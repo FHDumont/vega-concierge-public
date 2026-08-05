@@ -1,0 +1,18 @@
+{{- /*
+  Cards — grid container for nested {{< card >}} children.
+
+  Usage:
+    {{< cards >}}
+      {{< card title="Foo" href="/foo" icon="rocket" >}} ... {{< /card >}}
+      {{< card title="Bar" href="/bar" icon="book" >}}   ... {{< /card >}}
+    {{< /cards >}}
+
+  Implementation: wraps `.Inner` in a flex/grid container. Each child
+  `card` shortcode emits its own `<a class="shortcode-card">` HTML; this
+  shortcode just provides the layout box. No Store state, no per-card
+  bookkeeping — Hugo's normal shortcode evaluator handles every step.
+*/ -}}
+{{- /* Flag the page so layouts (notably index.html) suppress their
+       auto-card-grid when the body has already authored cards. */ -}}
+{{- .Page.Store.Set "_has_cards" true -}}
+<div class="cards cards--shortcode">{{ .Inner }}</div>

@@ -1,0 +1,17 @@
+# Workshop guide (Hugo) — serve na VM em :1313 (F-DEPLOY-PROD-1).
+# Requer hugo extended no PATH (instalado na AMI golden).
+[Unit]
+Description=Vega workshop guide (Hugo)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/vega-concierge/workshop
+EnvironmentFile=-/opt/vega-concierge/.env
+ExecStart=/usr/bin/hugo server --bind 0.0.0.0 --port 1313 --baseURL http://127.0.0.1:1313/
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,18 @@
+# Allowlist — paths copied to vega-concierge-public (one path per line; # = comment).
+# Directories should end with / so rsync copies contents into the matching dest dir.
+
+backend/
+frontend/
+control/
+workshop/
+scripts/
+docker-compose.yml
+compose.plain.yml
+compose.o11y.yml
+otel-collector-config.yaml
+.env.example
+.gitignore
+docs/reference/workshop-env-contract.md
+docs/reference/runbooks/deploy-pull-only.md
+.github/workflows/build-images.yml
+.github/workflows/pages.yml

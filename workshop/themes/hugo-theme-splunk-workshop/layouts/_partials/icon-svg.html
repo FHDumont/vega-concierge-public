@@ -1,0 +1,11 @@
+{{- /*
+  Inline SVG icon by name. Data lives in `data/icons.toml` so the
+  `icon-gallery` shortcode enumerates the same set — single source
+  of truth for the whole theme.
+*/ -}}
+{{- $name := . -}}
+{{- $i := hugo.Data.icons -}}
+{{- $svg := index $i.icons $name -}}
+{{- if not $svg }}{{ with index $i.aliases $name }}{{ $svg = index $i.icons . }}{{ end }}{{ end -}}
+{{- if not $svg }}{{ $svg = $i.meta.fallback }}{{ end -}}
+<svg viewBox="{{ $i.meta.viewBox }}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ $svg | safeHTML }}</svg>

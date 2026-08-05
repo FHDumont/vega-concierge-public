@@ -1,0 +1,115 @@
+# F-034 / F-DEPLOY-PROD-1 — Build & push das imagens Docker (backend + frontend) via CI.
+# CalVer Cortex-style (ADR-036): tag YYYY.MM.DD-<sha> na main, v* em release, latest na main.
+# Princípio (CONVENCOES › "Build de imagens Docker — somente via CI"): imagens são geradas
+# SOMENTE aqui (GitHub Actions), multi-arch (amd64 + arm64), e publicadas no GHCR. Os ambientes
+# (Mac mini, VMs/AMI do Splunk Show) fazem PULL — nunca `docker build` local no fluxo de run.
+name: build-images
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    # F-035: na main, builda só quando muda código (não em commits só de docs/scripts).
+    # Allowlist explícita (CONVENCOES › preferir allowlist a paths-ignore). Não afeta
+    # pushes de tag v* (paths não filtra tag push) nem workflow_dispatch — ambos sempre buildam.
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "**/Dockerfile"
+      - "docker-compose*.yml"
+      - ".github/workflows/build-images.yml"
+  workflow_dispatch: {}
+
+# Permissões mínimas p/ publicar no GitHub Container Registry com o GITHUB_TOKEN.
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: backend
+            context: ./backend
+            image: vega-backend
+          - name: frontend
+            context: ./frontend
+            image: vega-frontend
+          # F-041: variante OPCIONAL do backend com Playwright+Chromium (modo Browser do
+          # simulador, F-039/ADR-022) p/ o Mac mini gerar sessões reais no RUM. Imagem grande
+          # (Chromium) — o run compose só a usa quando BACKEND_IMAGE=vega-backend-browser.
+          - name: backend-browser
+            context: ./backend
+            image: vega-backend-browser
+            dockerfile: Dockerfile.browser
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # GHCR exige owner em minúsculas no caminho da imagem.
+      - name: Resolve image name (lowercase owner)
+        id: img
+        run: echo "ref=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.image }}" >> "$GITHUB_OUTPUT"
+
+      - name: Compute CalVer version (ADR-036)
+        id: ver
+        run: |
+          SHA="$(echo "${GITHUB_SHA}" | cut -c1-7)"
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAG="${{ github.ref_name }}"
+            # v2026.08.05 → 2026.08.05 (CalVer sem prefixo v)
+            VEGA_VERSION="${TAG#v}"
+          else
+            CALVER="$(date -u +%Y.%m.%d)"
+            VEGA_VERSION="${CALVER}-${SHA}"
+          fi
+          echo "vega_version=${VEGA_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "git_sha=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU (emulação p/ arm64)
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tags: CalVer (+sha na main) · SHA curto · latest (main) · tag git (releases v*).
+      - name: Docker metadata (tags + labels)
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ steps.img.outputs.ref }}
+          tags: |
+            type=raw,value=${{ steps.ver.outputs.vega_version }}
+            type=sha,format=short
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=tag
+
+      - name: Build & push (linux/amd64 + linux/arm64)
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.context }}
+          # Dockerfile alternativo p/ variantes (ex.: backend-browser → Dockerfile.browser).
+          file: ${{ matrix.context }}/${{ matrix.dockerfile || 'Dockerfile' }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VEGA_VERSION=${{ steps.ver.outputs.vega_version }}
+            VEGA_GIT_SHA=${{ steps.ver.outputs.git_sha }}
+            VEGA_BUILD_DATE=${{ steps.ver.outputs.build_date }}
+            NEXT_PUBLIC_VEGA_VERSION=${{ steps.ver.outputs.vega_version }}
+            NEXT_PUBLIC_VEGA_GIT_SHA=${{ steps.ver.outputs.git_sha }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}

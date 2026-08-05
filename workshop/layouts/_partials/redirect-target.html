@@ -1,0 +1,5 @@
+{{- $to := .to | default "/" -}}
+<meta http-equiv="refresh" content="0; url={{ $to | relURL }}">
+<link rel="canonical" href="{{ $to | absURL }}">
+<script>location.replace("{{ $to | relURL }}");</script>
+<p class="redirect-fallback">Redirecting… <a href="{{ $to | relURL }}">Continue to the workshop</a>.</p>

@@ -1,0 +1,31 @@
+input,output
+What is your return window?,"You have 30 days from the delivery date to request a return for any reason. The window starts when the carrier marks the order as delivered."
+Can I return an order that is still in transit?,No. Only orders marked as delivered can be returned. Wait for delivery or cancel instead if the order has not shipped yet.
+Do you charge a restocking fee on returns?,No. An approved return is refunded for the full order total including shipping. Vega does not charge a restocking fee.
+How long do card refunds take?,Card refunds usually appear within 5 to 10 business days after approval depending on your bank. Pix refunds are typically same-day.
+What is standard shipping cost for a $150 order?,Orders below $200 are charged $9.99 for standard shipping at checkout.
+When is shipping free?,Orders of $200 or more qualify for free standard shipping.
+How long does standard shipping take?,Standard shipping is estimated at 2 business days for in-stock items starting when payment is confirmed.
+Do you ship internationally?,No. Vega ships to US domestic addresses only (50 states and Washington D.C.).
+What warranty do products have?,Every product carries a 12-month manufacturer warranty against defects from the delivery date.
+Is accidental damage covered by warranty?,No. Accidental damage liquid damage beyond the rated water resistance and unauthorized repair are not covered.
+What payment methods do you accept?,Vega accepts credit card and Pix demo. All prices are in US dollars USD.
+Do you offer installment plans?,No. Orders can be paid in a single installment only.
+What currency are prices in?,All catalog prices checkout totals and refunds are in USD.
+What's the battery life of the Aura Bluetooth Headphones?,Up to 30 hours playback with about 3 hours from a 5-minute quick charge.
+Is the Mini Bluetooth Speaker waterproof?,Yes. It is IPX7 rated and can be submerged up to 1 meter for 30 minutes.
+What water resistance does Smartwatch Pulse have?,5 ATM 50 meters swim-safe.
+What's the battery life of Smartwatch Pulse?,Up to 7 days in smartwatch mode or about 20 hours with GPS workouts active.
+Is Headphone Studio Pro in stock?,No. NS-005 Headphone Studio Pro is currently out of stock.
+Is Robot Vacuum Lite available?,No. NS-022 Robot Vacuum Lite is currently out of stock.
+How many days do I have to return a delivered order?,30 days from delivery for any reason as long as the order status is delivered.
+What happens if my package arrives damaged?,Report transit damage within 30 days. We handle it as a claim with replacement or full refund at no extra shipping cost.
+Does warranty cover items after the return window?,Yes. After the 30-day return window a defective item is handled as a 12-month warranty claim not an automatic refund.
+Can I change my shipping address after the order ships?,No. Once marked shipped the address is locked with the carrier.
+Does the store AI concierge send my chat to an LLM?,Yes. Questions in product Q&A store chat and the concierge are sent to configured LLM providers. Do not share sensitive personal information.
+What is the Enduro Running Watch battery in GPS mode?,About 80 hours in GPS ultra mode or up to 14 days in smart mode.
+Does Earbuds Max ANC support spatial audio?,Yes on supported sources with spatial audio content-dependent. Battery is 10 hours with ANC on and 36 hours with the case.
+What is the PureBreeze Air Purifier coverage area?,About 300 square feet with true HEPA H13 filtration.
+Can I get a 90-day return window?,No. The return window is 30 days from delivery not 90 days. Requests after day 30 cannot be refunded automatically.
+What is the shipping cost on a $249 order?,Free. Orders of $200 or more qualify for free standard shipping so a $249 order ships free.
+Does Vega ship to Brazil?,No. Vega ships US domestic only. Prices are in USD not Brazilian reais.

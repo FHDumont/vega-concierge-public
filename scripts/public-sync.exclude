@@ -1,0 +1,16 @@
+# Rsync exclude patterns — applied to every allowlist path (private repo → public mirror).
+
+.git/
+**/.venv/
+**/node_modules/
+**/.next/
+**/__pycache__/
+*.pyc
+.env
+.env.local
+*.log
+*.db
+workshop/public/
+docs/scratch/
+.DS_Store
+control-audit.log

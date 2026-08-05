@@ -1,0 +1,82 @@
+# Vega Concierge — workshop stack (1 VM por participante)
+services:
+  backend:
+    build: ./backend
+    environment:
+      - DEPLOYMENT_ENVIRONMENT=${DEPLOYMENT_ENVIRONMENT:-user-local}
+      - OWNER_PASSWORD=${OWNER_PASSWORD:-}
+      - ENROLL_TOKEN=${ENROLL_TOKEN:-}
+      - ORDERS_DB=/data/vega.db  # SQLite em volume nomeado (DT-006): sobrevive a recriação
+      # Splunk Agent Observability (ADR-032): sem API key o SDK nunca é chamado e a app roda "base" (sem traces).
+      - GALILEO_API_KEY=${GALILEO_API_KEY:-}
+      - GALILEO_CONSOLE_URL=${GALILEO_CONSOLE_URL:-}
+      - GALILEO_PROJECT=${GALILEO_PROJECT:-vega-concierge}
+      - GALILEO_LOG_STREAM=${GALILEO_LOG_STREAM:-default}
+      # RAG (ADR-031): URL interna @postgres — host/setup_vectordb usa localhost no .env.
+      - RAG_ENABLED=${RAG_ENABLED:-1}
+      - RAG_DATABASE_URL=postgresql+psycopg://${RAG_DB_USER:-vega}:${RAG_DB_PASSWORD:-vega}@postgres:5432/${RAG_DB_NAME:-vega_rag}
+      - RAG_EMBEDDING_PROVIDER=${RAG_EMBEDDING_PROVIDER:-ollama}
+      - RAG_EMBEDDING_MODEL=${RAG_EMBEDDING_MODEL:-nomic-embed-text}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_CHAT_MODEL=${OLLAMA_CHAT_MODEL:-llama3.2}
+      - RAG_TOP_K=${RAG_TOP_K:-3}
+      - REFUND_WINDOW_DAYS=${REFUND_WINDOW_DAYS:-30}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - VEGA_PERSIST_DIR=/persist
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports: ["8000:8000"]
+    volumes:
+      - vega-db:/data
+      - ./backend/.vega-persist:/persist
+
+  frontend:
+    build: ./frontend
+    environment:
+      # Separado (ADR-024): o navegador fala direto com a API. Em dev o browser está no HOST → usa a
+      # porta publicada do backend (localhost:8000). API_INTERNAL_URL é p/ o SSR alcançar o backend
+      # por DNS de compose (`backend:8000`).
+      - PUBLIC_API_BASE=${PUBLIC_API_BASE:-http://localhost:8000}
+      - API_INTERNAL_URL=${API_INTERNAL_URL:-http://backend:8000}
+    ports: ["3000:3000"]
+    depends_on: [backend]
+
+  # OTel Collector — dev local; recebe OTLP (:4317/:4318) e exporta p/ Splunk o11y.
+  # Profile o11y: só sobe com ./scripts/dev.sh --o11y (não entra no stack default).
+  otel-collector:
+    profiles: [o11y]
+    image: quay.io/signalfx/splunk-otel-collector:latest
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    environment:
+      - SPLUNK_O11Y_REALM=${SPLUNK_O11Y_REALM:-us1}
+      - SPLUNK_O11Y_TOKEN=${SPLUNK_O11Y_TOKEN:-}
+      - SPLUNK_HEC_TOKEN=${SPLUNK_HEC_TOKEN:-}
+      - SPLUNK_HEC_URL=${SPLUNK_HEC_URL:-}
+    ports: ["4317:4317", "4318:4318"]
+
+  # pgvector — embeddings reais pro RAG (ADR-031). Profile `rag`: NÃO entra no stack default,
+  # porque o retriever keyword em processo já atende sem banco nenhum. Guarda só vetores; o
+  # estado transacional continua no SQLite (ADR-008).
+  postgres:
+    profiles: [rag]
+    image: pgvector/pgvector:pg16
+    environment:
+      - POSTGRES_USER=${RAG_DB_USER:-vega}
+      - POSTGRES_PASSWORD=${RAG_DB_PASSWORD:-vega}
+      - POSTGRES_DB=${RAG_DB_NAME:-vega_rag}
+    # Dev local: publica loopback p/ setup_vectordb no host (dev.sh). Produção: sem ports (compose.plain.yml).
+    ports: ["127.0.0.1:${RAG_DB_PORT:-5434}:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${RAG_DB_USER:-vega} -d ${RAG_DB_NAME:-vega_rag}"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
+    volumes:
+      - vega-vectors:/var/lib/postgresql/data
+
+volumes:
+  vega-db:  # persistência do SQLite de pedidos entre recriações de container (DT-006)
+  vega-vectors:  # embeddings do pgvector (profile `rag`)

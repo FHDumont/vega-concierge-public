@@ -1,0 +1,92 @@
+{{- /*
+  Relearn-compatible children — list child pages of the current section.
+  Args:
+    page         - section path (default: current page)
+    type         - "card" | "list" | "h2" | "h3" | "h4"  (relearn canonical)
+    style        - alias of type
+    depth        - how deep to recurse (default 1) — currently shallow only
+    description  - "true" to include description (default true)
+    image        - "true" to render each child's featured image (params.images[0])
+                   as a banner on top of card-style children (relearn compat).
+    showhidden   - "true" to include hidden pages (default false)
+    sort         - weight | title  (default weight)
+
+  IMPORTANT: this template emits HTML on a single contiguous block with no leading
+  whitespace, so it works inside `{{% children %}}` (percent form, which re-runs
+  Goldmark and would otherwise treat indented HTML as a code block).
+*/ -}}
+{{- $page  := .Get "page" -}}
+{{- $type  := .Get "type"  | default (.Get "style") | default "list" -}}
+{{- $depth := int (.Get "depth" | default 1) -}}
+{{- $desc  := ne (.Get "description" | default "true") "false" -}}
+{{- $img   := eq (.Get "image" | default "false") "true" -}}
+{{- $sort  := .Get "sort" | default "weight" -}}
+{{- $hide  := ne (.Get "showhidden" | default "false") "true" -}}
+{{- /* notime="true" suppresses the time pill on every card in this listing.
+       Useful when the listing groups reference content or short pages where
+       a duration estimate adds noise. Other meta items (difficulty, page
+       count) keep rendering. */ -}}
+{{- $notime := eq (.Get "notime" | default "false") "true" -}}
+
+{{- $start := .Page -}}
+{{- if $page -}}
+  {{- with $.Page.GetPage $page }}{{ $start = . }}{{ end -}}
+{{- end -}}
+
+{{- $items := $start.Pages -}}
+{{- if $start.Sections }}{{ $items = $items | union $start.Sections }}{{ end -}}
+{{- if $hide }}{{ $items = where $items "Params.hidden" "!=" true }}{{ end -}}
+{{- if eq $sort "title" }}{{ $items = $items.ByTitle }}{{ else }}{{ $items = $items.ByWeight }}{{ end -}}
+
+{{- if eq $type "card" -}}
+{{- /* Flag the page so layouts (notably index.html) suppress their
+       auto-card-grid when the body has already authored cards. */ -}}
+{{- .Page.Store.Set "_has_cards" true -}}
+<div class="cards cards--shortcode{{ if $img }} cards--with-images{{ end }}">
+{{- range $items -}}
+{{- $child := . -}}
+{{- $imgURL := "" -}}
+{{- if $img -}}
+  {{- with $child.Params.images -}}
+    {{- $raw := index . 0 -}}
+    {{- /* Resolution order:
+           1. Page-bundle resource at the raw path
+           2. Page-bundle resource at the basename only (relearn-migrated
+              content often points at "../images/foo.png" while the file
+              actually lives inside the page bundle at "images/foo.png")
+           3. Fall back to a path-join URL relative to the child's permalink. */ -}}
+    {{- with $child.Resources.GetMatch $raw -}}
+      {{- $imgURL = .RelPermalink -}}
+    {{- else -}}
+      {{- /* Try the basename inside the bundle. */ -}}
+      {{- $base := path.Base $raw -}}
+      {{- with $child.Resources.GetMatch (printf "images/%s" $base) -}}
+        {{- $imgURL = .RelPermalink -}}
+      {{- else -}}
+        {{- with $child.Resources.GetMatch $base -}}
+          {{- $imgURL = .RelPermalink -}}
+        {{- else -}}
+          {{- $clean := strings.TrimPrefix "./" $raw -}}
+          {{- $imgURL = path.Join $child.RelPermalink $clean -}}
+        {{- end -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- $childCount := partial "workshop/children-count.html" . -}}
+<a class="shortcode-card shortcode-card--children{{ if $imgURL }} shortcode-card--with-image{{ end }}" href="{{ .RelPermalink }}" data-section-root="{{ .RelPermalink }}"{{ if eq $childCount 0 }} data-section-pages="1"{{ end }}>{{ if $imgURL }}<div class="shortcode-card__media"><img src="{{ $imgURL }}" alt="" loading="lazy"></div>{{ end }}<p class="shortcode-card__title">{{ .LinkTitle }}</p>{{ if and $desc .Description }}<div class="shortcode-card__body"><p>{{ .Description }}</p></div>{{ end }}<div class="shortcode-card__meta">{{ if not $notime }}{{ with (.Params.time | default .Params.duration | default (printf "%d min" .ReadingTime)) }}<span>{{ . }}</span>{{ end }}{{ end }}{{ with .Params.difficulty }}<span>{{ . }}</span>{{ end }}{{ if gt $childCount 1 }}<span>{{ i18n "pagesCount" (dict "Count" $childCount) }}</span>{{ end }}</div><span class="shortcode-card__check" hidden>{{ partial "icon-svg.html" "check" }}<span class="sr-only">{{ i18n "completed" | default "Completed" }}</span></span></a>
+{{- end -}}
+</div>
+{{- else if or (eq $type "h2") (eq $type "h3") (eq $type "h4") -}}
+<div class="children-headings children-headings--{{ $type }}">
+{{- range $items -}}
+<{{ $type }}><a href="{{ .RelPermalink }}">{{ .LinkTitle }}</a></{{ $type }}>{{ if and $desc .Description }}<p>{{ .Description }}</p>{{ end }}
+{{- end -}}
+</div>
+{{- else -}}
+<ul class="children-list">
+{{- range $items -}}
+<li><a href="{{ .RelPermalink }}"><strong>{{ .LinkTitle }}</strong></a>{{ if and $desc .Description }}<span class="children-list__desc"> &mdash; {{ .Description }}</span>{{ end }}</li>
+{{- end -}}
+</ul>
+{{- end -}}

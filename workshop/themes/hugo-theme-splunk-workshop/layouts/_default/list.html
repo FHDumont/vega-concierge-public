@@ -1,0 +1,7 @@
+{{- /* Section landings without a `layout` key. Sections with
+       `layout = "hero"` or `"chapter"` hit those templates first. */ -}}
+{{ define "main" }}
+{{ partial "shell/three-column.html" (dict
+  "page"         .
+  "innerPartial" "page/default.html") }}
+{{ end }}

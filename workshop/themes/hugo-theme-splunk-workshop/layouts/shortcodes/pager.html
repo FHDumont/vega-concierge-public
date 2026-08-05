@@ -1,0 +1,56 @@
+{{- /*
+  Pager override shortcode.
+
+  Replaces the default auto-pager's prev/next destinations on this page.
+  Authors specify URLs and (optionally) labels in the markdown body; the
+  bottom pager partial reads these from .Page.Store and renders them
+  in place of the DFS-computed neighbours.
+
+  Args (any combination of; everything optional):
+    prev      = "/path/" or "https://..."  URL for the Previous button.
+    prevLabel = "..."                      Label for Previous. If omitted
+                                           and `prev` resolves to a local
+                                           page, the page's LinkTitle is
+                                           used; otherwise the URL.
+    next      = "..."                      Same shape as `prev`.
+    nextLabel = "..."
+
+  Only the side you provide is overridden — omit `prev` to leave the
+  Previous button auto-computed by DFS, override only `next`. Author
+  can place the shortcode anywhere in the body; the visual pager
+  always renders at the bottom of the page.
+
+  The shortcode itself emits no output; it only writes to Store.
+
+  Honored after `nopager: true` — a page with `nopager: true` in front
+  matter still renders no pager even if this shortcode is present.
+*/ -}}
+{{- $prevURL := .Get "prev" -}}
+{{- $nextURL := .Get "next" -}}
+
+{{- /* Resolve an author-supplied path to a real Page when possible: that
+       gives us `.RelPermalink` which already accounts for baseURL subpath
+       AND the active language. Passing the raw author string straight into
+       href="" emits a domain-absolute path that 404s under either of those
+       deployment shapes. External URLs (http/https) and typo'd paths don't
+       resolve, so the raw input is preserved as a fallback. */ -}}
+
+{{- with $prevURL -}}
+  {{- $url   := . -}}
+  {{- $label := $.Get "prevLabel" -}}
+  {{- with site.GetPage . -}}
+    {{- $url = .RelPermalink -}}
+    {{- if not $label }}{{ $label = .LinkTitle }}{{ end -}}
+  {{- end -}}
+  {{- $.Page.Store.Set "pager_override_prev" (dict "url" $url "title" ($label | default $url)) -}}
+{{- end -}}
+
+{{- with $nextURL -}}
+  {{- $url   := . -}}
+  {{- $label := $.Get "nextLabel" -}}
+  {{- with site.GetPage . -}}
+    {{- $url = .RelPermalink -}}
+    {{- if not $label }}{{ $label = .LinkTitle }}{{ end -}}
+  {{- end -}}
+  {{- $.Page.Store.Set "pager_override_next" (dict "url" $url "title" ($label | default $url)) -}}
+{{- end -}}

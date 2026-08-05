@@ -1,0 +1,9 @@
+{{- /* Last-modified pill. .Lastmod comes from `enableGitInfo` or a
+       `lastmod:` front-matter override. */ -}}
+{{- if not .Lastmod.IsZero -}}
+<footer class="page-meta-footer">
+  <span class="page-meta-footer__label">{{ i18n "lastModified" | default "Last Modified" }}</span>
+  <span class="page-meta-footer__sep">·</span>
+  <time datetime="{{ .Lastmod.Format "2006-01-02" }}" class="page-meta-footer__date">{{ .Lastmod.Format "Jan 2, 2006" }}</time>
+</footer>
+{{- end -}}

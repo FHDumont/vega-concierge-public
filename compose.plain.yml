@@ -1,0 +1,78 @@
+name: vega
+# Vega Concierge — stack do workshop. Portas DIRETAS na VM (sem Traefik).
+# Stack de run sem instrumentação de backend (F-049/ADR-026 — app cega no servidor).
+#
+# Imagens JÁ PUBLICADAS no GHCR (pull, NÃO build — ver CONVENCOES › "Build de imagens Docker —
+# somente via CI"). Para desenvolver localmente use o docker-compose.yml (com build + hot reload).
+# Imagem/tag controláveis por env (default owner fhdumont, tag latest): IMAGE_OWNER / IMAGE_TAG.
+services:
+  backend:
+    image: ghcr.io/${IMAGE_OWNER:-fhdumont}/${BACKEND_IMAGE:-vega-backend}:${IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: always
+    environment:
+      - DEPLOYMENT_ENVIRONMENT=${DEPLOYMENT_ENVIRONMENT:-user-local}
+      - OWNER_PASSWORD=${OWNER_PASSWORD:-}
+      - ENROLL_TOKEN=${ENROLL_TOKEN:-}
+      - ORDERS_DB=/data/vega.db # SQLite em volume nomeado (DT-006): sobrevive a recriação
+      # Splunk Agent Observability (ADR-032): sem API key o SDK nunca é chamado e a app roda "base" (sem traces).
+      - GALILEO_API_KEY=${GALILEO_API_KEY:-}
+      - GALILEO_CONSOLE_URL=${GALILEO_CONSOLE_URL:-}
+      - GALILEO_PROJECT=${GALILEO_PROJECT:-vega-concierge}
+      - GALILEO_LOG_STREAM=${GALILEO_LOG_STREAM:-default}
+      # RAG (ADR-031): URL interna @postgres — host/setup_vectordb usa localhost no .env.
+      - RAG_ENABLED=${RAG_ENABLED:-1}
+      - RAG_DATABASE_URL=postgresql+psycopg://${RAG_DB_USER:-vega}:${RAG_DB_PASSWORD:-vega}@postgres:5432/${RAG_DB_NAME:-vega_rag}
+      - RAG_EMBEDDING_PROVIDER=${RAG_EMBEDDING_PROVIDER:-ollama}
+      - RAG_EMBEDDING_MODEL=${RAG_EMBEDDING_MODEL:-nomic-embed-text}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_CHAT_MODEL=${OLLAMA_CHAT_MODEL:-llama3.2}
+      - RAG_TOP_K=${RAG_TOP_K:-3}
+      - REFUND_WINDOW_DAYS=${REFUND_WINDOW_DAYS:-30}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - VEGA_PERSIST_DIR=/persist
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports: ["8000:8000"]
+    volumes:
+      - vega-db:/data
+      - ./backend/.vega-persist:/persist
+
+  frontend:
+    image: ghcr.io/${IMAGE_OWNER:-fhdumont}/vega-frontend:${IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: always
+    environment:
+      # O navegador fala DIRETO com a API (ADR-024). Sem Traefik, a API é o IP:porta da VM. Como o
+      # participante acessa por IP, PUBLIC_API_BASE deve apontar p/ o MESMO host que serviu a loja:
+      # deixamos vazio → o front resolve a API pela origin do navegador na porta 8000 (fallback do
+      # runtime). Se precisar fixar, defina PUBLIC_API_BASE=http://<IP-da-VM>:8000 no .env.
+      - PUBLIC_API_BASE=${PUBLIC_API_BASE:-}
+      - API_INTERNAL_URL=${API_INTERNAL_URL:-http://backend:8000}
+    ports: ["3000:3000"]
+    depends_on: [backend]
+
+  # pgvector — embeddings reais pro RAG (ADR-031). Profile `rag`: fora do stack default, porque o
+  # retriever keyword em processo já atende sem banco. Guarda só vetores; o estado transacional
+  # continua no SQLite (ADR-008).
+  postgres:
+    profiles: [rag]
+    image: pgvector/pgvector:pg16
+    restart: always
+    environment:
+      - POSTGRES_USER=${RAG_DB_USER:-vega}
+      - POSTGRES_PASSWORD=${RAG_DB_PASSWORD:-vega}
+      - POSTGRES_DB=${RAG_DB_NAME:-vega_rag}
+    # Produção: só rede interna do compose — backend @postgres:5432; index via rag-init (docker one-off).
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${RAG_DB_USER:-vega} -d ${RAG_DB_NAME:-vega_rag}"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
+    volumes:
+      - vega-vectors:/var/lib/postgresql/data
+
+volumes:
+  vega-db: # persistência do SQLite de pedidos entre recriações de container (DT-006)
+  vega-vectors: # embeddings do pgvector (profile `rag`)

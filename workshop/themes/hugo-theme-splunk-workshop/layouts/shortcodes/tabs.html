@@ -1,0 +1,43 @@
+{{- /*
+  Tabs container — relearn-compatible.
+  Args:
+    groupid / groupId  - sync tab selection across blocks with the same id
+                         (stored in localStorage). Both casings accepted
+                         (relearn migrated content often uses groupId).
+    style              - default | code | primary | secondary
+
+  Output is emitted with no leading whitespace per line. When this shortcode
+  is nested inside a percent shortcode like `{{% notice %}}`, the outer
+  shortcode re-runs the inner through the markdown parser; any 4+-space
+  indentation in the emitted HTML would then be treated as a code block.
+*/ -}}
+{{- /* Prefer an explicit id when authors need a stable key. Otherwise fall
+       back to the rendered shortcode position, which is the existing theme
+       behaviour for pages that don't need a custom bucket key. */ -}}
+{{- $explicit := .Get "id" | default (.Get "key") -}}
+{{- $seed := "" -}}
+{{- if $explicit -}}
+  {{- $seed = printf "%v" $explicit -}}
+{{- else -}}
+  {{- $scope := printf "%v" .Position -}}
+  {{- $ordinal := .Ordinal | default 0 -}}
+  {{- $seed = printf "%s-%v" $scope $ordinal -}}
+{{- end -}}
+{{- $slug := replaceRE "[^a-zA-Z0-9]" "-" $seed -}}
+{{- $key    := printf "_tabs_%s" $slug -}}
+{{- $tid    := printf "tabs-%s" $slug -}}
+{{- $groupid := .Get "groupid" | default (.Get "groupId") -}}
+{{- $style   := .Get "style" -}}
+{{- /* Force inner so children push into the current tab bucket. */ -}}
+{{- $_ := .Inner -}}
+{{- $tabs := .Page.Store.Get $key | default slice -}}
+<div class="tabs{{ with $style }} tabs--{{ . }}{{ end }}" data-tabs{{ with $groupid }} data-tabs-group="{{ . }}"{{ end }}>
+<div class="tabs__list" role="tablist">
+{{- range $i, $t := $tabs -}}
+<button id="{{ $tid }}-tab-{{ $i }}" class="tabs__btn{{ if eq $i 0 }} is-active{{ end }}" role="tab" aria-selected="{{ if eq $i 0 }}true{{ else }}false{{ end }}" aria-controls="{{ $tid }}-panel-{{ $i }}" tabindex="{{ if eq $i 0 }}0{{ else }}-1{{ end }}" data-tab-label="{{ $t.label }}">{{ if $t.icon }}<span class="tabs__icon">{{ partial "icon-svg.html" $t.icon }}</span>{{ end }}{{ $t.label }}</button>
+{{- end }}
+</div>
+{{ range $i, $t := $tabs -}}
+<div id="{{ $tid }}-panel-{{ $i }}" class="tabs__panel{{ if eq $i 0 }} is-active{{ end }}" role="tabpanel" aria-labelledby="{{ $tid }}-tab-{{ $i }}"{{ if ne $i 0 }} hidden{{ end }} data-tab-label="{{ $t.label }}">{{ $t.content | safeHTML }}</div>
+{{ end }}
+</div>

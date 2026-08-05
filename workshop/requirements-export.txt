@@ -1,0 +1,9 @@
+# PDF export for workshop/ — macOS + Safari only.
+#
+#   pip install -r workshop/requirements-export.txt
+#   playwright install chromium    # pager crawl only
+#
+# Safari drives File → Export as PDF via AppleScript.
+# System Settings → Privacy & Security → Accessibility → enable your terminal app.
+playwright==1.60.0
+pypdf>=5.0.0

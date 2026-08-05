@@ -1,0 +1,23 @@
+# Vega boot — stack Docker (fresh-state + pull + up) na AMI/clone (F-DEPLOY-PROD-1).
+# Control (vega-control/vega-ttyd) e workshop (vega-workshop) sobem em paralelo via multi-user.target.
+[Unit]
+Description=Vega Concierge stack boot (fresh-state + pull + up)
+After=docker.service network-online.target
+Wants=network-online.target
+# Ollama é soft — boot segue se a unit não existir na AMI.
+After=ollama.service
+Wants=ollama.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/vega-concierge
+EnvironmentFile=-/opt/vega-concierge/.env
+Environment=NON_INTERACTIVE=1
+ExecStart=/opt/vega-concierge/scripts/boot-workshop.sh
+# Retry em falha transitória (rede, pull).
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

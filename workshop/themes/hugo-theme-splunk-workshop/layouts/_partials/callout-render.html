@@ -1,0 +1,74 @@
+{{- /*
+  Render a callout. Single source of truth for the callout markup, the icon
+  SVG per type, the default title (resolved via i18n), and the optional
+  collapsible <details> wrapper used by relearn-compatible notices.
+
+  Usage:
+      {{ partial "callout-render.html" (dict
+           "type"     "tip"          // required: tip|note|info|warning|danger|success
+           "title"    "Custom title" // optional; falls back to i18n lookup of $type
+           "inner"    $renderedHTML  // required: already piped through .Page.RenderString
+           "icon"     "rocket"       // optional: Lucide icon name override
+           "color"    "#ff7700"      // optional: custom accent colour (any CSS colour)
+           "expanded" "true"         // optional: "true"/"false"/"" — render as <details>
+           "groupid"  "advanced"     // optional: synced-collapse group name
+           "page"     .Page) }}
+
+  Output is intentionally flat (no internal line breaks inside an open tag) so
+  Goldmark recognises the markup as an HTML block when the calling shortcode is
+  invoked with the percent form (e.g. {{% notice %}}).
+*/ -}}
+{{- $type     := .type | default "note" -}}
+{{- $title    := .title -}}
+{{- $inner    := .inner -}}
+{{- $iconOv   := .icon -}}
+{{- $color    := .color -}}
+{{- $expR     := .expanded -}}
+{{- $groupid  := .groupid -}}
+{{- $icons := dict
+  "tip"     `<path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>`
+  "note"    `<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M9 13h6 M9 17h6"/>`
+  "info"    `<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>`
+  "warning" `<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>`
+  "danger"  `<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>`
+  "success" `<polyline points="20 6 9 17 4 12"/>`
+-}}
+{{- $iconSVG := index $icons $type | default (index $icons "note") -}}
+{{- $stroke := cond (eq $type "success") "2.5" "2" -}}
+{{- /* Author-supplied callout titles support inline markdown (`**bold**`,
+       `*italic*`, `` `code` ``, links). The `| string` cast handles
+       callers that pass `template.HTML` (e.g. the render-blockquote hook
+       forwards `.AlertTitle`, which is already-rendered) — markdownify
+       refuses already-rendered values, but on a plain string it parses
+       any markdown and lets raw HTML pass through. Avoid leading
+       digit-dot-space in titles — Goldmark will treat it as an
+       ordered-list start and emit <ol><li>...</li></ol>. */ -}}
+{{- $resolvedTitle := $title | default (i18n $type) | default (humanize $type) | string | markdownify -}}
+{{- /* expanded mode: render as <details> only when explicitly set. */ -}}
+{{- $useDetails := false -}}
+{{- $detailsOpen := false -}}
+{{- if $expR -}}
+  {{- $e := lower (trim (string $expR) " ") -}}
+  {{- if ne $e "" -}}
+    {{- $useDetails = true -}}
+    {{- $detailsOpen = eq $e "true" -}}
+  {{- end -}}
+{{- end -}}
+{{- $cls := printf "callout callout--%s" $type -}}
+{{- if $useDetails }}{{ $cls = printf "%s callout--expandable" $cls }}{{ end -}}
+{{- $iconHTML := "" -}}
+{{- if $iconOv -}}
+  {{- $iconHTML = partial "icon-svg.html" $iconOv -}}
+{{- else -}}
+  {{- $iconHTML = printf `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="%s" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">%s</svg>` $stroke (string $iconSVG) -}}
+{{- end -}}
+{{- $styleAttr := "" -}}
+{{- with $color -}}
+  {{- $safeColor := partial "css-color.html" (dict "value" . "fallback" "") -}}
+  {{- if $safeColor }}{{ $styleAttr = printf ` style="--callout-color: %s"` ($safeColor | safeCSS) }}{{ end -}}
+{{- end -}}
+{{- if $useDetails -}}
+<details class="{{ $cls }}"{{ if $detailsOpen }} open{{ end }}{{ with $groupid }} name="{{ . }}"{{ end }}{{ $styleAttr | safeHTMLAttr }}><summary class="callout__summary"><span class="callout__icon" aria-hidden="true">{{ $iconHTML | safeHTML }}</span><span class="callout__title">{{ $resolvedTitle }}</span><span class="callout__chev" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span></summary><div class="callout__body">{{ $inner | safeHTML }}</div></details>
+{{- else -}}
+<div class="{{ $cls }}"{{ $styleAttr | safeHTMLAttr }}><span class="callout__icon" aria-hidden="true">{{ $iconHTML | safeHTML }}</span><p class="callout__title">{{ $resolvedTitle }}</p><div class="callout__body">{{ $inner | safeHTML }}</div></div>
+{{- end -}}

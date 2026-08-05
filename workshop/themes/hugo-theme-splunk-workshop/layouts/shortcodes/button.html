@@ -1,0 +1,103 @@
+{{- /*
+  Inline button — relearn-compatible. Small, configurable, designed for
+  page content. Drops in as a replacement for `{{% button %}}` from
+  hugo-theme-relearn (https://mcshelby.github.io/hugo-theme-relearn/shortcodes/button/).
+
+  For big Splunk-branded hero / landing-page actions use {{< cta >}} instead.
+
+  Args:
+    href              link target (auto-prefixed for project-pages baseURLs)
+    style             one of:
+                        primary   - default; filled accent
+                        secondary - outlined
+                        transparent - text-only
+                        success | warning | error | info | note | tip
+                                  - semantic colour presets
+                        <any CSS colour or relearn colour-name>
+                                  - custom fill (e.g. style="blue")
+    color             explicit CSS colour, wins over $style colour
+    icon              icon name (rendered via icon-svg.html)
+    iconposition      left (default) | right
+    target            link target attribute; _blank also adds rel=noopener
+    title             fallback label when Inner is empty
+
+  Style values are case-insensitive — style="Primary" works the same as
+  style="primary".
+*/ -}}
+{{- $hrefRaw := .Get "href" -}}
+{{- $href    := partial "site-href.html" $hrefRaw -}}
+{{- $style   := .Get "style" | default "default" -}}
+{{- $styleKey := lower (string $style) -}}
+{{- $color   := .Get "color" -}}
+{{- $icon    := .Get "icon" -}}
+{{- $iconpos := .Get "iconposition" | default "left" -}}
+{{- $target  := .Get "target" -}}
+{{- $title   := .Get "title" -}}
+
+{{- /* Semantic colour map for relearn-style names. */ -}}
+{{- $semantic := dict
+    "primary"     "var(--color-accent)"
+    "accent"      "var(--color-accent)"
+    "secondary"   ""
+    "transparent" ""
+    "default"     ""
+    "success"     "#2f7c47"
+    "warning"     "#FF9000"
+    "error"       "#d4341f"
+    "danger"      "#d4341f"
+    "info"        "#1d5d99"
+    "note"        "var(--color-ink-muted)"
+    "tip"         "#FFAB0F"
+    "blue"        "#1d5d99"
+    "green"       "#2f7c47"
+    "orange"      "#FF9000"
+    "yellow"      "#FFAB0F"
+    "red"         "#d4341f"
+    "gray"        "var(--color-ink-muted)"
+    "grey"        "var(--color-ink-muted)"
+-}}
+
+{{- /* Resolve $color: explicit `color=` wins, then a semantic preset,
+       then treat the raw $style value as a CSS colour (relearn idiom).
+       The default style leaves $color unset → neutral surface. */ -}}
+{{- $cls := "btn-inline" -}}
+{{- if eq $styleKey "secondary" -}}
+  {{- $cls = "btn-inline btn-inline--outline" -}}
+  {{- if not $color }}{{ $color = "var(--color-accent)" }}{{ end -}}
+{{- else if eq $styleKey "transparent" -}}
+  {{- $cls = "btn-inline btn-inline--text" -}}
+  {{- if not $color }}{{ $color = "var(--color-accent-text)" }}{{ end -}}
+{{- else if eq $styleKey "default" -}}
+  {{- /* neutral — only colourise if user supplied an explicit `color=` */ -}}
+{{- else if not $color -}}
+  {{- with index $semantic $styleKey -}}
+    {{- $color = . -}}
+  {{- else -}}
+    {{- $color = $style -}}
+  {{- end -}}
+{{- end -}}
+{{- if $color -}}
+  {{- $fallback := cond (eq $styleKey "transparent") "var(--color-accent-text)" "var(--color-accent)" -}}
+  {{- $color = partial "css-color.html" (dict "value" $color "fallback" $fallback) -}}
+{{- end -}}
+{{- /* Add the filled modifier whenever we end up with a colour and we're
+       not in the outline or text-only variant. */ -}}
+{{- if and $color (ne $styleKey "secondary") (ne $styleKey "transparent") -}}
+  {{- $cls = "btn-inline btn-inline--filled" -}}
+{{- end -}}
+
+{{- $body := .Inner | .Page.RenderString -}}
+{{- if not (trim ($body | string) " \n\r\t") }}{{ $body = $title }}{{ end -}}
+{{- $tag := "a" -}}
+{{- if not $href }}{{ $tag = "button" }}{{ end -}}
+{{- $iconHTML := "" -}}
+{{- if $icon -}}
+  {{- $iconHTML = printf `<span class="btn-inline__icon">%s</span>` (partial "icon-svg.html" $icon) -}}
+{{- end -}}
+{{- /* Single-line output so the button can sit inline inside a paragraph
+       without markdown splitting at internal line-breaks. */ -}}
+{{- if eq $tag "a" -}}
+<a class="{{ $cls }}" href="{{ $href }}"{{ with $target }} target="{{ . }}"{{ if eq . "_blank" }} rel="noopener"{{ end }}{{ end }}{{ with $color }} style="--btn-color: {{ . | safeCSS }}"{{ end }}>{{ if and $icon (eq $iconpos "left") }}{{ $iconHTML | safeHTML }}{{ end }}<span>{{ $body | safeHTML }}</span>{{ if and $icon (eq $iconpos "right") }}{{ $iconHTML | safeHTML }}{{ end }}</a>
+{{- else -}}
+<button class="{{ $cls }}" type="button"{{ with $color }} style="--btn-color: {{ . | safeCSS }}"{{ end }}>{{ if and $icon (eq $iconpos "left") }}{{ $iconHTML | safeHTML }}{{ end }}<span>{{ $body | safeHTML }}</span>{{ if and $icon (eq $iconpos "right") }}{{ $iconHTML | safeHTML }}{{ end }}</button>
+{{- end -}}

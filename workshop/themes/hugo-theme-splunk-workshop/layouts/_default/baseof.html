@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="{{ site.Language.Lang | default "en" }}" data-theme="light">
+<head>
+  {{ partial "chrome/head.html" . }}
+  {{ block "head" . }}{{ end }}
+</head>
+<body>
+  <a class="skip-link" href="#content">{{ i18n "skipToContent" | default "Skip to content" }}</a>
+  {{ partial "chrome/header.html" . }}
+  {{ block "main" . }}{{ end }}
+  {{ partial "chrome/footer.html" . }}
+</body>
+</html>

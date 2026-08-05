@@ -1,0 +1,18 @@
+{{- /*
+  Inline span with custom color, font-family, and weight.
+  Usage (paired shortcode):
+    textcolor color="#FF0F7B"          - red-pink
+    textcolor color="green" weight="bold" font="serif"
+
+  Allow-list inputs to prevent CSS property-escape attacks via arbitrary
+  `style=` injection. `safeCSS` doesn't validate values — it only marks
+  them trusted for Hugo's HTML escaper.
+*/ -}}
+{{- $color  := .Get "color"  | default "currentColor" -}}
+{{- $font   := .Get "font"   | default "inherit" -}}
+{{- $weight := .Get "weight" | default "normal" -}}
+{{- $allow  := `^[a-zA-Z0-9#.,()% /_-]+$` -}}
+{{- $color = partial "css-color.html" (dict "value" $color "fallback" "currentColor") -}}
+{{- if not (findRE $allow $font)   }}{{- $font   = "inherit"      -}}{{- end -}}
+{{- if not (findRE $allow $weight) }}{{- $weight = "normal"       -}}{{- end -}}
+<span style="color: {{ $color | safeCSS }}; font-family: {{ $font | safeCSS }}; font-weight: {{ $weight | safeCSS }}">{{ .Inner | safeHTML }}</span>

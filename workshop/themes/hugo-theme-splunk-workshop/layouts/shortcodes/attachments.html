@@ -1,0 +1,19 @@
+{{- /*
+  Relearn-compatible attachments — list page resources (downloadable files).
+  Args:
+    title    - heading text (default "Attachments")
+    pattern  - regex to match resource paths (default: all non-image)
+    sort     - asc | desc (default asc)
+    icon     - icon name to prefix each row
+
+  Body shared with the `resources` shortcode via _partials/resource-list.html;
+  the only difference is the default title.
+*/ -}}
+{{- $_unused := .Inner -}}
+{{- partial "resource-list.html" (dict
+    "page"    .Page
+    "title"   (.Get "title"   | default "Attachments")
+    "pattern" (.Get "pattern")
+    "sort"    (.Get "sort"    | default "asc")
+    "icon"    (.Get "icon"    | default "file")
+) -}}

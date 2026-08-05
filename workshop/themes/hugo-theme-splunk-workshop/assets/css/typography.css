@@ -1,0 +1,346 @@
+/* ==========================================================================
+   Typography — display + body + mono with deliberate hierarchy
+   ========================================================================== */
+
+:root {
+  --fs-xs:   0.78rem;
+  --fs-sm:   0.875rem;
+  --fs-base: 1rem;
+  --fs-md:   1.125rem;
+  --fs-lg:   1.375rem;
+  --fs-xl:   1.75rem;
+  --fs-2xl:  2.25rem;
+  --fs-3xl:  3rem;
+  --fs-4xl:  clamp(2.75rem, 5vw + 1rem, 4.5rem);
+  --fs-5xl:  clamp(3.5rem, 8vw + 1rem, 6.5rem);
+
+  --lh-tight: 1.05;
+  --lh-snug:  1.2;
+  --lh-base:  1.65;
+  --lh-loose: 1.75;
+}
+
+body {
+  font-size: var(--fs-md);
+  line-height: var(--lh-base);
+  letter-spacing: -0.005em;
+}
+
+/* ---- Display: Bricolage Grotesque, variable width axis used aggressively */
+h1, h2, h3, h4, h5, h6, .display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  letter-spacing: -0.025em;
+  color: var(--color-ink);
+}
+
+h1, .h1 {
+  font-size: var(--fs-4xl);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+h2, .h2 {
+  font-size: var(--fs-2xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-top: 3.5rem;
+  margin-bottom: 1rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--color-border);
+  position: relative;
+}
+h2::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 0;
+  width: 4rem;
+  height: 2px;
+  background: var(--gradient-accent);
+}
+
+h3, .h3 {
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-top: 2.5rem;
+  margin-bottom: 0.75rem;
+}
+
+h4, .h4 {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  margin-top: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+h5, h6 {
+  font-size: var(--fs-md);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  margin-top: 1.5rem;
+}
+
+/* ---- Body prose ---- */
+p, ul, ol, blockquote, dl, table, pre {
+  margin-block: 1.1em;
+}
+
+ul, ol { padding-inline-start: 1.5em; }
+li { margin-block: 0.4em; }
+li::marker { color: var(--color-accent-text); }
+
+ol { list-style: decimal; }
+ol > li::marker { font-family: var(--font-mono); font-weight: 500; }
+
+/* ---- Strong, em, small ---- */
+strong, b { font-weight: 650; color: var(--color-ink); }
+/* Bold inside a link must inherit the link's color so the gradient-text
+   hover (and the rest-state accent) survives `**[link](url)**` markup. */
+a strong, a b { color: inherit; }
+em, i { font-style: italic; }
+small { font-size: var(--fs-sm); }
+
+/* ---- Inline code ---- */
+:not(pre):not(.terminal__body) > code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  padding: 0.15em 0.4em;
+  /* Small horizontal margin so the chip's background edge doesn't butt
+     up against the adjacent word (just the inter-word space character is
+     too tight against the chip's solid fill). 0.15em reads as deliberate
+     space without feeling like a real word gap. */
+  margin: 0 0.15em;
+  /* Brand identity carried by the type, not the surface. Background is
+     unified with fenced code blocks (`--code-bg`); text uses the
+     accent-text token that flips per mode and is engineered for body-
+     text contrast (~5.4:1 dark-magenta on white, ~8:1 light-pink on
+     navy — both pass WCAG AA on its own scale). Distinct from links by
+     the chip's mono font + border + padding. Modern dev-doc convention
+     (GitHub / Linear / Stripe all use brand colour on inline code at
+     least in dark mode); applying it in both keeps the chip identity
+     consistent across modes and means no `[data-theme="dark"]` override. */
+  background: var(--code-bg);
+  color: var(--color-accent-text);
+  border-radius: 4px;
+  border: 1px solid var(--color-border-strong);
+  font-feature-settings: "calt" 0;
+}
+/* Terminal's <code> wrapper must inherit cleanly */
+.terminal__body > code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* ---- Blockquote — modern speech-bubble pull-quote.
+       Plain `> text` markdown renders as a tinted card with paired
+       decorative curly quotes and a small bubble tail. For semantic
+       callouts (tip / note / warning / etc.) authors should use GitHub
+       Alerts syntax `> [!TIP]` — those route through callout-render.html,
+       not this rule. See exampleSite/content/docs/authoring/04-markdown.md. */
+blockquote {
+  position: relative;
+  margin: 2rem 0 2.5rem;
+  padding: 1.4rem 3.25rem 1.4rem 3.5rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1.55;
+  color: var(--color-ink);
+  box-shadow: 0 1px 3px color-mix(in oklab, var(--color-ink) 4%, transparent);
+}
+/* Opening curly quote — top-left, upright display type so it reads as
+   typographic ornament, not as a glyph in the prose. */
+blockquote::before {
+  content: "\201C";
+  position: absolute;
+  top: 0.1rem;
+  left: 0.85rem;
+  font-family: var(--font-display);
+  font-size: 4rem;
+  line-height: 1;
+  font-style: normal;
+  color: var(--color-accent-text);
+  opacity: 0.55;
+}
+/* Closing curly quote — bottom-right, mirroring the opening mark for
+   typographic balance. Absolutely positioned against the blockquote
+   (the nearest positioned ancestor), so paragraph-internal flow is
+   undisturbed. blockquote::after is taken by the bubble tail; mounting
+   the closing mark on the last paragraph's ::after lets both coexist. */
+blockquote p:last-child::after {
+  content: "\201D";
+  position: absolute;
+  right: 0.85rem;
+  bottom: -0.5rem;
+  font-family: var(--font-display);
+  font-size: 4rem;
+  line-height: 1;
+  font-style: normal;
+  color: var(--color-accent-text);
+  opacity: 0.55;
+}
+/* Speech-bubble tail — rotated square at the bottom-left, painted in the
+   bubble's surface colour with the border continuing across two of its
+   sides so the seam disappears against the card. */
+blockquote::after {
+  content: "";
+  position: absolute;
+  bottom: -0.6rem;
+  left: 2rem;
+  width: 1rem;
+  height: 1rem;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  transform: rotate(45deg);
+}
+/* Suppress the original per-paragraph opening glyph (now handled at
+   blockquote level) and tighten paragraph margins inside the bubble. */
+blockquote p:first-child::before { content: none; }
+blockquote p:first-child { margin-top: 0; }
+blockquote p:last-child { margin-bottom: 0; }
+
+/* ---- Horizontal rule — gradient version ---- */
+hr {
+  border: 0;
+  height: 2px;
+  background: var(--gradient-accent);
+  margin: 3rem auto;
+  width: 4rem;
+  border-radius: 2px;
+  opacity: 0.7;
+}
+
+/* ---- Tables ---- */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+th, td {
+  text-align: left;
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid var(--color-border);
+}
+th {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-ink-muted);
+  border-bottom: 2px solid var(--color-border-strong);
+}
+
+/* ---- Definition list ---- */
+dt { font-weight: 600; margin-top: 0.8rem; }
+dd { margin-inline-start: 1rem; color: var(--color-ink-muted); }
+
+/* ---- Anchor links on headings (rendered by render-heading.html) ---- */
+.heading-anchor {
+  margin-left: 0.4em;
+  opacity: 0;
+  font-size: 0.7em;
+  color: var(--color-ink-muted);
+  transition: opacity var(--t-fast) var(--ease);
+  text-decoration: none;
+  font-weight: 400;
+}
+/* Wrap heading element types in :where() so the heading-hover rule has
+   zero contribution from the (h1|h2|h3|h4) part. That drops the rule's
+   specificity to (0,1,1) — letting the .heading-anchor:hover override
+   below at (0,2,0) win cleanly, without resorting to !important. */
+:where(h1, h2, h3, h4):hover .heading-anchor,
+:where(h1, h2, h3, h4):focus-within .heading-anchor { opacity: 0.6; }
+.heading-anchor:hover,
+.heading-anchor:focus-visible { opacity: 1; color: var(--color-accent-text); }
+
+/* ---- Lead paragraph (used at top of pages) ---- */
+.lead {
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  line-height: 1.45;
+  font-weight: 400;
+  color: var(--color-ink-muted);
+  margin: 1.5rem 0 2rem;
+  max-width: 42ch;
+}
+
+/* ---- Gradient text utility ----
+   `padding-bottom: 0.1em`: with text-fill-color transparent and
+   background-clip:text, descenders (g, p, y, q, j) that extend below the
+   element's padding box render invisible — the gradient isn't painted
+   there, so there's no fill to reveal. Extending the paint area down by
+   0.1em covers every common descender at every font size without
+   visibly affecting layout. For inline usages padding-bottom doesn't
+   participate in line-box height calc so neighbours don't shift. */
+.gradient-text {
+  background: var(--gradient-accent);
+  -webkit-background-clip: text;
+          background-clip: text;
+  -webkit-text-fill-color: transparent;
+  padding-bottom: 0.1em;
+}
+
+/* Italics inside DISPLAY headings get the brand gradient — the same accent
+   treatment as the hero ("Observability *Workshops*."). Scoped to specific
+   display headings so workshop body `##`/`###` headings that happen to
+   contain italics (e.g. file names) keep emphasis without the brand color
+   overriding it. Templates pipe titles through `markdownify` so authors
+   can write `*Workshops*` in front matter.
+   `font-weight: 500` is the only weight override (em is already italic by
+   UA default — no need to re-state). `padding-right` + negative
+   `margin-right`: italic glyphs slant past their inline box, and
+   `background-clip: text` only paints inside the element box; without the
+   pad, the trailing letter's right edge (the curve of "s" in "Workshops")
+   gets clipped. The negative margin pulls the next sibling back so visual
+   spacing stays unchanged. */
+.hero__title em,
+.browse__title em,
+.cat__name em {
+  background: var(--gradient-accent);
+  -webkit-background-clip: text;
+          background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 500;
+  /* padding-right covers the italic slant of the trailing letter
+     ("Workshops" → s); padding-bottom covers descenders (italic g/p/y/q
+     extend below baseline, otherwise clip when text-fill-color is
+     transparent). Negative margin pulls the next sibling back so visual
+     spacing stays unchanged on inline use. */
+  padding-right: 0.2em;
+  padding-bottom: 0.1em;
+  margin-right: -0.15em;
+}
+
+/* ---- Eyebrow / kicker ---- */
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 500;
+  color: var(--color-accent-text);
+}
+.eyebrow::before {
+  content: "";
+  width: 1.5rem;
+  height: 1px;
+  background: var(--gradient-accent);
+}

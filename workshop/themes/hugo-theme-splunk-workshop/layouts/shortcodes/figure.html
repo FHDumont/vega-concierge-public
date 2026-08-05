@@ -1,0 +1,24 @@
+{{- /* Alias of image — preserves Hugo's built-in {{< figure >}} syntax. */ -}}
+{{- $src     := .Get "src"     | default (.Get 0) -}}
+{{- $alt     := .Get "alt"     | default "" -}}
+{{- $caption := .Get "caption" | default (.Get 1) -}}
+{{- $title   := .Get "title"   -}}
+{{- $align   := .Get "align"   | default "" -}}
+{{- $url := $src -}}
+{{- $hasScheme := gt (len (findRE `^[A-Za-z][A-Za-z0-9+.-]*:` $src)) 0 -}}
+{{- $isAbsoluteURI := or $hasScheme (hasPrefix $src "//") -}}
+{{- if hasPrefix $src "/" -}}
+  {{- $url = partial "site-href.html" $src -}}
+{{- else if not $isAbsoluteURI -}}
+  {{- with .Page.Resources.GetMatch $src -}}
+    {{- $url = .RelPermalink -}}
+  {{- else -}}
+    {{- warnidf (printf "figure-missing-%s" $src) "{{< figure >}}: %q not found in page bundle %q" $src .Page.Path -}}
+  {{- end -}}
+{{- end -}}
+<figure class="figure {{ with $align }}figure--align-{{ . }}{{ end }}">
+  <div class="figure__inner">
+    <img src="{{ $url | safeURL }}" alt="{{ $alt }}" loading="lazy" decoding="async">
+  </div>
+  {{ if or $title $caption }}<figcaption class="figure__caption">{{ with $title }}<strong>{{ . }}</strong> {{ end }}{{ $caption }}</figcaption>{{ end }}
+</figure>

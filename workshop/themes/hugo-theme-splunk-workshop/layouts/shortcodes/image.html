@@ -1,0 +1,44 @@
+{{- /*
+  Image — flexible figure with caption, alignment, and zoom.
+  Args: src, alt, caption, align (left|right|center|bleed|none), width, height.
+  Resources are resolved via .Page.Resources first, falling back to a URL.
+
+  Sizing: `width` and `height` accept any CSS length (px, rem, %, vh, …)
+  and apply as `max-width` / `max-height` on the rendered image, so the
+  picture scales down but never up. With only one dimension set, native
+  aspect ratio is preserved; setting both clamps the image into a fixed
+  box (it still fits inside without distortion).
+
+  Usage:
+    {{< image src="screenshot.png" alt="Splunk dashboard" caption="The empty state." >}}
+    {{< image src="ux.png" align="right" width="50%" >}}
+    {{< image src="diagram.png" width="320px" height="240px" >}}
+*/ -}}
+{{- $src     := .Get "src"     | default (.Get 0) -}}
+{{- $alt     := .Get "alt"     | default "" -}}
+{{- $caption := .Get "caption" | default (.Get 1) -}}
+{{- $align   := .Get "align"   | default "" -}}
+{{- $width   := .Get "width"   | default "" -}}
+{{- $height  := .Get "height"  | default "" -}}
+{{- $url := $src -}}
+{{- $hasScheme := gt (len (findRE `^[A-Za-z][A-Za-z0-9+.-]*:` $src)) 0 -}}
+{{- $isAbsoluteURI := or $hasScheme (hasPrefix $src "//") -}}
+{{- if hasPrefix $src "/" -}}
+  {{- $url = partial "site-href.html" $src -}}
+{{- else if not $isAbsoluteURI -}}
+  {{- with .Page.Resources.GetMatch $src -}}
+    {{- $url = .RelPermalink -}}
+  {{- else -}}
+    {{- warnidf (printf "image-missing-%s" $src) "{{< image >}}: %q not found in page bundle %q" $src .Page.Path -}}
+  {{- end -}}
+{{- end -}}
+{{- /* width clamps the whole figure (so caption + frame stay aligned with
+       the image); height clamps just the <img> (browsers preserve the
+       intrinsic aspect ratio when only one dimension is constrained
+       on a replaced element). */ -}}
+<figure class="figure {{ with $align }}figure--align-{{ . }}{{ end }}"{{ with $width }} style="max-width: {{ . | safeCSS }}"{{ end }}>
+  <div class="figure__inner">
+    <img src="{{ $url | safeURL }}" alt="{{ $alt }}" loading="lazy" decoding="async"{{ with $height }} style="max-height: {{ . | safeCSS }}"{{ end }}>
+  </div>
+  {{ with $caption }}<figcaption class="figure__caption">{{ . }}</figcaption>{{ end }}
+</figure>

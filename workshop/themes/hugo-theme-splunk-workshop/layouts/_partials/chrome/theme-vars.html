@@ -1,0 +1,138 @@
+{{- /*
+  Bridges Hugo `params` to CSS custom properties.
+  Override any param in your site's hugo.toml to rebrand the theme.
+*/ -}}
+{{- $p := site.Params -}}
+{{- if $p.splunkDataSansPro -}}
+<style>
+  /* Splunk Data Sans Pro — the official Splunk brand typeface, loaded from
+     Splunk's own CDN (same files help.splunk.com serves). Opt in by setting
+     `splunkDataSansPro = true` in your site's [params] and pointing
+     fontDisplay / fontBody at "'Splunk Data Sans Pro', ...". */
+  {{- /* Only the weights the CSS actually requests are declared. CSS rules
+         use 400 / 450 / 500 / 600 / 650 / 700 / 800; the browser maps the
+         in-between values (450, 600, 650) to the nearest declared face
+         via standard font-weight matching. Lt (300) and Blk (900) were
+         loaded historically but never referenced; dropped to keep the
+         inline <style> tight. */ -}}
+  @font-face {
+    font-family: 'Splunk Data Sans Pro';
+    src: url('https://assets.portal.heretto.com/splunk/26.02.26/SplunkDataSansPro_Rg.ttf') format('truetype');
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Splunk Data Sans Pro';
+    src: url('https://assets.portal.heretto.com/splunk/26.02.26/SplunkDataSansPro_Md.ttf') format('truetype');
+    font-weight: 500; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Splunk Data Sans Pro';
+    src: url('https://assets.portal.heretto.com/splunk/26.02.26/SplunkDataSansPro_Bd.ttf') format('truetype');
+    font-weight: 700; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Splunk Data Sans Pro';
+    src: url('https://assets.portal.heretto.com/splunk/26.02.26/SplunkDataSansPro_XBd.ttf') format('truetype');
+    font-weight: 800; font-style: normal; font-display: swap;
+  }
+</style>
+{{- end -}}
+<style>
+  :root {
+    /* Splunk official brand gradient: Magenta 50 → Orange 50.
+       --color-accent     = decorative (gradients, large display text, icons, borders, shadows)
+       --color-accent-text = body-text use, AA-contrast (Magenta 60 light / Magenta 30 dark) */
+    --color-accent:       {{ $p.colorAccent      | default "#FF007F" }};
+    --color-accent-2:     {{ $p.colorAccent2     | default "#FF9000" }};
+    --color-accent-3:     {{ $p.colorAccent3     | default "#FFAB0F" }};
+    --color-accent-dark:  {{ $p.colorAccentDark  | default "#D4006B" }};
+    --color-accent-text:  {{ $p.colorAccentText  | default "#BD0D5F" }};
+
+    /* Light mode tokens (the page paints with these unless data-theme=dark) */
+    --color-ink:           {{ $p.colorInk           | default "#0C1724" }};
+    --color-ink-muted:     {{ $p.colorInkMuted      | default "#4B4D52" }};
+    --color-paper:         {{ $p.colorPaper         | default "#FFFFFF" }};
+    --color-surface:       {{ $p.colorSurface       | default "#F7F6F3" }};
+    --color-surface-alt:   {{ $p.colorSurfaceAlt    | default "#EFEDE7" }};
+    --color-border:        {{ $p.colorBorder        | default "#E5E2DA" }};
+    --color-border-strong: {{ $p.colorBorderStrong  | default "#D6D2C8" }};
+
+    /* Code-block surfaces — background of the code body and the header
+       strip. Other code tokens (fg, comment, keyword, etc.) stay in
+       code.css since they're a syntax-highlight palette tuned together. */
+    --code-bg:             {{ $p.codeBg             | default "#F5F5F5" }};
+    --code-header-bg:      {{ $p.codeHeaderBg       | default "#F2F2F2" }};
+    --code-bg-dark:        {{ $p.codeBgDark         | default "#0A1322" }};
+    --code-header-bg-dark: {{ $p.codeHeaderBgDark   | default "#131E33" }};
+
+    /* Dark-tier tokens emitted at :root so components that are always dark
+       (e.g. the site footer) can reference them regardless of theme mode. */
+    --color-ink-dark:           {{ $p.colorInkDark           | default "#F4F1EA" }};
+    --color-ink-muted-dark:     {{ $p.colorInkMutedDark      | default "#9CA3AF" }};
+    --color-paper-dark:         {{ $p.colorPaperDark         | default "#0C1724" }};
+    --color-surface-dark:       {{ $p.colorSurfaceDark       | default "#141E2F" }};
+    --color-surface-alt-dark:   {{ $p.colorSurfaceAltDark    | default "#1B2740" }};
+    --color-border-dark:        {{ $p.colorBorderDark        | default "#1F2C44" }};
+    --color-border-strong-dark: {{ $p.colorBorderStrongDark  | default "#2A3A56" }};
+
+    /* Typography */
+    --font-display: {{ $p.fontDisplay | default "'Inter', ui-sans-serif, system-ui, sans-serif" | safeCSS }};
+    --font-body:    {{ $p.fontBody    | default "'Inter', ui-sans-serif, system-ui, sans-serif" | safeCSS }};
+    --font-mono:    {{ $p.fontMono    | default "'JetBrains Mono', ui-monospace, Menlo, monospace" | safeCSS }};
+
+    /* Layout */
+    --content-max:  {{ $p.contentMaxWidth | default "720px" }};
+    --logo-h:       {{ $p.logoHeight | default "28" }}px;
+
+    /* Shape tokens — single source of truth so every card-like surface and
+       every button shares the same corner radius family. */
+    --radius-sm: 6px;     /* chips, badges, kbd, inline buttons */
+    --radius-md: 8px;     /* form controls, small components */
+    --radius-lg: 12px;    /* cards, callouts, code blocks, pager buttons */
+
+    /* Motion tokens — three durations + one shared easing. Avoids the
+       0.15s / 0.18s / 0.2s / 0.25s drift the CSS had grown. */
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+    --t-fast:  150ms;     /* colour / border shifts on hover */
+    --t-base:  200ms;     /* card lifts, sidebar chevron rotation */
+    --t-slow:  300ms;     /* modal open, theme toggle, image zoom */
+
+    /* Z-index scale — ordered stack of overlay layers. Local z-index
+       values (1-9) within isolated stacking contexts don't use these
+       tokens; the scale only applies to elements that compete for
+       document-level layering. Skip link sits above modals so keyboard
+       users can always reach the "skip to content" affordance even
+       with a modal open. */
+    --z-mobile-sidebar: 40;   /* mobile slide-in workshop sidebar */
+    --z-meta-bar:       49;   /* workshop-meta sticky strip */
+    --z-header:         50;   /* fixed site header */
+    --z-presenter:      60;   /* floating presenter-mode toggle pill */
+    --z-menu:           80;   /* language switcher dropdown */
+    --z-modal:         100;   /* search modal, image lightbox */
+    --z-skip:          200;   /* skip-to-content link (beats modal) */
+
+    /* Hero background images — empty string falls through to CSS radial gradient. */
+    --hero-bg-light: {{ with $p.heroBackgroundLight }}url("{{ . | relURL }}"){{ else }}none{{ end }};
+    --hero-bg-dark:  {{ with $p.heroBackgroundDark  }}url("{{ . | relURL }}"){{ else }}none{{ end }};
+
+    /* Splunk's signature gradient — Magenta 50 → Orange 50 with 10/90 stops
+       per the official brand spec. Used on hero italic, step circles, the
+       progress bar, pager hover, and the chapter weight number. */
+    --gradient-accent: linear-gradient(95deg,
+      var(--color-accent) 10%,
+      var(--color-accent-2) 90%);
+  }
+
+  [data-theme="dark"] {
+    --color-ink:           var(--color-ink-dark);
+    --color-ink-muted:     var(--color-ink-muted-dark);
+    --color-paper:         var(--color-paper-dark);
+    --color-surface:       var(--color-surface-dark);
+    --color-surface-alt:   var(--color-surface-alt-dark);
+    --color-border:        var(--color-border-dark);
+    --color-border-strong: var(--color-border-strong-dark);
+    --color-accent-text:   {{ $p.colorAccentTextDark    | default "#FF7DBA" }};
+    --code-bg:             var(--code-bg-dark);
+    --code-header-bg:      var(--code-header-bg-dark);
+  }
+</style>

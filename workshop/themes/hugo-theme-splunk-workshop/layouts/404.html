@@ -1,0 +1,49 @@
+{{ define "main" }}
+{{- /* Opt-in legacy redirect: catches `/…/latest/<rest>` URLs that 404 today
+       (from an older version of the site that used a `/latest/` segment)
+       and rewrites them to the canonical path. Runs FIRST so the redirect
+       fires before the 404 content paints. Gated on a site param so a
+       brand-new site with no legacy URLs pays nothing.
+       Single replacement (not /g) — a real page whose path coincidentally
+       contains "/latest/" downstream is left alone. */ -}}
+{{ if site.Params.legacyLatestRedirect }}
+<script>
+  (function () {
+    var p = location.pathname;
+    if (p.indexOf("/latest/") !== -1) {
+      location.replace(p.replace("/latest/", "/") + location.search + location.hash);
+    }
+  })();
+</script>
+{{ end }}
+<main class="page page--narrow" style="text-align:center; padding-top:8rem; padding-bottom:6rem;">
+  <p class="eyebrow eyebrow--center">{{ i18n "notFoundEyebrow" }}</p>
+  <h1 class="hero__title gradient-text not-found__title">{{ i18n "notFoundTitle" }}</h1>
+  <p class="hero__lead not-found__lead">{{ i18n "notFoundLead" }}</p>
+  {{- /* Fake "query result" panel — leans into the observability metaphor:
+         the visitor's URL is the search, the page is the empty result. Hidden
+         by default and filled in via the small script below; without JS we
+         just don't show it (no awkward empty panel). */ -}}
+  <dl class="not-found__query" data-not-found-query hidden aria-hidden="true">
+    <div class="not-found__query-row">
+      <dt class="not-found__query-key">{{ i18n "notFoundQueryLabel" }}</dt>
+      <dd class="not-found__query-val"><code data-not-found-path>—</code></dd>
+    </div>
+    <div class="not-found__query-row">
+      <dt class="not-found__query-key">{{ i18n "notFoundResultLabel" }}</dt>
+      <dd class="not-found__query-val">{{ i18n "notFoundResultValue" }}</dd>
+    </div>
+  </dl>
+  <div class="not-found__cta"><a href="{{ partial "site-href.html" "/" }}" class="btn btn--primary">{{ i18n "takeMeHome" }} <span class="btn__arrow">&rarr;</span></a></div>
+  <script>
+    (function () {
+      var pathEl = document.querySelector("[data-not-found-path]");
+      var panel  = document.querySelector("[data-not-found-query]");
+      if (!pathEl || !panel) return;
+      pathEl.textContent = location.pathname + location.search;
+      panel.removeAttribute("hidden");
+      panel.setAttribute("aria-hidden", "false");
+    })();
+  </script>
+</main>
+{{ end }}

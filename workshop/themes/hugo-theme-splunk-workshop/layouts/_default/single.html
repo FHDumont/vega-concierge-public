@@ -1,0 +1,6 @@
+{{ define "main" }}
+{{ partial "shell/three-column.html" (dict
+  "page"           .
+  "innerPartial"   "page/default.html"
+  "showMetaFooter" true) }}
+{{ end }}

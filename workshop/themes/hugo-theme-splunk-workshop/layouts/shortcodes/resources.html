@@ -1,0 +1,11 @@
+{{- /* Alias of `attachments` — same listing logic, different default title.
+       Both shortcode names exist so relearn content migrates without
+       rewriting. Body lives in _partials/resource-list.html. */ -}}
+{{- $_unused := .Inner -}}
+{{- partial "resource-list.html" (dict
+    "page"    .Page
+    "title"   (.Get "title"   | default "Resources")
+    "pattern" (.Get "pattern")
+    "sort"    (.Get "sort"    | default "asc")
+    "icon"    (.Get "icon"    | default "file")
+) -}}

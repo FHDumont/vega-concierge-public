@@ -1,0 +1,19 @@
+# Imagem OPCIONAL do backend com modo BROWSER do simulador (F-039) — Playwright + Chromium
+# JÁ embutidos. A imagem BASE (Dockerfile) segue enxuta (só o modo API). Use esta variante
+# só quando quiser dirigir o navegador real p/ o RUM. Build via CI (CONVENCOES › "Build de
+# imagens Docker — somente via CI"); a tag da base do Playwright casa com requirements-browser.txt.
+FROM mcr.microsoft.com/playwright/python:v1.60.0-noble
+WORKDIR /app
+ARG VEGA_VERSION=dev
+ARG VEGA_GIT_SHA=local
+ARG VEGA_BUILD_DATE=
+ENV VEGA_VERSION=${VEGA_VERSION} VEGA_GIT_SHA=${VEGA_GIT_SHA} VEGA_BUILD_DATE=${VEGA_BUILD_DATE}
+COPY requirements.txt requirements-browser.txt ./
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-browser.txt
+# O browser já vem na imagem base do Playwright; garante o Chromium presente (idempotente).
+RUN playwright install chromium
+COPY . .
+EXPOSE 8000
+# Aponte o runner ao frontend do compose (serviço "frontend"); default = localhost:3000.
+ENV SIM_BROWSER_BASE_URL=http://frontend:3000
+CMD ["uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "8000"]

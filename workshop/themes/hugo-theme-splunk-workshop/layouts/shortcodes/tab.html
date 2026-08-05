@@ -1,0 +1,40 @@
+{{- /*
+  Tab — child of tabs. When used standalone (no parent {{< tabs >}}) it renders
+  as a single labeled block, matching relearn's behaviour.
+
+  Args: title | name | label  (any of the three is accepted as the tab label;
+        positional 0 also works). `name` is the relearn idiom and is kept here
+        for migrated content. `icon` is optional.
+*/ -}}
+{{- $label   := .Get "title" | default (.Get "name") | default (.Get "label") | default (.Get 0) | default "Tab" -}}
+{{- $icon    := .Get "icon" -}}
+{{- $content := .Inner | .Page.RenderString -}}
+
+{{- if and .Parent (eq .Parent.Name "tabs") -}}
+  {{- /* Nested inside tabs — append to the bucket for the matching tab set.
+         Use an explicit id when present. Otherwise fall back to the current
+         rendered position plus the parent tabs ordinal, which matches the
+         existing automatic keying used by older pages. */ -}}
+  {{- $explicit := .Parent.Get "id" | default (.Parent.Get "key") -}}
+  {{- $seed := "" -}}
+  {{- if $explicit -}}
+    {{- $seed = printf "%v" $explicit -}}
+  {{- else -}}
+    {{- $scope := printf "%v" .Parent.Position -}}
+    {{- $ordinal := .Parent.Ordinal | default 0 -}}
+    {{- $seed = printf "%s-%v" $scope $ordinal -}}
+  {{- end -}}
+  {{- $key := printf "_tabs_%s" (replaceRE "[^a-zA-Z0-9]" "-" $seed) -}}
+  {{- $entry  := dict "label" $label "icon" $icon "content" $content -}}
+  {{- .Page.Store.Add $key (slice $entry) -}}
+{{- else -}}
+{{- /* Standalone — render as a labeled single-pane block. Flat output so
+       indented HTML isn't parsed as a code block when nested in a percent
+       shortcode (see tabs.html for the same constraint). */ -}}
+<div class="tabs tabs--single">
+<div class="tabs__list" role="tablist">
+<button class="tabs__btn is-active" role="tab" aria-selected="true" tabindex="0" disabled>{{ if $icon }}<span class="tabs__icon">{{ partial "icon-svg.html" $icon }}</span>{{ end }}{{ $label }}</button>
+</div>
+<div class="tabs__panel is-active" role="tabpanel">{{ $content | safeHTML }}</div>
+</div>
+{{- end -}}

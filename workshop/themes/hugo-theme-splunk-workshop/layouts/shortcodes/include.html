@@ -1,0 +1,30 @@
+{{- /*
+  Relearn-compatible include — embed another page's content.
+  Args:
+    file              - path under content/, e.g. "shared/footer.md"
+    hidefirstheading  - "true" to drop the first H1
+*/ -}}
+{{- $file := .Get "file" | default (.Get 0) -}}
+{{- $hide := eq (.Get "hidefirstheading" | default (.Get 1) | default "false") "true" -}}
+{{- with $.Page.GetPage $file -}}
+  {{- $html := .RenderShortcodes -}}
+  {{- if .Store.Get "_needs_katex" }}{{- $.Page.Store.Set "_needs_katex" true -}}{{- end -}}
+  {{- if .Store.Get "_needs_mermaid" }}{{- $.Page.Store.Set "_needs_mermaid" true -}}{{- end -}}
+  {{- $rendered := $html | $.Page.RenderString -}}
+  {{- if $hide -}}
+    {{- /* Split at the first </h1> and discard everything up to and including
+           it. We deliberately operate on RENDERED HTML (not .RawContent) so
+           that Goldmark has already escaped any `</h1>` inside code fences
+           to `&lt;/h1&gt;` — that makes the split safer than a markdown-
+           level regex, which would need its own code-fence awareness to
+           avoid false matches like `# shell comment` inside ```bash blocks.
+           Goldmark always emits lowercase tags, so `</H1>` never appears. */ -}}
+    {{- $parts := split ($rendered | string) "</h1>" -}}
+    {{- if gt (len $parts) 1 -}}
+      {{- $rendered = strings.Join (after 1 $parts) "</h1>" -}}
+    {{- end -}}
+  {{- end -}}
+  {{ $rendered | safeHTML }}
+{{- else -}}
+  {{- errorf "{{< include >}} could not find page %q" $file -}}
+{{- end -}}

@@ -1,0 +1,137 @@
+/* Modern reset — opinionated, minimal */
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
+  scroll-padding-top: calc(var(--header-h, 4.25rem) + 1rem);
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.6;
+  font-family: var(--font-body);
+  background: var(--color-paper);
+  color: var(--color-ink);
+  transition: background-color var(--t-base) var(--ease), color var(--t-base) var(--ease);
+}
+
+/* Sticky footer: main grows to fill available space so the footer sits
+   flush to the viewport bottom on short pages. */
+body > main { flex: 1 0 auto; }
+
+img, picture, video, canvas, svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+input, button, textarea, select { font: inherit; color: inherit; }
+
+p, h1, h2, h3, h4, h5, h6 { overflow-wrap: break-word; }
+
+button {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+}
+
+a {
+  /* `--color-accent-text` (Magenta 60 in light mode, Magenta 30 in dark)
+     is the AA-contrast variant of the brand pink — 6.4:1 against paper-light,
+     8.6:1 against paper-dark. The token system's other accent var
+     (`--color-accent` = Magenta 50 #FF007F) is reserved for decorative use
+     (gradients, large display text, icons, borders) where 4.39:1 is fine. */
+  color: var(--color-accent-text);
+  text-decoration: none;
+  transition: color var(--t-fast) var(--ease);
+}
+/* No colour change on hover: the rest state is already the brand pink and
+   passes WCAG AA in both modes. A hover colour shift would either fail AA
+   transiently (brightening to Magenta 50) or trade brand identity for ink
+   contrast. No underline on hover — modern theme convention; cards, buttons,
+   and tree rows are their own affordance. */
+a:hover { color: var(--color-accent-text); }
+
+/* Prose links — accent-coloured at rest, no underline. On hover the text
+   itself becomes the brand pink→orange gradient via background-clip:text.
+   WCAG 1.4.1 is satisfied via the link/body contrast ratio: accent-text
+   is `#BD0D5F` (light) / `#FF7DBA` (dark) against the body ink, both clear
+   the 3:1 threshold for link-vs-surrounding-text distinction.
+   Scoped to anchors inside prose containers (p, li, dd) that DON'T carry
+   a class — markdown-emitted links have no class, while component chrome
+   (.btn, .card, .shortcode-card, .attachments__item a) does. */
+.content :is(p, li, dd) a:not([class]) {
+  text-decoration: none;
+  color: var(--color-accent-text);
+}
+.content :is(p, li, dd) a:not([class]):hover,
+.content :is(p, li, dd) a:not([class]):focus-visible {
+  background-image: var(--gradient-accent);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  /* descenders (g, p, y, q, j) clip when text-fill-color is transparent
+     because the gradient isn't painted below the padding box. Small
+     padding-bottom on hover covers them without shifting line layout
+     (inline padding doesn't participate in line-box height). */
+  padding-bottom: 0.05em;
+}
+
+::selection { background: var(--color-accent); color: #fff; }
+
+/* ------ Focus rings — keyboard-only via :focus-visible ------ */
+/* Ring uses `currentColor` so it contrasts every surface — the previous
+   `--color-accent` version disappeared on magenta surfaces (CTA button,
+   terminal cursor, magenta-tinted card hover). The `box-shadow` halo in
+   `--color-paper` adds a guaranteed-contrast separation between the ring
+   and any same-colour background it might sit on. WCAG 2.2 SC 2.4.13.
+   Components that need a different border-radius set it on their own
+   selector — the ring inherits via `border-radius: inherit` below. */
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 4px var(--color-paper);
+  border-radius: inherit;
+}
+
+/* ------ Skip link — off-screen until focused ------ */
+.skip-link {
+  position: fixed;
+  top: 0.5rem;
+  left: 0.5rem;
+  padding: 0.6rem 1rem;
+  background: var(--color-accent);
+  color: #fff !important;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  text-decoration: none !important;
+  transform: translateY(-200%);
+  transition: transform var(--t-fast) var(--ease);
+  z-index: var(--z-skip);
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

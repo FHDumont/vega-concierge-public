@@ -1,0 +1,18 @@
+# Vega Ops Console — terminal web (ttyd) "SSH via browser" (F-047, ADR-025). Serviço de HOST.
+# Serve shell do host em localhost only; o painel faz proxy autenticado em /shell/ (sem Basic Auth duplo).
+# -b /shell = base-path alinhado ao proxy FastAPI. NÃO exponha :7681 no Security Group — só :9000.
+[Unit]
+Description=Vega Ops Console (web terminal via ttyd)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/vega-concierge
+EnvironmentFile=-/opt/vega-concierge/.env
+ExecStart=/bin/sh -c 'exec ttyd -b /shell -i lo -p ${CONTROL_TTYD_PORT:-7681} -W bash'
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,26 @@
+# dependências
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+*.tsbuildinfo
+.next/
+
+# ambiente
+.env
+.env.local
+
+# SO
+.DS_Store
+
+# logs / runtime local
+*.log
+*.db
+backend/.vega-persist/
+
+# ferramentas de agente (locais)
+.claude/
+.superpowers/
+
+# investigações/spikes efêmeros e planos de rascunho (não versionar)
+docs/scratch/

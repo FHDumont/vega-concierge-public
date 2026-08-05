@@ -1,0 +1,5400 @@
+/* Tailwind 4: import único (substitui as 3 diretivas @tailwind do v3) — F-036. */
+@import "tailwindcss";
+
+/* Tailwind segue disponível só para LAYOUT cru (grid/flex/spacing) — NÃO para
+   estilizar componentes Splunk (cor/tipografia vêm dos tokens). Ver ADR-009. */
+:root {
+  --brand: #534ab7; /* legado: Behind the Scenes (Tailwind) até a F-007 */
+}
+
+/* ============================================================================
+   LOJA — sistema de paletas selecionáveis (ADR-012 / F-009).
+   Design custom estilizado por variáveis CSS; aplicadas no <html> via
+   [data-palette] + [data-scheme] (seletor global + script anti-flash no layout).
+   Valores de referência: docs/design/store-mockup.html. Splunk UI NÃO entra aqui.
+   ========================================================================== */
+:root {
+  --radius: 16px;
+  --radius-sm: 12px;
+  --shadow: 0 6px 24px rgba(20, 20, 40, 0.08);
+  --shadow-lg: 0 16px 48px rgba(20, 20, 40, 0.14);
+  /* layer bar + store header (topo do painel de chat abaixo do menu) */
+  --chat-panel-top: 118px;
+}
+
+/* neutros por esquema (light/dark) */
+[data-scheme="light"] {
+  --bg: #f6f7fb;
+  --surface: #ffffff;
+  --surface-2: #f0f2f8;
+  --text: #15161c;
+  --muted: #6b6f80;
+  --border: #e9ebf2;
+}
+[data-scheme="dark"] {
+  --bg: #0e0f14;
+  --surface: #171922;
+  --surface-2: #1f2230;
+  --text: #f3f4f8;
+  --muted: #9aa0b3;
+  --border: #262a38;
+}
+
+/* acentos por paleta (default = splunk = tema do guia; ver layout/anti-flash) */
+[data-palette="blue"] {
+  --accent: #0264d7;
+  --accent-2: #04a4b0;
+  --accent-ink: #ffffff;
+  --hero: linear-gradient(135deg, #0264d7, #3993ff 60%, #04a4b0);
+}
+[data-palette="blue"][data-scheme="dark"] {
+  --accent: #3993ff;
+}
+[data-palette="sunset"] {
+  --accent: #ff6b4a;
+  --accent-2: #ffb020;
+  --accent-ink: #3a1300;
+  --hero: linear-gradient(135deg, #ff6b4a, #ff9248 55%, #ffb020);
+}
+[data-palette="mono"] {
+  --accent: #2c2c2e;
+  --accent-2: #7d7d85;
+  --accent-ink: #ffffff;
+  --hero: linear-gradient(135deg, #3a3a3f, #6b6b73);
+}
+[data-palette="mono"][data-scheme="dark"] {
+  --accent: #e9e9ee;
+  --accent-ink: #15161c;
+}
+
+/* Paleta "Splunk" (F-038, default): copia os tokens do tema Hugo Splunk já vendorizado em
+   `workshop/` (fonte de verdade: `workshop/public/index.html` :root + `[data-theme="dark"]`
+   e `workshop/public/css/bundle.css`). NÃO inventar valores. Acento rosa Magenta 50 #FF007F.
+   (Esta é a paleta-padrão; a antiga "Splunk" azul virou "blue".)
+   O tema resolve neutros por-tema (paper/surface/ink); a loja resolve por [data-scheme],
+   então sobrescrevemos os neutros por paleta+esquema p/ bater exatamente com o guia.
+   Mapa canvas/cards p/ preservar o "lift" dos cards da loja:
+   light  → canvas = surface (#F4F6FA, leve cinza) · card = paper (#FFFFFF);
+   dark   → canvas = paper (#0C1724, mais escuro)  · card = surface (#141E2F).
+   (No tema o paper é a página; na loja o card precisa contrastar do canvas.) */
+[data-palette="splunk"] {
+  --accent: #ff007f; /* --color-accent (Magenta 50) */
+  --accent-2: #ff9000; /* --color-accent-2 (usado no gradiente do tema) */
+  --accent-ink: #ffffff; /* tema: texto branco sobre o acento (CTA / ::selection) */
+  /* --gradient-accent do tema: linear-gradient(95deg, accent 10%, accent-2 90%) */
+  --hero: linear-gradient(95deg, #ff007f 10%, #ff9000 90%);
+  /* radius do tema: --radius-lg 12px (cards) / --radius-md 8px */
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+[data-palette="splunk"][data-scheme="light"] {
+  --bg: #f4f6fa; /* --color-surface (canvas levemente cinza) */
+  --surface: #ffffff; /* --color-paper (cards) */
+  --surface-2: #e9edf2; /* --color-surface-alt */
+  --text: #0c1724; /* --color-ink */
+  --muted: #585b61; /* --color-ink-muted */
+  --border: #e1e5ec; /* --color-border */
+}
+[data-palette="splunk"][data-scheme="dark"] {
+  --bg: #0c1724; /* --color-paper-dark (canvas mais escuro) */
+  --surface: #141e2f; /* --color-surface-dark (cards) */
+  --surface-2: #1b2740; /* --color-surface-alt-dark */
+  --text: #f4f1ea; /* --color-ink-dark */
+  --muted: #9ca3af; /* --color-ink-muted-dark */
+  --border: #1f2c44; /* --color-border-dark */
+}
+
+/* Tipografia da paleta Splunk (F-038): aplica a FONTE e o caráter de ESCALA do tema
+   quando a paleta splunk (tema do guia) está ativa, escopado à loja (`.ns-store`) — é onde o critério
+   pede "a cara do guia". Fonte do tema (workshop/public/index.html :root): display e body
+   ambos 'Splunk Data Sans Pro'; mono 'JetBrains Mono'. Essas faces são PROPRIETÁRIAS e
+   NÃO vêm bundleadas no tema (sem @font-face/woff em workshop/), então usamos a MESMA
+   stack/fallback declarada pelo tema — sem embutir nada (decisão em aberto da spec; DT-015).
+   Escala/caráter: o tema usa corpo maior e arejado (--fs-md 1.125rem, --lh-base 1.65,
+   letter-spacing -0.005em) com tracking fechado nos títulos (-0.02/-0.025em). Os tamanhos
+   px dos componentes da loja NÃO são tocados (disciplina de escopo — sem refactor de carona);
+   aplicamos o tracking/leading do tema, que é a assinatura visível da escala dele. */
+[data-palette="splunk"] .ns-store {
+  font-family: "Splunk Data Sans Pro", ui-sans-serif, system-ui, sans-serif;
+  line-height: var(--lh-base, 1.65);
+  letter-spacing: -0.005em;
+}
+[data-palette="splunk"] .ns-store :is(h1, h2, h3, h4) {
+  letter-spacing: -0.025em;
+}
+/* mono do tema p/ os trechos monoespaçados da loja (ex.: code da dica de demo) */
+[data-palette="splunk"] .ns-store code,
+[data-palette="splunk"] .ns-store .ns-demo-hint code {
+  font-family: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* Escala de SEVERIDADE como tokens (não componentes Splunk — ADR-013/F-013).
+   Semântica, independente de paleta (consistência didática: erro é vermelho em
+   qualquer paleta). Alinha-se a lib/severity.ts (Emergency→Info) e aos pontos do
+   .ns-status. Usada pelo Behind the Scenes (e telas técnicas) p/ status/erros. */
+:root {
+  --sev-normal: #1aa179;
+  --sev-info: #3993ff;
+  --sev-notice: #d99a08;
+  --sev-warning: #e08b08;
+  --sev-alert: #e0533d;
+  --sev-critical: #d33a2c;
+}
+
+/* Canvas do Behind the Scenes (telas técnicas / Splunk UI): segue o tema Prisma
+   pelo [data-scheme] no <html> (default light — ADR-010). A LOJA usa .ns-store
+   (abaixo), que pinta o próprio canvas com a paleta. */
+html[data-scheme="dark"] body {
+  background: #111215; /* backgroundColorPage (dark) */
+  color: #b5b5b5; /* contentColorDefault (dark) */
+}
+html[data-scheme="light"] body,
+html:not([data-scheme]) body {
+  background: #f9f9f9; /* backgroundColorPage (light) */
+  color: #4d4d4d; /* contentColorDefault (light) */
+}
+
+body {
+  /* Stack do token Splunk Platform Sans com fallback livre de licença (Roboto/Arial). */
+  font-family: "Splunk Platform Sans", "Splunk Data Sans", Roboto, "Helvetica Neue",
+    Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ============================================================================
+   LOJA — componentes custom (sem @splunk/react-ui). Classes prefixadas `ns-`
+   para não colidir com Tailwind/Splunk. Tudo estilizado pelas variáveis acima.
+   ========================================================================== */
+
+/* canvas + tipografia da loja (Manrope via next/font, fallback livre) */
+.ns-store {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-manrope), "Manrope", system-ui, -apple-system, sans-serif;
+  transition: background 0.25s, color 0.25s;
+}
+.ns-store a {
+  color: inherit;
+  text-decoration: none;
+}
+.ns-store button {
+  font-family: inherit;
+  cursor: pointer;
+}
+.ns-wrap {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 22px;
+}
+.ns-muted {
+  color: var(--muted);
+}
+
+/* ---- seletor de paleta + esquema (popup do header da loja, F-NAV-1) ------------ */
+.ns-theme-wrap {
+  position: relative;
+}
+.ns-theme-popup {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  min-width: 320px;
+  padding: 14px 16px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+}
+.ns-theme-popup-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.ns-theme-popup-head b {
+  font-size: 14px;
+}
+.ns-theme-picker {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.ns-theme-picker b {
+  font-weight: 700;
+}
+.ns-switch {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.ns-switch b {
+  font-weight: 700;
+}
+.ns-chips {
+  display: flex;
+  gap: 6px;
+}
+.ns-chip {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 4px 11px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.ns-chip.on {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+
+/* ---- header (horizontal fixo) --------------------------------------------- */
+.ns-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.ns-topbar {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 12.5px;
+  text-align: center;
+  padding: 7px 22px;
+}
+.ns-nav {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 14px 0;
+}
+.ns-logo {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 800;
+  font-size: 20px;
+  flex: none;
+}
+.ns-logo .dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  background: var(--accent);
+  display: inline-block;
+}
+.ns-cats {
+  display: flex;
+  gap: 18px;
+  font-weight: 600;
+  font-size: 14.5px;
+}
+.ns-cats button {
+  background: none;
+  border: none;
+  color: inherit;
+  font-weight: 600;
+  font-size: 14.5px;
+  padding: 0;
+}
+.ns-cats button:hover {
+  color: var(--accent);
+}
+.ns-cats button.on {
+  color: var(--accent);
+}
+.ns-search {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 9px 16px;
+  min-width: 230px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.ns-search input {
+  border: none;
+  background: transparent;
+  outline: none;
+  color: var(--text);
+  font: inherit;
+  width: 100%;
+}
+.ns-search input::placeholder {
+  color: var(--muted);
+}
+.ns-icons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex: none;
+}
+.ns-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  font-size: 19px;
+  line-height: 1;
+}
+.ns-icon:hover {
+  background: var(--surface-2);
+}
+.ns-icon .count {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 1px 5px;
+  font-family: var(--font-manrope), system-ui, sans-serif;
+}
+.ns-header-cta {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: 13.5px;
+  font-weight: 600;
+  flex: none;
+  color: var(--text);
+  white-space: nowrap;
+}
+.ns-header-cta:hover {
+  border-color: var(--accent);
+}
+.ns-header-cta.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
+}
+.ns-account {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: 13.5px;
+  font-weight: 600;
+  flex: none;
+}
+.ns-account:hover {
+  border-color: var(--accent);
+}
+.ns-account .who {
+  max-width: 8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- hero ------------------------------------------------------------------ */
+.ns-hero {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 26px;
+  align-items: stretch;
+  margin: 26px 0;
+}
+.ns-hero-card {
+  background: var(--hero);
+  border-radius: 24px;
+  padding: 40px;
+  color: #fff;
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  box-shadow: var(--shadow-lg);
+}
+.ns-hero-card h1 {
+  font-size: 38px;
+  line-height: 1.1;
+  margin: 0 0 12px;
+  font-weight: 800;
+}
+.ns-hero-card p {
+  font-size: 16px;
+  opacity: 0.92;
+  margin: 0 0 22px;
+  max-width: 380px;
+}
+/* a.ns-btn (não .ns-btn): empata em especificidade com o reset `.ns-store a` e vence
+   por ordem — senão o link herdaria o branco do hero card (texto sumiria). */
+a.ns-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  color: #15161c;
+  font-weight: 700;
+  border: none;
+  border-radius: 999px;
+  padding: 13px 22px;
+  font-size: 15px;
+  width: max-content;
+}
+.ns-hero-side {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 18px;
+}
+.ns-promo {
+  border-radius: 20px;
+  padding: 22px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.ns-promo.accent {
+  background: var(--surface-2);
+}
+.ns-promo .k {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.ns-promo .v {
+  font-size: 24px;
+  font-weight: 800;
+  margin-top: 4px;
+}
+
+/* ---- banda do concierge ---------------------------------------------------- */
+.ns-concierge {
+  margin: 8px 0 26px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 18px 20px;
+  box-shadow: var(--shadow);
+}
+.ns-concierge-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.ns-concierge-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.ns-concierge-picks {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.ns-spark {
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex: none;
+}
+.ns-spark.sm {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  font-size: 17px;
+}
+.ns-ask {
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 10px 18px;
+}
+.ns-ask input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  color: var(--text);
+  font: inherit;
+}
+.ns-ask input::placeholder {
+  color: var(--muted);
+}
+.ns-budget {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 14px;
+  white-space: nowrap;
+}
+.ns-budget input {
+  width: 84px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 9px 12px;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+.ns-go {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: none;
+  border-radius: 999px;
+  padding: 12px 20px;
+  font-weight: 700;
+  font-size: 14px;
+  flex: none;
+}
+.ns-go:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.ns-concierge-result {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.ns-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.ns-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: ns-spin 0.7s linear infinite;
+  flex: none;
+}
+@keyframes ns-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---- indicador global "AI is working" (F-028) ----------------------------- */
+/* UM sinal consistente com identidade de IA (sparkle animado + texto + dots),
+   reusado em todos os toques de IA da Loja/Admin. Independente de paleta. */
+.ns-ai-busy {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  max-width: 100%;
+}
+.ns-ai-busy.block {
+  display: flex;
+}
+.ns-ai-busy-spark {
+  color: var(--accent);
+  font-size: 16px;
+  line-height: 1;
+  flex: none;
+  animation: ns-ai-spark 1.4s ease-in-out infinite;
+}
+.ns-ai-busy-label {
+  display: inline-flex;
+  align-items: baseline;
+}
+.ns-ai-busy-dots {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 2px;
+}
+.ns-ai-busy-dots i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.35;
+  align-self: flex-end;
+  margin-bottom: 3px;
+  animation: ns-ai-dot 1.2s ease-in-out infinite;
+}
+.ns-ai-busy-dots i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.ns-ai-busy-dots i:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes ns-ai-spark {
+  0%,
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.25) rotate(20deg);
+    opacity: 1;
+  }
+}
+@keyframes ns-ai-dot {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ns-ai-busy-spark,
+  .ns-ai-busy-dots i {
+    animation: none;
+  }
+}
+.ns-note {
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  font-size: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+/* ---- cabeçalho de seção ---------------------------------------------------- */
+.ns-sec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 30px 0 14px;
+}
+.ns-sec-head h2 {
+  font-size: 22px;
+  font-weight: 800;
+  margin: 0;
+}
+
+/* ---- breadcrumb de saída da navegação por categoria/busca (F-028) ---------- */
+.ns-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 24px 0 -6px;
+  font-size: 14px;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+.ns-crumb-home {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-weight: 700;
+  font-size: 14px;
+}
+.ns-crumb-home:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.ns-crumbs .sep {
+  color: var(--muted);
+}
+.ns-crumbs .cur {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ---- grade + product card -------------------------------------------------- */
+.ns-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  margin-bottom: 40px;
+}
+.ns-card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  transition: transform 0.18s, box-shadow 0.18s;
+  display: flex;
+  flex-direction: column;
+}
+.ns-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+}
+.ns-card.hl {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.ns-ph {
+  height: 170px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 46px;
+  color: #fff;
+}
+.ns-heart {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #15161c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+}
+.ns-reco {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 1;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.ns-card .body {
+  padding: 14px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+.ns-card .name {
+  font-weight: 700;
+  font-size: 15px;
+}
+.ns-card .name:hover {
+  color: var(--accent);
+}
+.ns-card .rate {
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ns-star {
+  color: #f5a623;
+}
+.ns-stock {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+.ns-stock.low {
+  color: #b26a00;
+  background: rgba(245, 166, 35, 0.16);
+}
+.ns-stock.out {
+  color: #c0392b;
+  background: rgba(192, 57, 43, 0.14);
+}
+.ns-card .row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 8px;
+}
+.ns-price {
+  font-weight: 800;
+  font-size: 18px;
+}
+.ns-add {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: none;
+  border-radius: 11px;
+  padding: 9px 13px;
+  font-weight: 700;
+  font-size: 13px;
+}
+.ns-add:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ---- skeletons ------------------------------------------------------------- */
+.ns-skel {
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  overflow: hidden;
+}
+.ns-skel .tile {
+  height: 170px;
+  background: var(--surface-2);
+}
+.ns-skel .bar {
+  height: 14px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.ns-pulse {
+  animation: ns-pulse 1.4s ease-in-out infinite;
+}
+@keyframes ns-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* ---- página de detalhe ----------------------------------------------------- */
+.ns-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) 1fr;
+  gap: 36px;
+  margin: 26px 0 48px;
+  align-items: start;
+}
+/* Card de imagem (F-030): menor (coluna mais estreita + teto) e com placeholder
+   mais bonito que preenche o card — gradiente por SKU + camadas de luz p/ profundidade
+   + disco frosted grande com o ícone da categoria centralizado. Dirigido por paletas
+   (a base é gradientOf; os overlays são luz/sombra translúcidas, neutras). */
+.ns-detail-img {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  max-width: 420px;
+  border-radius: 28px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  box-shadow: var(--shadow-lg);
+  isolation: isolate;
+}
+.ns-detail-img::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(120% 90% at 18% 12%, rgba(255, 255, 255, 0.4), transparent 46%),
+    radial-gradient(85% 75% at 84% 90%, rgba(0, 0, 0, 0.22), transparent 60%);
+}
+.ns-detail-glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72%;
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 18px 40px rgba(0, 0, 0, 0.18);
+  font-size: clamp(72px, 16vw, 130px);
+  line-height: 1;
+}
+a.ns-back {
+  display: inline-block;
+  margin: 22px 0 4px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+a.ns-back:hover {
+  color: var(--accent);
+}
+.ns-detail-info {
+  display: flex;
+  flex-direction: column;
+}
+.ns-chips-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ns-tag {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.ns-detail-info h1 {
+  font-size: 32px;
+  font-weight: 800;
+  margin: 14px 0 0;
+}
+.ns-detail-price {
+  font-size: 32px;
+  font-weight: 800;
+  margin: 16px 0 0;
+}
+.ns-detail-about {
+  margin-top: 20px;
+}
+.ns-detail-about-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ns-detail-desc {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.ns-detail-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 28px;
+  flex-wrap: wrap;
+}
+.ns-btn-primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: none;
+  border-radius: 12px;
+  padding: 13px 22px;
+  font-weight: 700;
+  font-size: 15px;
+}
+.ns-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.ns-btn-ghost {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 13px 22px;
+  font-weight: 700;
+  font-size: 15px;
+}
+.ns-btn-ghost:hover {
+  border-color: var(--accent);
+}
+
+/* ---- IA-Produto (F-022): assistente na página de detalhe ------------------- */
+/* IA-Pedido (F-024): callout do resumo de status (confirmação + detalhe do histórico). */
+.ns-aisum {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  padding: 14px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.ns-aisum p {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+/* IA-Notificação (F-031): prévia da copy de e-mail (confirmação/enviado) estilo card de e-mail. */
+.ns-notify {
+  margin: 14px 0;
+  padding: 14px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 12px;
+}
+.ns-notify-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.ns-notify-head .chan {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ns-notify .subj {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.ns-notify .body {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+/* IA-Conta (F-031): insights do histórico + tier + recompra na página da Conta. */
+.ns-acct-ai p {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.ns-acct-ai-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.ns-acct-ai-row .lbl {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* IA-Checkout (F-024): gerador de mensagem de presente (Details step). */
+.ns-gift {
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.ns-gift-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.ns-pai {
+  margin: 0 0 48px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 20px 22px;
+  box-shadow: var(--shadow);
+}
+.ns-pai-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ns-pai-head h2 {
+  font-size: 18px;
+  font-weight: 800;
+  margin: 0;
+}
+.ns-pai-summary {
+  margin: 14px 0 0;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.ns-pai-ask {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+.ns-pai-ask input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 11px 18px;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+.ns-pai-ask input::placeholder {
+  color: var(--muted);
+}
+.ns-pai-ask input:focus {
+  border-color: var(--accent);
+}
+.ns-pai-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.ns-pai-answer {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.ns-pai-answer p {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+/* ---- Compare 2 produtos (F-029): seletor + veredito na página de produto ---- */
+.ns-compare {
+  margin-top: 18px;
+}
+.ns-compare-pick {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.ns-compare-pick select {
+  flex: 1;
+  min-width: 220px;
+}
+.ns-compare-vs {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.ns-compare-vs b {
+  color: var(--text);
+}
+
+/* ---- Returns/Refund (F-029): entrada da cadeia de reembolso no detalhe da ordem ---- */
+.ns-refund {
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+.ns-refund-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ns-refund-head > div {
+  flex: 1;
+  min-width: 180px;
+}
+.ns-refund-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text);
+}
+.ns-refund-sub {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.ns-refund-done {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ns-refund-done p {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+}
+.ns-refund-result {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.ns-refund-verdict {
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+.ns-refund-verdict.ok {
+  color: var(--sev-normal);
+}
+.ns-refund-verdict.no {
+  color: var(--sev-alert);
+}
+.ns-refund-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ns-refund-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.ns-refund-steps .ic {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  color: #fff;
+  background: var(--sev-normal);
+}
+.ns-refund-steps li.no .ic {
+  background: var(--muted);
+}
+.ns-refund-steps .bd {
+  display: flex;
+  flex-direction: column;
+}
+.ns-refund-steps .lb {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+}
+.ns-refund-steps .dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ---- IA-Busca (F-022): busca em linguagem natural na área de resultados ---- */
+.ns-smart {
+  margin: 6px 0 22px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
+}
+.ns-smart-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ns-smart-lead {
+  flex: 1;
+  min-width: 200px;
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+}
+.ns-smart-result {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.ns-smart-interp {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+}
+.ns-smart-dym {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* ---- IA-Home (F-023): picks personalizados na home default ----------------- */
+.ns-picks {
+  margin: 6px 0 40px;
+}
+.ns-picks-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.ns-picks-head h2 {
+  font-size: 20px;
+  font-weight: 800;
+  margin: 0;
+}
+.ns-picks-blurb {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ---- IA-Carrinho (F-023): cross-sell dentro do carrinho slide-over --------- */
+.ns-xsell {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.ns-xsell-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ns-xsell-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+.ns-xsell-blurb {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.ns-xsell-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ns-xsell-cta:hover {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.ns-xsell-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+.ns-xsell-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ns-xsell-item .thumb {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+.ns-xsell-item .info {
+  flex: 1;
+  min-width: 0;
+}
+.ns-xsell-item .nm {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ns-xsell-item .pr {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.ns-xsell-add {
+  flex: 0 0 auto;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ns-xsell-add:hover {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* ---- rodapé ---------------------------------------------------------------- */
+.ns-footer {
+  border-top: 1px solid var(--border);
+  padding: 26px 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  margin-top: 8px;
+}
+
+/* ============================================================================
+   F-010 — carrinho/checkout, conta/histórico e auth no design custom (ADR-012/013).
+   Migra as telas restantes p/ fora do @splunk/react-ui, dirigidas pelas paletas.
+   ========================================================================== */
+
+/* ---- tier badge (substitui o TierBadge Splunk) ----------------------------- */
+.ns-tier {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.ns-tier::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: none;
+}
+.ns-tier.standard {
+  color: var(--muted);
+}
+.ns-tier.gold {
+  color: #8a6200;
+  border-color: #e0a91b;
+}
+.ns-tier.gold::before {
+  background: #e0a91b;
+}
+[data-scheme="dark"] .ns-tier.gold {
+  color: #f2c451;
+}
+.ns-tier.platinum {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: transparent;
+}
+.ns-tier.platinum::before {
+  background: var(--accent-ink);
+}
+
+/* ---- status do pedido (severidade por cor + rótulo; substitui SeverityTag) -- */
+.ns-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--text);
+}
+.ns-status::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: none;
+}
+.ns-status.ok::before {
+  background: #1aa179;
+}
+.ns-status.info::before {
+  background: #3993ff;
+}
+.ns-status.pending::before {
+  background: #d99a08;
+}
+.ns-status.fail::before {
+  background: #e0533d;
+}
+.ns-status.warn::before {
+  background: var(--sev-warning);
+}
+
+/* IA-Admin (F-024): card de insights (resumo/anomalias gerados + reposição determinística). */
+.ns-adm-insights .lead {
+  margin: 12px 0 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.ns-adm-insights .ns-spark.sm {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+.ns-adm-anom {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ns-adm-anom li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text);
+}
+.ns-adm-restock {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.ns-adm-restock .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+}
+.ns-adm-restock .chip.out {
+  border-color: var(--sev-alert);
+  color: var(--sev-alert);
+}
+.ns-adm-restock .chip.low {
+  border-color: var(--sev-warning);
+}
+
+/* ---- botões reutilizáveis (largura cheia + linha) --------------------------- */
+.ns-btn-primary.block,
+.ns-btn-ghost.block {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.ns-btn-row {
+  display: flex;
+  gap: 10px;
+}
+.ns-btn-row > * {
+  flex: 1;
+}
+
+/* ---- campos de formulário (custom) ----------------------------------------- */
+.ns-field {
+  margin-bottom: 14px;
+}
+.ns-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.ns-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: 12px;
+  padding: 11px 14px;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.ns-input:focus {
+  border-color: var(--accent);
+}
+.ns-input::placeholder {
+  color: var(--muted);
+}
+.ns-row2 {
+  display: flex;
+  gap: 10px;
+}
+.ns-row2 > * {
+  flex: 1;
+}
+
+/* ---- alertas inline --------------------------------------------------------- */
+.ns-alert {
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 13.5px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+}
+.ns-alert.error {
+  border-color: rgba(224, 83, 61, 0.45);
+  background: rgba(224, 83, 61, 0.1);
+  color: #b23c28;
+}
+[data-scheme="dark"] .ns-alert.error {
+  color: #ff9b88;
+}
+.ns-alert.success {
+  border-color: rgba(26, 161, 121, 0.45);
+  background: rgba(26, 161, 121, 0.12);
+  color: #0f7050;
+}
+[data-scheme="dark"] .ns-alert.success {
+  color: #5fd6ad;
+}
+.ns-alert b {
+  font-weight: 700;
+}
+
+/* ---- carrinho / checkout (slide-over) -------------------------------------- */
+.ns-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.ns-overlay[aria-hidden="true"] {
+  pointer-events: none;
+}
+.ns-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 9, 15, 0.5);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.ns-overlay[aria-hidden="false"] .ns-backdrop {
+  opacity: 1;
+}
+.ns-panel {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 100%;
+  max-width: 30rem;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  transform: translateX(100%);
+  transition: transform 0.22s ease;
+}
+.ns-overlay[aria-hidden="false"] .ns-panel {
+  transform: translateX(0);
+}
+.ns-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.ns-panel-head h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+}
+.ns-panel-head .n {
+  font-weight: 500;
+  color: var(--muted);
+}
+.ns-close {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+}
+.ns-close:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.ns-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+.ns-panel-foot {
+  border-top: 1px solid var(--border);
+  padding: 18px 20px;
+}
+
+/* step bar do checkout */
+.ns-steps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 20px 0;
+}
+.ns-step {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.ns-step .n {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 11px;
+}
+.ns-step.on,
+.ns-step.done {
+  color: var(--text);
+}
+.ns-step.on .n,
+.ns-step.done .n {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+.ns-step-sep {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+  min-width: 8px;
+}
+
+/* linhas de item no carrinho */
+.ns-line {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.ns-line:first-child {
+  padding-top: 0;
+}
+.ns-line:last-child {
+  border-bottom: none;
+}
+.ns-line .thumb {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: #fff;
+}
+.ns-line .info {
+  flex: 1;
+  min-width: 0;
+}
+.ns-line .nm {
+  font-weight: 700;
+  font-size: 14px;
+}
+.ns-line .pr {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 2px;
+}
+.ns-line .sub {
+  font-weight: 700;
+  white-space: nowrap;
+  font-size: 14px;
+}
+.ns-remove {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-top: 8px;
+}
+.ns-remove:hover {
+  color: #e0533d;
+}
+
+/* stepper de quantidade */
+.ns-qty {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface-2);
+  margin-top: 8px;
+}
+.ns-qty button {
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1;
+}
+.ns-qty button:hover {
+  background: var(--border);
+}
+.ns-qty .v {
+  min-width: 30px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+/* total + linhas de resumo */
+.ns-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  font-size: 15px;
+}
+.ns-total .v {
+  font-size: 22px;
+  font-weight: 800;
+}
+.ns-sumrow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  padding: 6px 0;
+  color: var(--text);
+}
+.ns-sumrow .q {
+  color: var(--muted);
+}
+.ns-empty {
+  display: grid;
+  place-items: center;
+  min-height: 220px;
+  text-align: center;
+  color: var(--muted);
+}
+.ns-empty .big {
+  font-size: 34px;
+  margin-bottom: 8px;
+}
+
+/* ---- auth (login/registro redesenhado: card split com hero) ---------------- */
+.ns-auth {
+  max-width: 1040px;
+  margin: 40px auto;
+  padding: 0 22px;
+}
+.ns-auth-card {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-radius: 24px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  min-height: 540px;
+}
+.ns-auth-hero {
+  background: var(--hero);
+  color: #fff;
+  padding: 44px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.ns-auth-hero .brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 800;
+  font-size: 20px;
+}
+.ns-auth-hero .brand .dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.28);
+}
+.ns-auth-hero h2 {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.15;
+  margin: 0 0 12px;
+}
+.ns-auth-hero p {
+  font-size: 15px;
+  opacity: 0.92;
+  margin: 0;
+  max-width: 340px;
+}
+.ns-auth-points {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 26px;
+}
+.ns-auth-point {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.ns-auth-point .ic {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.18);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.ns-auth-form {
+  padding: 44px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.ns-auth-form h1 {
+  font-size: 24px;
+  font-weight: 800;
+  margin: 0 0 4px;
+}
+.ns-auth-sub {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0 0 22px;
+}
+.ns-tabs {
+  display: inline-flex;
+  gap: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px;
+  margin-bottom: 22px;
+  width: max-content;
+}
+.ns-tab {
+  border: none;
+  background: transparent;
+  border-radius: 999px;
+  padding: 8px 18px;
+  font-weight: 700;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.ns-tab.on {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.ns-demo-hint {
+  margin-top: 18px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--surface-2);
+}
+.ns-demo-hint b {
+  color: var(--text);
+}
+.ns-demo-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.ns-demo-row > span {
+  min-width: 0;
+}
+.ns-demo-hint code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1px 6px;
+  font-size: 12.5px;
+}
+.ns-link {
+  color: var(--accent);
+  font-weight: 700;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+}
+.ns-link:hover {
+  text-decoration: underline;
+}
+
+/* ---- conta: perfil + histórico --------------------------------------------- */
+.ns-account-page {
+  max-width: 920px;
+  margin: 30px auto;
+  padding: 0 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.ns-account-page > h1 {
+  font-size: 26px;
+  font-weight: 800;
+  margin: 0;
+}
+.ns-panelcard {
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 24px;
+}
+.ns-policy-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 720px) {
+  .ns-policy-layout {
+    grid-template-columns: 1fr;
+  }
+}
+.ns-policy-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: sticky;
+  top: 88px;
+}
+.ns-policy-nav button {
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ns-policy-nav button.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+.ns-policy-panel {
+  min-height: 320px;
+}
+.ns-policy-h1 {
+  font-size: 22px;
+  font-weight: 800;
+  margin: 0 0 20px;
+}
+.ns-policy-section {
+  margin-bottom: 22px;
+}
+.ns-policy-h2 {
+  font-size: 16px;
+  font-weight: 800;
+  margin: 0 0 10px;
+}
+.ns-policy-p {
+  margin: 0 0 12px;
+  line-height: 1.55;
+  color: var(--text);
+  font-size: 14px;
+}
+.ns-card-title {
+  font-size: 18px;
+  font-weight: 800;
+  margin: 0 0 16px;
+}
+/* Header de card com ação à direita (ex.: botão Refresh em Purchase history — F-032) */
+.ns-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.ns-card-head .ns-card-title {
+  margin: 0;
+}
+/* Paginação do Purchase history (F-032) — espelha o pager do Admin com classes da Loja */
+.ns-hist-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.ns-hist-pager .size {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 700;
+}
+.ns-hist-pager .size select {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 5px 8px;
+  font-weight: 700;
+  font-size: 13px;
+}
+.ns-hist-pager .nav {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.ns-hist-pager .nav .page {
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+.ns-hist-pager .nav .ns-btn-ghost {
+  padding: 7px 12px;
+}
+.ns-profile {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.ns-profile .who {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.ns-avatar {
+  width: 54px;
+  height: 54px;
+  border-radius: 16px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  font-weight: 800;
+  flex: none;
+}
+.ns-profile .nm {
+  font-size: 19px;
+  font-weight: 800;
+}
+.ns-profile .em {
+  color: var(--muted);
+  font-size: 13.5px;
+}
+.ns-profile .right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.ns-progress {
+  margin-top: 18px;
+}
+.ns-progress .track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+  margin-top: 8px;
+}
+.ns-progress .fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+}
+.ns-orders {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.ns-orders th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0 12px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.ns-orders td {
+  padding: 14px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.ns-orders tr:last-child td {
+  border-bottom: none;
+}
+.ns-orders td.right,
+.ns-orders th.right {
+  text-align: right;
+}
+.ns-orders .id {
+  font-weight: 700;
+}
+/* histórico clicável (F-019): linha abre o detalhe da ordem */
+.ns-orders-click tbody tr {
+  cursor: pointer;
+}
+.ns-orders-click tbody tr:hover td {
+  background: var(--surface-2);
+}
+.ns-orders-click tbody tr[aria-busy="true"] {
+  opacity: 0.6;
+}
+.ns-orders-click tbody tr:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.ns-center {
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  color: var(--muted);
+}
+.ns-address-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.ns-address-row .ns-btn-ghost {
+  flex: none;
+}
+
+@media (max-width: 760px) {
+  .ns-auth-card {
+    grid-template-columns: 1fr;
+  }
+  .ns-auth-hero {
+    display: none;
+  }
+  .ns-orders thead {
+    display: none;
+  }
+  .ns-orders td {
+    display: block;
+    border: none;
+    padding: 2px 0;
+  }
+  .ns-orders tr {
+    display: block;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .ns-orders td.right {
+    text-align: left;
+  }
+}
+
+@media (max-width: 700px) {
+  .ns-reco-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+@media (max-width: 900px) {
+  .ns-hero {
+    grid-template-columns: 1fr;
+  }
+  .ns-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .ns-detail {
+    grid-template-columns: 1fr;
+  }
+  .ns-cats {
+    display: none;
+  }
+  .ns-search {
+    min-width: 0;
+  }
+}
+@media (max-width: 560px) {
+  .ns-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================================
+   CHECKOUT — página própria (F-011). Step bar + form (Details/Payment) numa
+   coluna e resumo do pedido ao lado (sticky no desktop). Reusa .ns-panelcard,
+   .ns-steps, .ns-field, .ns-line, .ns-total etc. Estilizado pelas variáveis.
+   ========================================================================== */
+.ns-checkout {
+  max-width: 980px;
+  margin: 30px auto;
+  padding: 0 22px;
+}
+.ns-checkout-title {
+  font-size: 26px;
+  font-weight: 800;
+  margin: 0 0 18px;
+}
+.ns-checkout .ns-steps {
+  margin-bottom: 22px;
+}
+.ns-checkout-grid {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 20px;
+  align-items: start;
+}
+.ns-checkout-summary {
+  position: sticky;
+  top: 20px;
+}
+.ns-checkout-done {
+  max-width: 560px;
+}
+.ns-checkout-empty {
+  max-width: 460px;
+  margin: 40px auto;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.ns-checkout-empty .big {
+  font-size: 46px;
+}
+.ns-checkout-empty h1 {
+  font-size: 22px;
+  font-weight: 800;
+  margin: 6px 0 0;
+}
+.ns-checkout-empty .ns-btn-primary {
+  margin-top: 14px;
+}
+.ns-saved-address {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  padding: 12px 14px;
+  font-size: 14px;
+}
+.ns-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--muted);
+  cursor: pointer;
+  margin-top: 2px;
+}
+.ns-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  flex: none;
+}
+@media (max-width: 760px) {
+  .ns-checkout-grid {
+    grid-template-columns: 1fr;
+  }
+  .ns-checkout-summary {
+    position: static;
+  }
+}
+
+/* ============================================================================
+   CONCIERGE LAUNCHER — botão flutuante global (F-011), canto inferior direito.
+   Painel WhatsApp-style abre POST /api/chat (F-051). z-index abaixo do carrinho
+   (.ns-overlay = 40) para o carrinho cobrir o painel quando aberto.
+   ========================================================================== */
+.ns-fab {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 30;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: none;
+  font-size: 24px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease;
+}
+.ns-fab:hover {
+  transform: translateY(-2px);
+}
+.ns-fab.on {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.ns-fab-panel {
+  position: fixed;
+  top: var(--chat-panel-top, 118px);
+  right: 22px;
+  bottom: 92px;
+  z-index: 31;
+  width: min(520px, calc(100vw - 44px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow-lg);
+}
+.ns-fab-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+.ns-fab-head .ttl {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ns-fab-head .ttl b {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+}
+.ns-fab-head .ttl .sub {
+  display: block;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.ns-fab-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+.ns-fab-body {
+  padding: 16px 18px 18px;
+}
+.ns-fab-chat {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+.ns-fab-chat .ns-chat-thread {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 16px;
+}
+.ns-fab-composer {
+  flex: none;
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--surface);
+}
+.ns-fab-composer .ns-fab-composer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.ns-fab-composer .ns-fab-composer-row .ns-input {
+  flex: 1;
+  min-width: 0;
+}
+.ns-fab-composer .ns-fab-composer-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+@media (max-width: 480px) {
+  .ns-fab-panel {
+    top: var(--chat-panel-top, 118px);
+    right: 12px;
+    left: 12px;
+    width: auto;
+    bottom: 86px;
+    border-radius: 14px;
+  }
+  .ns-fab {
+    right: 16px;
+    bottom: 16px;
+  }
+}
+
+/* --- Chat aberto (F-050-CHAT) ---------------------------------------------- */
+.ns-chat-page {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 72px);
+  max-width: 720px;
+  margin: 0 auto;
+  padding-bottom: 100px;
+}
+.ns-chat-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.ns-chat-thread {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  padding-bottom: 16px;
+}
+.ns-chat-bubble {
+  max-width: 88%;
+  padding: 12px 16px;
+  border-radius: 16px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.ns-chat-bubble.user {
+  align-self: flex-end;
+  background: var(--accent);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.ns-chat-bubble.assistant {
+  align-self: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+.ns-chat-bubble p {
+  margin: 0;
+}
+.ns-chat-artifact {
+  margin-top: 12px;
+}
+.ns-chat-compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.ns-chat-mini-card {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ns-chat-verdict {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.ns-chat-answer-layout {
+  margin-top: 4px;
+}
+.ns-chat-facts {
+  margin: 0 0 12px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.ns-chat-fact {
+  display: grid;
+  grid-template-columns: minmax(88px, 38%) 1fr;
+  gap: 8px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+}
+.ns-chat-fact dt {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.ns-chat-fact dd {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.4;
+}
+.ns-chat-sections {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ns-chat-sections li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.ns-chat-sections .ic {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.ns-chat-sections .bd {
+  display: flex;
+  flex-direction: column;
+}
+.ns-chat-sections .lb {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+.ns-chat-sections .dt {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.ns-chat-bullets {
+  margin: 0;
+  padding: 0 0 0 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.ns-chat-search-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+}
+.ns-chat-gift blockquote {
+  margin: 0 0 10px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--accent);
+  font-style: italic;
+  font-size: 14px;
+  line-height: 1.5;
+  background: var(--bg);
+  border-radius: 0 8px 8px 0;
+}
+.ns-chat-loading {
+  padding: 8px 0;
+}
+.ns-chat-composer {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 0;
+  width: 100%;
+  max-width: 720px;
+  padding: 14px 16px 22px;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 20;
+}
+.ns-chat-composer-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ns-chat-composer-row .ns-btn-primary {
+  margin-left: auto;
+}
+.ns-chat-link {
+  font-size: 13px;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+  align-self: center;
+}
+.ns-chat-link:hover {
+  text-decoration: underline;
+}
+@media (max-width: 480px) {
+  .ns-chat-composer {
+    left: 0;
+    transform: none;
+    max-width: none;
+  }
+}
+
+/* ============================================================================
+   BEHIND THE SCENES — telas técnicas no design custom dirigido por paletas
+   (F-013, ADR-013). Substitui o Tailwind hardcoded (bg-neutral/bg-brand/red…)
+   por variáveis de paleta (--accent/--surface/--text) + tokens de severidade
+   (--sev-*). Agentes = acento; erros/sucesso = severidade. Classes `ns-bts-*`.
+   ========================================================================== */
+.ns-tech {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-manrope), "Manrope", system-ui, -apple-system, sans-serif;
+  transition: background 0.25s, color 0.25s;
+}
+.ns-tech button {
+  font-family: inherit;
+  cursor: pointer;
+}
+.ns-tech-wrap {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px 22px 48px;
+}
+.ns-tech-head h1 {
+  font-size: 26px;
+  font-weight: 800;
+  margin: 0;
+}
+.ns-tech-head p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+.ns-tech-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 22px;
+  margin-top: 24px;
+}
+@media (min-width: 1024px) {
+  .ns-tech-grid {
+    grid-template-columns: 2fr 1fr;
+  }
+}
+.ns-tech-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ns-tech-side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ns-tech-card {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 18px;
+}
+.ns-tech-sectitle {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+/* F-034: shell do Behind the Scenes — reusa o shell/nav do Admin (ns-adm-*). Os itens da nav
+   são <button> (troca de seção, não rota), então neutralizamos o look nativo de botão. */
+.ns-tech .ns-adm-shell {
+  max-width: 1340px;
+}
+.ns-bts-navbtn {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+}
+.ns-tech-head {
+  margin-bottom: 22px;
+}
+
+/* ---- barra de run (botão + request) ---------------------------------------- */
+.ns-bts-runbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.ns-bts-runbar .req {
+  font-size: 14px;
+  color: var(--muted);
+}
+.ns-bts-runbar .req b {
+  color: var(--text);
+  font-weight: 600;
+}
+.ns-bts-runbtn {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: none;
+  border-radius: 12px;
+  padding: 10px 20px;
+  font-weight: 700;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.ns-bts-runbtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* banner do resultado da run (sucesso/falha por severidade) */
+.ns-bts-result {
+  border-radius: 12px;
+  padding: 11px 14px;
+  font-size: 13.5px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+}
+.ns-bts-result.ok {
+  color: var(--sev-normal);
+  border-color: color-mix(in srgb, var(--sev-normal) 45%, transparent);
+  background: color-mix(in srgb, var(--sev-normal) 12%, transparent);
+}
+.ns-bts-result.broke {
+  color: var(--sev-critical);
+  border-color: color-mix(in srgb, var(--sev-critical) 45%, transparent);
+  background: color-mix(in srgb, var(--sev-critical) 12%, transparent);
+}
+[data-scheme="dark"] .ns-bts-result.broke {
+  color: #ff9b88;
+}
+
+/* ---- problem panel (toggles) ----------------------------------------------- */
+.ns-bts-side-title {
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+.ns-bts-side-sub {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* F-GALILEO-3: banner Splunk Agent Observability + roteiro UC + barra de presets */
+.ns-bts-galileo-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 16px;
+  margin-bottom: 18px;
+  background: var(--surface);
+}
+.ns-bts-galileo-banner.connected {
+  border-color: color-mix(in srgb, var(--sev-normal) 45%, var(--border));
+  background: color-mix(in srgb, var(--sev-normal) 8%, var(--surface));
+}
+.ns-bts-galileo-banner.off {
+  border-color: color-mix(in srgb, var(--sev-notice) 45%, var(--border));
+  background: color-mix(in srgb, var(--sev-notice) 8%, var(--surface));
+}
+.ns-bts-galileo-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.ns-bts-galileo-pill {
+  font-size: 13px;
+  font-weight: 700;
+}
+.ns-bts-galileo-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+.ns-bts-galileo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.ns-bts-galileo-link,
+.ns-bts-galileo-copy {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-radius: 10px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-family: inherit;
+  text-decoration: none;
+}
+.ns-bts-galileo-copy:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.ns-bts-preset-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0 4px;
+}
+.ns-bts-preset-btn {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+}
+.ns-bts-preset-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.ns-bts-uc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ns-bts-uc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ns-bts-uc-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ns-bts-uc-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+.ns-bts-uc-enforcement {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+.ns-bts-uc-enforcement.enforcement-observe {
+  color: var(--sev-normal);
+  border-color: color-mix(in srgb, var(--sev-normal) 45%, transparent);
+}
+.ns-bts-uc-enforcement.enforcement-block {
+  color: var(--sev-critical);
+  border-color: color-mix(in srgb, var(--sev-critical) 45%, transparent);
+}
+.ns-bts-uc-enforcement.enforcement-steer {
+  color: var(--sev-notice);
+  border-color: color-mix(in srgb, var(--sev-notice) 45%, transparent);
+}
+.ns-bts-uc-pain {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+.ns-bts-uc-load {
+  align-self: flex-start;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: none;
+  border-radius: 10px;
+  padding: 8px 16px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.ns-bts-uc-steps {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13.5px;
+  color: var(--text);
+}
+.ns-bts-uc-steps li + li {
+  margin-top: 4px;
+}
+.ns-bts-uc-prompt,
+.ns-bts-uc-hint,
+.ns-bts-uc-protect {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.ns-bts-uc-prompt code,
+.ns-bts-uc-protect code {
+  font-size: 12px;
+  color: var(--text);
+}
+.ns-bts-uc-store {
+  margin: 0;
+  font-size: 13px;
+}
+.ns-bts-uc-link {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+.ns-bts-uc-link:hover {
+  text-decoration: underline;
+}
+.ns-bts-uc-eval-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.ns-bts-uc-eval ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+/* F-034: Problem panel redesenhado — cards didáticos (o quê / como / sinal app),
+   borda de severidade (tokens --sev-*; cor + rótulo, nunca só cor). */
+.ns-pp-head {
+  margin-bottom: 4px;
+}
+.ns-pp-preset-banner {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+.ns-pp-card.preset-hit {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.ns-pp-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex: none;
+}
+.ns-pp-uc-chip {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.ns-pp-where code {
+  font-size: 12px;
+  color: var(--text);
+  word-break: break-word;
+}
+.ns-pp-try-link {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: none;
+}
+.ns-pp-try-link:hover {
+  text-decoration: underline;
+}
+.ns-pp-eval-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ns-pp-eval-chip {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.ns-pp-protect {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.ns-pp-protect strong {
+  color: var(--text);
+}
+.ns-pp-advanced .ns-pp-oneline {
+  margin: 8px 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.ns-pp-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+.ns-pp-card-actions .ns-pp-switch {
+  margin-top: 0;
+  flex: 1 1 auto;
+  min-width: 120px;
+}
+.ns-pp-details {
+  margin-top: 10px;
+}
+.ns-bts-workshop-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.ns-bts-workshop-intro {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+.ns-bts-workshop-intro .ns-bts-side-title {
+  margin: 0;
+}
+.ns-bts-workshop-intro .ns-bts-side-sub {
+  margin: 6px 0 0;
+}
+.ns-bts-workshop-clear {
+  flex: none;
+  align-self: flex-start;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+.ns-bts-workshop-clear:hover {
+  border-color: var(--sev-critical);
+  color: var(--sev-critical);
+}
+.ns-pp-detail-visible {
+  margin-top: 10px;
+}
+.ns-bts-uc-toggles-label {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.ns-bts-uc-toggles-label code {
+  font-size: 11px;
+  margin-right: 6px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.ns-bts-uc-toggles-label code.on {
+  color: var(--sev-critical);
+  border-color: color-mix(in srgb, var(--sev-critical) 40%, transparent);
+  background: color-mix(in srgb, var(--sev-critical) 8%, transparent);
+}
+.ns-bts-workshop .ns-bts-uc-enforcement {
+  font-size: 10px;
+  padding: 3px 8px;
+}
+.ns-bts-uc-compact .ns-bts-uc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+.ns-bts-uc-simulate {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: 10px;
+  padding: 8px 16px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.ns-bts-uc-simulate:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+.ns-bts-uc-simulate:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+.ns-bts-uc-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.ns-bts-toggle-chip {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  background: var(--surface);
+}
+.ns-bts-toggle-chip.on {
+  color: var(--sev-critical);
+  border-color: color-mix(in srgb, var(--sev-critical) 45%, transparent);
+  background: color-mix(in srgb, var(--sev-critical) 10%, transparent);
+}
+.ns-bts-uc-details {
+  margin-top: 12px;
+  font-size: 13px;
+}
+.ns-bts-uc-details summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--accent);
+  list-style: none;
+}
+.ns-bts-uc-details summary::-webkit-details-marker {
+  display: none;
+}
+.ns-bts-uc-details[open] summary {
+  margin-bottom: 8px;
+}
+.ns-sim-result {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.ns-sim-result.ok {
+  border-color: color-mix(in srgb, var(--sev-normal) 45%, var(--border));
+}
+.ns-sim-result.fail {
+  border-color: color-mix(in srgb, var(--sev-critical) 45%, var(--border));
+}
+.ns-sim-result-head {
+  margin: 0 0 6px;
+  font-weight: 800;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ns-sim-result.ok .ns-sim-result-head {
+  color: var(--sev-normal);
+}
+.ns-sim-result.fail .ns-sim-result-head {
+  color: var(--sev-critical);
+}
+.ns-sim-result-steps {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.45;
+}
+.ns-sim-result-steps li.fail {
+  color: var(--sev-critical);
+}
+.ns-sim-request {
+  margin: 4px 0;
+  font-size: 11px;
+  color: var(--muted);
+  word-break: break-word;
+}
+.ns-sim-request code {
+  font-size: 11px;
+  color: var(--text);
+}
+.ns-sim-flag {
+  color: var(--muted);
+  font-size: 12px;
+}
+.ns-sim-result-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.ns-sim-console-link {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: none;
+}
+.ns-sim-console-link:hover {
+  text-decoration: underline;
+}
+/* Advanced: dois cards por linha; cai p/ 1 coluna no estreito. Workshop (Use cases): sempre 1 por linha. */
+.ns-pp-list {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+@media (max-width: 760px) {
+  .ns-pp-list {
+    grid-template-columns: 1fr;
+  }
+}
+.ns-bts-workshop .ns-pp-list {
+  grid-template-columns: 1fr;
+}
+.ns-pp-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-left: 5px solid var(--sev, var(--border));
+  border-radius: 14px;
+  background: var(--surface-2);
+  padding: 16px 18px;
+}
+.ns-pp-card.on {
+  background: color-mix(in srgb, var(--sev, var(--accent)) 9%, var(--surface));
+  border-color: color-mix(in srgb, var(--sev, var(--accent)) 45%, var(--border));
+}
+/* mapeia a severidade do card p/ a variável local --sev */
+.ns-pp-card.sev-normal { --sev: var(--sev-normal); }
+.ns-pp-card.sev-info { --sev: var(--sev-info); }
+.ns-pp-card.sev-notice { --sev: var(--sev-notice); }
+.ns-pp-card.sev-warning { --sev: var(--sev-warning); }
+.ns-pp-card.sev-alert { --sev: var(--sev-alert); }
+.ns-pp-card.sev-critical { --sev: var(--sev-critical); }
+.ns-pp-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ns-pp-title {
+  font-size: 16.5px;
+  font-weight: 800;
+  color: var(--text);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ns-pp-sev {
+  flex: none;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: var(--sev, var(--muted));
+  background: color-mix(in srgb, var(--sev, var(--muted)) 16%, transparent);
+}
+.ns-pp-detail {
+  margin: 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1 1 auto;
+}
+.ns-pp-detail > div {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2px;
+}
+.ns-pp-detail dt {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.ns-pp-detail dd {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+}
+/* switch claro e rotulado (substitui o toggle "imagem" pouco intuitivo) */
+.ns-pp-switch {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 9px 12px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.15s, background 0.15s;
+}
+.ns-pp-switch:hover {
+  border-color: var(--sev, var(--accent));
+}
+.ns-pp-switch.on {
+  background: color-mix(in srgb, var(--sev, var(--accent)) 16%, var(--surface));
+  border-color: color-mix(in srgb, var(--sev, var(--accent)) 60%, var(--border));
+}
+.ns-pp-switch-track {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1.5px var(--border);
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.ns-pp-switch.on .ns-pp-switch-track {
+  background: var(--sev, var(--accent));
+  box-shadow: none;
+}
+.ns-pp-switch-track .knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s;
+}
+.ns-pp-switch.on .ns-pp-switch-track .knob {
+  transform: translateX(20px);
+}
+.ns-pp-switch-label {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.ns-pp-switch.on .ns-pp-switch-label {
+  color: var(--sev, var(--accent));
+}
+
+/* ============================================================================
+   ADMIN — dashboard do dono (camada de NEGÓCIO) no design custom por paletas
+   (F-014, ADR-013). Menu vertical (é dashboard). Classes `ns-adm-*`. Reusa
+   .ns-status (StatusPill) e os tokens --sev-* / --accent / --surface.
+   ========================================================================== */
+.ns-admin {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-manrope), "Manrope", system-ui, -apple-system, sans-serif;
+  transition: background 0.25s, color 0.25s;
+}
+.ns-admin button {
+  font-family: inherit;
+  cursor: pointer;
+}
+.ns-adm-wrap {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px 22px 48px;
+}
+.ns-adm-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+.ns-adm-top h1 {
+  font-size: 26px;
+  font-weight: 800;
+  margin: 0;
+}
+.ns-adm-top .sub {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.ns-adm-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.ns-adm-btn {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 9px 15px;
+  font-weight: 700;
+  font-size: 13.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.ns-adm-btn:hover {
+  border-color: var(--accent);
+}
+.ns-adm-btn.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+.ns-adm-btn.danger {
+  color: var(--sev-critical);
+  border-color: color-mix(in srgb, var(--sev-critical) 45%, var(--border));
+}
+.ns-adm-btn.danger:hover {
+  border-color: var(--sev-critical);
+}
+.ns-adm-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* F-034: Feature Flags — cards espaçados e didáticos (controls + example) + switch rotulado.
+   (Substitui o reuso das classes ns-bts-problem* — removidas no redesign do Problem Panel.) */
+.ns-ff-hub {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--sev-notice) 45%, var(--border));
+  background: color-mix(in srgb, var(--sev-notice) 9%, var(--surface));
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+}
+.ns-ff-hub-icon {
+  font-size: 18px;
+  line-height: 1.4;
+}
+.ns-ff-hub p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.ns-ff-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ns-ff-card {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 20px 22px;
+}
+.ns-ff-card.on {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+.ns-ff-card-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ns-ff-icon {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.ns-ff-card.on .ns-ff-icon {
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+.ns-ff-body {
+  min-width: 0;
+}
+.ns-ff-titlerow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ns-ff-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text);
+}
+.ns-ff-override {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--sev-notice);
+  background: color-mix(in srgb, var(--sev-notice) 16%, transparent);
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+.ns-ff-desc {
+  margin: 5px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.ns-ff-detail {
+  margin: 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ns-ff-detail > div {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 10px;
+  align-items: baseline;
+}
+.ns-ff-detail dt {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.ns-ff-detail dd {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.ns-ff-switch {
+  flex: none;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 132px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: 12px;
+  padding: 14px 12px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.15s, background 0.15s;
+}
+.ns-ff-switch:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.ns-ff-switch:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.ns-ff-switch.on {
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+.ns-ff-switch-track {
+  position: relative;
+  width: 48px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1.5px var(--border);
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.ns-ff-switch.on .ns-ff-switch-track {
+  background: var(--accent);
+  box-shadow: none;
+}
+.ns-ff-switch-track .knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s;
+}
+.ns-ff-switch.on .ns-ff-switch-track .knob {
+  transform: translateX(22px);
+}
+.ns-ff-switch-label {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  text-align: center;
+}
+.ns-ff-switch.on .ns-ff-switch-label {
+  color: var(--accent);
+}
+@media (max-width: 640px) {
+  .ns-ff-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .ns-ff-switch {
+    width: 100%;
+    flex-direction: row;
+  }
+}
+
+/* Shell de Admin: nav lateral agrupada (AdminNav) + conteúdo. Único p/ todas as rotas
+   /admin/* (UX — tirou as ferramentas da barra de topo). Colapsável p/ recuperar largura. */
+.ns-adm-shell {
+  max-width: 1340px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+}
+.ns-adm-shell.ns-portal.guest {
+  grid-template-columns: 1fr;
+}
+.ns-adm-content {
+  min-width: 0;
+}
+/* dentro do shell o wrap preenche a coluna (sem o cap de 1180 + centragem que ficava
+   estranho ao lado da nav); padding consistente. */
+.ns-adm-content .ns-adm-wrap {
+  max-width: 100%;
+  margin: 0;
+  padding: 26px 26px 48px;
+}
+.ns-adm-aside {
+  width: 200px;
+  align-self: start;
+  position: sticky;
+  top: 0;
+  padding: 22px 8px 22px 16px;
+}
+.ns-adm-aside.collapsed {
+  width: 60px;
+}
+.ns-adm-collapse {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: 8px;
+  width: 28px;
+  height: 26px;
+  font-size: 15px;
+  line-height: 1;
+  margin-bottom: 8px;
+  margin-left: auto;
+  display: block;
+}
+.ns-adm-collapse:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.ns-adm-aside.collapsed .ns-adm-collapse {
+  margin-left: 0;
+  margin-right: auto;
+}
+.ns-adm-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.ns-adm-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ns-adm-group-title {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0 10px;
+  margin-bottom: 3px;
+}
+.ns-adm-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 13.5px;
+  text-decoration: none;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.ns-adm-item:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+.ns-adm-item.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.ns-adm-item-icon {
+  flex: none;
+  width: 20px;
+  text-align: center;
+  font-size: 15px;
+}
+.ns-adm-item-lock {
+  margin-left: auto;
+  font-size: 10px;
+  opacity: 0.7;
+}
+/* colapsado: só ícones, centrados */
+.ns-adm-aside.collapsed .ns-adm-group-title,
+.ns-adm-aside.collapsed .ns-adm-item-label,
+.ns-adm-aside.collapsed .ns-adm-item-lock {
+  display: none;
+}
+.ns-adm-aside.collapsed .ns-adm-item {
+  justify-content: center;
+  padding: 9px 0;
+}
+/* mobile: nav vira faixa horizontal rolável no topo (não come largura) */
+@media (max-width: 760px) {
+  .ns-adm-shell {
+    grid-template-columns: 1fr;
+  }
+  .ns-adm-aside,
+  .ns-adm-aside.collapsed {
+    width: auto;
+    position: static;
+    padding: 10px 14px 0;
+  }
+  .ns-adm-collapse {
+    display: none;
+  }
+  .ns-adm-groups {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 6px;
+    padding-bottom: 4px;
+  }
+  .ns-adm-group {
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+  }
+  .ns-adm-group-title {
+    display: none;
+  }
+  .ns-adm-content .ns-adm-wrap {
+    padding: 16px 16px 40px;
+  }
+}
+
+/* layout: sidebar vertical + conteúdo (legado /admin interno — não usado após o shell) */
+.ns-adm-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 22px;
+}
+@media (min-width: 860px) {
+  .ns-adm-layout {
+    grid-template-columns: 200px 1fr;
+    align-items: start;
+  }
+}
+.ns-adm-nav {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+@media (min-width: 860px) {
+  .ns-adm-nav {
+    flex-direction: column;
+    position: sticky;
+    top: 16px;
+  }
+}
+.ns-adm-nav button {
+  text-align: left;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--muted);
+  border-radius: 10px;
+  padding: 9px 13px;
+  font-weight: 700;
+  font-size: 14px;
+}
+.ns-adm-nav button:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+.ns-adm-nav button.on {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.ns-adm-main {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+/* cards de resumo */
+.ns-adm-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+@media (min-width: 640px) {
+  .ns-adm-kpis {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+.ns-adm-kpi {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 16px;
+}
+.ns-adm-kpi .lbl {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.ns-adm-kpi .val {
+  margin: 6px 0 0;
+  font-size: 25px;
+  font-weight: 800;
+  color: var(--text);
+}
+.ns-adm-kpi-hint {
+  margin: 3px 0 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.ns-adm-card {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 20px;
+}
+.ns-adm-card h2 {
+  font-size: 16px;
+  font-weight: 800;
+  margin: 0 0 14px;
+}
+/* breakdown por status (cards compactos) */
+.ns-adm-status-cards {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+.ns-adm-status-card {
+  flex: 1 1 0;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+@media (max-width: 760px) {
+  .ns-adm-status-cards {
+    flex-wrap: wrap;
+  }
+  .ns-adm-status-card {
+    flex: 1 1 calc(33.333% - 7px);
+  }
+}
+@media (max-width: 480px) {
+  .ns-adm-status-card {
+    flex: 1 1 calc(50% - 5px);
+  }
+}
+.ns-adm-status-card .val {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text);
+}
+.ns-adm-status-card .ns-status {
+  font-size: 11px;
+}
+.ns-adm-empty {
+  color: var(--muted);
+  font-size: 14px;
+  padding: 8px 0;
+}
+
+/* ---- Admin: pedidos (lista + detalhe) -------------------------------------- */
+.ns-adm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.ns-adm-table thead th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  padding: 0 12px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.ns-adm-table tbody td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+.ns-adm-table tbody tr {
+  cursor: pointer;
+}
+.ns-adm-table tbody tr:hover td {
+  background: var(--surface-2);
+}
+.ns-adm-table tbody tr.on td {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.ns-adm-table .id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.ns-adm-table .num {
+  text-align: right;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.ns-adm-table .when {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* refresh sob demanda (F-019): toolbar do Overview + cabeçalho de card com ação */
+.ns-adm-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+.ns-adm-cardhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.ns-adm-cardhead h2 {
+  margin: 0;
+}
+
+/* paginação da lista de pedidos (F-019, cliente) */
+.ns-adm-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.ns-adm-pager .size {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 700;
+}
+.ns-adm-pager .size select {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 5px 8px;
+  font-weight: 700;
+  font-size: 13px;
+}
+.ns-adm-pager .nav {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.ns-adm-pager .nav .page {
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+.ns-adm-pager .nav .ns-adm-btn {
+  padding: 7px 12px;
+}
+
+/* detalhe da ordem (painel) */
+.ns-adm-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ns-adm-detail .head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.ns-adm-detail .head .id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 17px;
+  font-weight: 800;
+}
+.ns-adm-detail .grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+@media (min-width: 680px) {
+  .ns-adm-detail .grid {
+    grid-template-columns: 1.4fr 1fr;
+  }
+}
+.ns-adm-sub {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+.ns-adm-itemrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px;
+}
+.ns-adm-itemrow .q {
+  color: var(--muted);
+}
+.ns-adm-itemrow:last-of-type {
+  border-bottom: none;
+}
+.ns-adm-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  font-weight: 800;
+  font-size: 15px;
+}
+.ns-adm-cust {
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+.ns-adm-cust .nm {
+  font-weight: 700;
+}
+.ns-adm-cust .mut {
+  color: var(--muted);
+}
+/* timeline de ciclo de vida (PAID→SHIPPED→DELIVERED) */
+.ns-adm-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ns-adm-tl {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+}
+.ns-adm-tl .col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  align-self: stretch;
+}
+.ns-adm-tl .pin {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  margin-top: 3px;
+  flex: none;
+}
+.ns-adm-tl .line {
+  width: 2px;
+  flex: 1;
+  background: var(--border);
+  margin: 2px 0;
+  min-height: 14px;
+}
+.ns-adm-tl:last-child .line {
+  display: none;
+}
+.ns-adm-tl .body {
+  padding-bottom: 14px;
+}
+.ns-adm-tl .st {
+  font-weight: 700;
+  font-size: 13.5px;
+}
+.ns-adm-tl .at {
+  font-size: 12px;
+  color: var(--muted);
+}
+.ns-adm-back {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 13.5px;
+  padding: 0;
+}
+
+/* ---- Admin: produtos (estoque) --------------------------------------------- */
+.ns-adm-stock {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.ns-adm-stock::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sev-normal);
+  flex: none;
+}
+.ns-adm-stock.low::before {
+  background: var(--sev-warning);
+}
+.ns-adm-stock.out::before {
+  background: var(--sev-alert);
+}
+.ns-adm-stock .tag {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+.ns-adm-stock.low .tag {
+  color: var(--sev-warning);
+}
+.ns-adm-stock.out .tag {
+  color: var(--sev-alert);
+}
+.ns-adm-sku {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* ---- Admin: ações (seed/limpar) + confirmação inline ----------------------- */
+.ns-adm-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--sev-critical) 45%, var(--border));
+  background: color-mix(in srgb, var(--sev-critical) 10%, transparent);
+  border-radius: 10px;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.ns-adm-confirm .ns-adm-btn {
+  padding: 6px 12px;
+  font-size: 12.5px;
+}
+.ns-adm-note {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--sev-normal);
+}
+
+/* ============================================================================
+   SIMULADOR AVANÇADO — tela própria (/admin/simulator, F-018). Reusa o chrome do
+   Admin (ns-adm-*); aqui só o painel ao vivo + form de config. Classes `ns-sim-*`.
+   ========================================================================== */
+/* layout: coluna única centrada (painel ao vivo em cima, config embaixo) */
+.ns-sim-wrap {
+  max-width: 920px;
+}
+.ns-sim-main {
+  gap: 18px;
+}
+.ns-sim-kpis {
+  grid-template-columns: repeat(3, 1fr);
+}
+@media (min-width: 640px) {
+  .ns-sim-kpis {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}
+/* badge de estado (stopped/running/paused) */
+.ns-sim-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 7px 13px;
+  font-weight: 700;
+  font-size: 12.5px;
+  text-transform: capitalize;
+  color: var(--muted);
+}
+.ns-sim-state .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: none;
+}
+.ns-sim-state.running {
+  color: var(--sev-normal);
+  border-color: color-mix(in srgb, var(--sev-normal) 45%, var(--border));
+}
+.ns-sim-state.running .dot {
+  background: var(--sev-normal);
+  animation: ns-sim-pulse 1.2s ease-in-out infinite;
+}
+.ns-sim-state.paused {
+  color: var(--sev-warning);
+  border-color: color-mix(in srgb, var(--sev-warning) 45%, var(--border));
+}
+.ns-sim-state.paused .dot {
+  background: var(--sev-warning);
+}
+@keyframes ns-sim-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+/* tabela de sessões ao vivo: largura de coluna FIXA (não pula conforme o texto muda) */
+.ns-sim-sessions {
+  table-layout: fixed;
+  width: 100%;
+}
+.ns-sim-sessions th,
+.ns-sim-sessions td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ns-sim-shopper {
+  font-weight: 600;
+}
+.ns-sim-sessions .ns-sim-action {
+  font-weight: 600;
+}
+/* tier por slot */
+.ns-sim-tier {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+.ns-sim-tier.gold {
+  color: var(--sev-warning);
+}
+.ns-sim-tier.platinum {
+  color: var(--accent);
+}
+/* último pedido do slot */
+.ns-sim-last {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.ns-sim-last.paid {
+  color: var(--sev-normal);
+}
+.ns-sim-last.failed {
+  color: var(--sev-critical);
+}
+.ns-sim-sessions .ns-sim-action.live::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: ns-sim-pulse 1.2s ease-in-out infinite;
+  vertical-align: middle;
+}
+.ns-sim-muted {
+  color: var(--muted);
+}
+/* chips de by_status */
+.ns-sim-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ns-sim-chip {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.ns-sim-chip b {
+  color: var(--text);
+  margin-left: 4px;
+}
+.ns-sim-chip.paid {
+  color: var(--sev-normal);
+  border-color: color-mix(in srgb, var(--sev-normal) 45%, var(--border));
+}
+.ns-sim-chip.failed {
+  color: var(--sev-critical);
+  border-color: color-mix(in srgb, var(--sev-critical) 45%, var(--border));
+}
+.ns-sim-chip.pending {
+  color: var(--sev-notice);
+  border-color: color-mix(in srgb, var(--sev-notice) 45%, var(--border));
+}
+.ns-sim-cap {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+/* formulário de config */
+.ns-sim-form h2 {
+  margin-bottom: 6px;
+}
+.ns-sim-hint {
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  color: var(--sev-warning);
+}
+.ns-sim-fields {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ns-sim-fields:disabled {
+  opacity: 0.6;
+}
+/* grupo de campos compactos lado a lado (só quando há largura — senão empilha) */
+.ns-sim-compact {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  align-items: start;
+}
+@media (min-width: 720px) {
+  .ns-sim-compact {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+/* itens do grid/linha precisam poder encolher (inputs de número têm largura intrínseca) */
+.ns-sim-compact > *,
+.ns-sim-row > * {
+  min-width: 0;
+}
+.ns-sim-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ns-sim-field > label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+.ns-sim-field .ns-sim-pct {
+  color: var(--accent);
+  float: right;
+}
+.ns-sim-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.ns-sim-field input[type="number"],
+.ns-sim-field select {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 9px;
+  padding: 8px 10px;
+  font: inherit;
+  font-weight: 600;
+  outline: none;
+  min-width: 0;
+}
+.ns-sim-field input[type="number"]:focus,
+.ns-sim-field select:focus {
+  border-color: var(--accent);
+}
+.ns-sim-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ns-sim-row input,
+.ns-sim-row select {
+  flex: 1;
+}
+.ns-sim-dash {
+  font-size: 12px;
+  color: var(--muted);
+}
+.ns-sim-range {
+  width: 100%;
+  accent-color: var(--accent);
+}
+/* checkboxes (problemas, reset) */
+.ns-sim-checks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+.ns-sim-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.ns-sim-check input {
+  accent-color: var(--accent);
+}
+.ns-sim-reset {
+  margin-top: 2px;
+}
+/* mix de pesos (categoria/tier) */
+.ns-sim-mix {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ns-sim-mixrow {
+  display: grid;
+  grid-template-columns: 1fr 72px;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.ns-sim-mixrow input {
+  text-align: right;
+}
+/* segmented control (speed) */
+.ns-sim-seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.ns-sim-seg button {
+  border: none;
+  background: var(--surface);
+  color: var(--muted);
+  padding: 8px 12px;
+  font: inherit;
+  font-weight: 700;
+  font-size: 12.5px;
+  border-right: 1px solid var(--border);
+}
+.ns-sim-seg button:last-child {
+  border-right: none;
+}
+.ns-sim-seg button.on {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* --- Config de LLM (owner-only, F-020) --- */
+.ns-cfg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ns-cfg-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 16px;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+.ns-cfg-card.off {
+  opacity: 0.72;
+  background: var(--surface-2);
+}
+.ns-cfg-rank {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  color: var(--muted);
+}
+.ns-cfg-rank button {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+  padding: 2px;
+  cursor: pointer;
+}
+.ns-cfg-rank button:hover:not(:disabled) {
+  color: var(--accent);
+}
+.ns-cfg-rank button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.ns-cfg-rank .num {
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--text);
+}
+.ns-cfg-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ns-cfg-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ns-cfg-head .name {
+  font-weight: 800;
+  font-size: 15.5px;
+  color: var(--text);
+}
+.ns-cfg-head .kind {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: 999px;
+  padding: 1px 9px;
+}
+.ns-cfg-pill.off {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--sev-warning);
+  border: 1px solid color-mix(in srgb, var(--sev-warning) 40%, var(--border));
+  border-radius: 999px;
+  padding: 1px 9px;
+}
+.ns-cfg-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.ns-cfg-meta b {
+  color: var(--text);
+  font-weight: 700;
+  margin-right: 5px;
+}
+.ns-cfg-meta code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text);
+}
+.ns-cfg-nokey {
+  font-style: italic;
+}
+.ns-cfg-test {
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: var(--surface-2);
+  color: var(--muted);
+  align-self: flex-start;
+}
+.ns-cfg-test.ok {
+  color: var(--sev-normal);
+  background: color-mix(in srgb, var(--sev-normal) 12%, var(--surface));
+}
+.ns-cfg-test.err {
+  color: var(--sev-critical);
+  background: color-mix(in srgb, var(--sev-critical) 12%, var(--surface));
+}
+.ns-cfg-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.ns-cfg-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+}
+.ns-cfg-stub {
+  font-size: 12.5px;
+  color: var(--muted);
+  padding: 4px 8px;
+}
+/* formulário */
+.ns-cfg-form {
+  margin-bottom: 14px;
+}
+.ns-cfg-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 6px;
+}
+.ns-cfg-keyfield,
+.ns-cfg-enable {
+  grid-column: 1 / -1;
+}
+.ns-cfg-form input[type="text"],
+.ns-cfg-form input[type="password"] {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 9px;
+  padding: 8px 10px;
+  font: inherit;
+  font-weight: 600;
+  outline: none;
+  min-width: 0;
+}
+.ns-cfg-form input[type="text"]:focus,
+.ns-cfg-form input[type="password"]:focus {
+  border-color: var(--accent);
+}
+.ns-cfg-enable {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.ns-cfg-formactions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+.ns-cfg-secnote {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 10px;
+}
+/* seção de agentes (config por agente — F-021) */
+/* Seção de conexão (fonte local|remote + status de hub — F-026) */
+.ns-cfg-conn {
+  margin: 8px 0 24px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 20px;
+}
+.ns-cfg-conn-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.ns-cfg-conn-head h2 {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+}
+.ns-cfg-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 14px;
+  background: var(--surface);
+  white-space: nowrap;
+}
+.ns-cfg-mode .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+}
+.ns-cfg-mode b { font-size: 14px; color: var(--text); }
+.ns-cfg-env {
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--surface-2);
+  padding: 1px 7px;
+  border-radius: 6px;
+}
+.ns-cfg-conn-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 880px) {
+  .ns-cfg-conn-grid { grid-template-columns: 1fr; }
+}
+.ns-cfg-conn-card { padding: 16px; }
+.ns-cfg-seg { display: flex; gap: 8px; flex-wrap: wrap; }
+.ns-cfg-health {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+}
+.ns-cfg-health .dot { width: 9px; height: 9px; border-radius: 999px; flex: none; }
+.ns-cfg-health.ok { border-color: color-mix(in srgb, var(--sev-normal) 45%, var(--border)); }
+.ns-cfg-health.ok .dot { background: var(--sev-normal); }
+.ns-cfg-health.err { border-color: color-mix(in srgb, var(--sev-warning) 45%, var(--border)); }
+.ns-cfg-health.err .dot { background: var(--sev-warning); }
+.ns-cfg-clients { display: flex; flex-direction: column; gap: 6px; }
+.ns-cfg-client {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.ns-cfg-client .muted { color: var(--muted); font-size: 12px; }
+
+/* Tabela de clientes do hub (full-width: filtro + paginação + tempos) — F-026 UX */
+.ns-cfg-clients-wrap { margin-top: 24px; }
+.ns-cfg-clients-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.ns-cfg-clients-head .ns-cfg-group { display: flex; align-items: center; gap: 10px; }
+.ns-cfg-clients-actions { display: flex; align-items: center; gap: 10px; }
+.ns-cfg-count {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text);
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 1px 9px;
+}
+.ns-cfg-active {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--sev-normal);
+  border: 1px solid color-mix(in srgb, var(--sev-normal) 40%, var(--border));
+  border-radius: 999px;
+  padding: 1px 9px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.ns-cfg-filter {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 9px;
+  padding: 8px 12px;
+  font-size: 13.5px;
+  min-width: 220px;
+}
+.ns-cfg-filter:focus { outline: none; border-color: var(--accent); }
+.ns-adm-table-wrap { overflow-x: auto; }
+.ns-cfg-clients-table tbody tr { cursor: default; }
+.ns-cfg-clients-table code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.ns-cfg-clients-table .muted { color: var(--muted); }
+.ns-cfg-cl-agent {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.ns-cfg-seen {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.ns-cfg-seen .dot {
+  width: 8px; height: 8px; border-radius: 999px;
+  background: var(--border); flex: none;
+}
+.ns-cfg-seen.on { color: var(--text); }
+.ns-cfg-seen.on .dot { background: var(--sev-normal); }
+.ns-adm-pageinfo { font-weight: 700; color: var(--text); }
+
+.ns-cfg-agents {
+  margin-top: 28px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.ns-cfg-agents .ns-adm-top {
+  margin-bottom: 12px;
+}
+.ns-cfg-agents h2 {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+}
+.ns-cfg-group {
+  margin: 18px 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+/* card de agente: corpo + ações (2 colunas, sem a coluna de rank) */
+.ns-cfg-agent {
+  grid-template-columns: 1fr auto;
+  align-items: start;
+}
+.ns-cfg-pill {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--sev-warning);
+  border: 1px solid color-mix(in srgb, var(--sev-warning) 40%, var(--border));
+  border-radius: 999px;
+  padding: 1px 9px;
+}
+.ns-cfg-sysfield {
+  grid-column: 1 / -1;
+}
+.ns-cfg-agent input[type="text"],
+.ns-cfg-agent select,
+.ns-cfg-agent textarea {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 9px;
+  padding: 8px 10px;
+  font: inherit;
+  font-weight: 600;
+  outline: none;
+  min-width: 0;
+  width: 100%;
+}
+.ns-cfg-agent textarea {
+  resize: vertical;
+  line-height: 1.45;
+}
+.ns-cfg-agent input[type="text"]:focus,
+.ns-cfg-agent select:focus,
+.ns-cfg-agent textarea:focus {
+  border-color: var(--accent);
+}
+@media (max-width: 720px) {
+  .ns-cfg-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ns-cfg-card {
+    grid-template-columns: auto 1fr;
+  }
+  .ns-cfg-agent {
+    grid-template-columns: 1fr;
+  }
+  .ns-cfg-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+
+/* ============================================================================
+   F-023 — LLM Inspector (owner-only): tabela de atividade de LLM + linha expansível.
+   Dirigido por paletas (globals). Classes ns-llm-*.
+   ========================================================================== */
+.ns-llm-count {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.ns-llm-table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.ns-llm-row {
+  display: grid;
+  grid-template-columns: 92px 1.1fr 1.4fr 78px 90px 84px 28px;
+  gap: 14px;
+  align-items: center;
+  padding: 11px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text);
+}
+.ns-llm-row:first-child {
+  border-top: none;
+}
+.ns-llm-row.head {
+  background: var(--surface-2);
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ns-llm-row:not(.head) {
+  cursor: pointer;
+}
+.ns-llm-row:not(.head):hover {
+  background: var(--surface-2);
+}
+.ns-llm-row.open {
+  background: var(--surface-2);
+}
+.ns-llm-row .mono {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.ns-llm-model {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ns-llm-model em {
+  font-style: normal;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.ns-llm-cache {
+  font-size: 11.5px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 1px 9px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+.ns-llm-cache.hit {
+  color: var(--sev-normal);
+  border-color: color-mix(in srgb, var(--sev-normal) 40%, var(--border));
+}
+.ns-llm-cache.warn {
+  color: var(--sev-warning);
+  border-color: color-mix(in srgb, var(--sev-warning) 40%, var(--border));
+}
+.ns-llm-cache.none {
+  border: none;
+  color: var(--muted);
+}
+.ns-llm-exp {
+  color: var(--muted);
+  text-align: center;
+}
+.ns-llm-detail {
+  padding: 4px 16px 18px;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ns-llm-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  font-size: 12.5px;
+  color: var(--muted);
+  padding-top: 12px;
+}
+.ns-llm-meta b {
+  color: var(--text);
+  font-weight: 700;
+}
+.ns-llm-flabel {
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+.ns-llm-pre {
+  margin: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 11px 13px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 280px;
+  overflow: auto;
+}
+@media (max-width: 820px) {
+  .ns-llm-table {
+    overflow-x: auto;
+  }
+  .ns-llm-row {
+    min-width: 620px;
+  }
+}
+
+/* --- Editor visual de agentes (F-027) ------------------------------------- */
+/* Layout: canvas do diagrama + painel lateral de config (clicar num nó abre). */
+.ns-agt-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .ns-agt-layout { grid-template-columns: 1fr; }
+}
+.ns-agt-section { margin-bottom: 22px; }
+.ns-agt-section .ns-adm-note { margin: 2px 0 12px; }
+.ns-agt-clusters { display: flex; flex-direction: column; gap: 16px; }
+.ns-agt-cluster {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px 14px;
+}
+.ns-agt-cluster-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.ns-agt-svg-wrap { overflow-x: auto; }
+.ns-agt-svg-wrap svg { display: block; }
+
+/* Nós do diagrama (SVG). Cor por tipo via variáveis de paleta. */
+.ns-agt-node rect {
+  fill: var(--surface-2);
+  stroke: var(--border);
+  stroke-width: 1.5;
+  transition: stroke 0.12s, fill 0.12s;
+}
+.ns-agt-node .lbl { font-size: 12.5px; font-weight: 600; fill: var(--text); text-anchor: middle; }
+.ns-agt-node .role { font-size: 10px; fill: var(--muted); text-anchor: middle; }
+.ns-agt-node .tag { font-size: 9px; fill: var(--muted); text-anchor: end; text-transform: uppercase; letter-spacing: 0.04em; }
+.ns-agt-node.workflow rect { fill: var(--accent); stroke: var(--accent); stroke-dasharray: 4 3; }
+.ns-agt-node.workflow .lbl { fill: var(--accent-ink); }
+.ns-agt-node.agent rect { fill: var(--surface-2); stroke: var(--accent); }
+.ns-agt-node.tool rect { fill: var(--surface); stroke: var(--border); }
+.ns-agt-node.dep rect { fill: var(--surface); stroke: var(--border); stroke-dasharray: 2 3; }
+.ns-agt-node.clickable { cursor: pointer; }
+.ns-agt-node.clickable:hover rect { stroke: var(--accent-2); fill: var(--surface); }
+.ns-agt-node.clickable:focus { outline: none; }
+.ns-agt-node.clickable:focus rect { stroke: var(--accent-2); }
+.ns-agt-node.sel rect { stroke: var(--accent-2); stroke-width: 2.5; }
+
+/* Chips de features standalone (sem arestas). */
+.ns-agt-standalone { display: flex; flex-wrap: wrap; gap: 10px; }
+.ns-agt-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-width: 150px;
+  padding: 8px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.12s, background 0.12s;
+}
+.ns-agt-chip:hover { background: var(--surface); border-color: var(--accent-2); }
+.ns-agt-chip.sel { border-color: var(--accent-2); border-width: 2px; padding: 7px 11px; }
+.ns-agt-chip .name { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.ns-agt-chip .role { font-size: 10.5px; color: var(--muted); }
+
+/* Painel lateral de config. */
+.ns-agt-panel { position: sticky; top: 16px; }
+.ns-agt-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+
+/* --- Push de enrollment por IP (F-027) ------------------------------------ */
+.ns-cfg-push { margin-top: 24px; }
+.ns-cfg-push-ips { grid-column: 1 / -1; }
+.ns-cfg-push-ips textarea {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12.5px;
+  resize: vertical;
+}
+.ns-cfg-push-result { margin-top: 14px; }
+.ns-cfg-push-summary { font-size: 13px; color: var(--text); margin-bottom: 8px; }
+.ns-cfg-push-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ns-cfg-push-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.ns-cfg-push-list li .dot {
+  width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto;
+  background: var(--sev-critical);
+}
+.ns-cfg-push-list li.ok .dot { background: var(--sev-normal); }
+.ns-cfg-push-list li code { color: var(--text); }
+.ns-cfg-push-list li .msg { color: var(--muted); }
+
+/* --- Painel "Edit agent" no editor visual (F-027): campos full-width + altura --- */
+/* O AgentCard é compartilhado com a tela LLM Providers (lista larga, grid 2-col). No painel
+   estreito (420px) os campos ficam apertados → empilha em 1 coluna e dá altura ao prompt. */
+.ns-agt-panel .ns-cfg-agent { grid-template-columns: 1fr; }
+.ns-agt-panel .ns-cfg-grid { grid-template-columns: 1fr; gap: 13px; }
+.ns-agt-panel .ns-cfg-agent .ns-sim-field label,
+.ns-agt-panel .ns-cfg-agent .ns-sim-field > label { font-size: 12.5px; }
+.ns-agt-panel .ns-cfg-sysfield textarea { min-height: 200px; }
+.ns-agt-panel .ns-cfg-actions {
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  margin-top: 4px;
+}
+.ns-cfg-link { color: var(--accent); font-weight: 600; text-decoration: underline; }
+.ns-cfg-link:hover { color: var(--accent-2); }

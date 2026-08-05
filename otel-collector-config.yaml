@@ -1,0 +1,53 @@
+# OTel Collector (distro Splunk, quay.io/signalfx/splunk-otel-collector) — recebe OTLP do backend
+# e exporta 100% pro ecossistema Splunk: traces+métricas → Splunk Observability Cloud, logs
+# (content-events GenAI) → Splunk platform via HEC. Splunk Agent Observability fica fora até a fase Splunk Agent Observability (fan-out).
+# Dev: ./scripts/dev.sh --o11y  ·  Prod: ./scripts/up.sh --o11y
+receivers:
+  otlp:
+    protocols:
+      grpc: { endpoint: 0.0.0.0:4317 }
+      http: { endpoint: 0.0.0.0:4318 }
+
+processors:
+  # Primeiro processor de cada pipeline — evita OOM do Collector sob rajada de spans/eventos.
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 20
+  batch: {}
+
+exporters:
+  # otlphttp nos endpoints OTLP-nativos do Splunk o11y (v2/.../otlp) — NÃO o exporter "signalfx"
+  # (API SignalFx clássica: traces via /v2/trace em Zipkin/SAPM, métricas traduzidas por regras
+  # fixas). O "signalfx" aceita o payload de teste com 200 OK mas usa o pipeline de ingestão
+  # legado — os spans/métricas `gen_ai.*` não aparecem no APM/o11y novo, que é OTLP-nativo.
+  # otlphttp preserva o modelo OTel (resource attrs, gen_ai.* semantics) ponta a ponta.
+  otlp_http/splunk:
+    traces_endpoint: "https://ingest.${env:SPLUNK_O11Y_REALM}.signalfx.com/v2/trace/otlp"
+    metrics_endpoint: "https://ingest.${env:SPLUNK_O11Y_REALM}.signalfx.com/v2/datapoint/otlp"
+    headers:
+      X-SF-Token: "${env:SPLUNK_O11Y_TOKEN}"
+
+  # Logs (content-events GenAI) → Splunk platform via HEC — token/URL do dono via env.
+  splunk_hec/platform:
+    token: "${env:SPLUNK_HEC_TOKEN}"
+    endpoint: "${env:SPLUNK_HEC_URL}"
+    source: "vega-concierge"
+    sourcetype: "otel"
+
+  debug: { verbosity: normal }
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_http/splunk, debug]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_http/splunk, debug]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [splunk_hec/platform, debug]

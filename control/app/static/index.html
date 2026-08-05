@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vega Ops Console</title>
+  <style>
+    :root {
+      --bg: #0b1020; --surface: #131a2e; --surface-2: #1b243d; --border: #2a3550;
+      --text: #e8ecf6; --muted: #93a0bd; --accent: #3993ff; --accent-ink: #fff;
+      --ok: #4fd18b; --warn: #f5b955; --err: #f0726f;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg); color: var(--text); display: flex; flex-direction: column; }
+    header { padding: 16px 24px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+    header h1 { font-size: 18px; margin: 0; font-weight: 700; }
+    header .tag { font-size: 12px; color: var(--muted); border: 1px solid var(--border);
+      padding: 2px 8px; border-radius: 999px; }
+    .header-actions { display: flex; align-items: center; gap: 8px; margin-left: 4px; }
+    nav.tabs { display: flex; gap: 4px; padding: 0 24px; border-bottom: 1px solid var(--border);
+      background: var(--surface); flex-shrink: 0; }
+    nav.tabs button { background: none; border: none; border-bottom: 2px solid transparent;
+      border-radius: 0; padding: 12px 18px; color: var(--muted); font-weight: 500; }
+    nav.tabs button:hover { color: var(--text); }
+    nav.tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
+    main { flex: 1; display: flex; flex-direction: column; max-width: 1100px; width: 100%;
+      margin: 0 auto; padding: 24px; min-height: 0; }
+    main.terminal-mode { max-width: none; margin: 0; padding: 0; }
+    .panel { display: none; flex: 1; flex-direction: column; min-height: 0; }
+    .panel.active { display: flex; }
+    .panel.active:not(#panel-terminal) { display: block; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      padding: 20px; margin-bottom: 16px; }
+    .card h2 { margin: 0 0 12px; font-size: 15px; letter-spacing: .3px; text-transform: uppercase;
+      color: var(--muted); }
+    .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+      border-radius: 999px; font-size: 13px; border: 1px solid var(--border); }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+    .dot.on { background: var(--ok); } .dot.off { background: var(--muted); }
+    .dot.err { background: var(--err); }
+    button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--surface-2); color: var(--text); padding: 10px 16px; }
+    button:hover { border-color: var(--accent); }
+    button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent);
+      font-weight: 600; }
+    button.primary:disabled { opacity: .5; cursor: not-allowed; }
+    button.danger { border-color: var(--err); color: var(--err); }
+    input[type=password] { font: inherit; background: var(--surface-2); color: var(--text);
+      border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; width: 220px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .hidden { display: none !important; }
+    .alert { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; font-size: 13px; }
+    .alert.warn { border-color: var(--warn); color: var(--warn); background: rgba(245,185,85,.08); }
+    .alert.err { border-color: var(--err); color: var(--err); background: rgba(240,114,111,.08); }
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+    .status-card { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+      padding: 16px; }
+    .status-card h3 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+    .status-card .meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .status-card.up { border-color: rgba(79,209,139,.35); }
+    .status-card.down { border-color: rgba(240,114,111,.25); }
+    .term-gate { max-width: 420px; padding: 24px; }
+    #termWarn { margin: 0 16px; flex-shrink: 0; }
+    #termFrameWrap { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    #termFrame { flex: 1; width: 100%; border: none; background: #05070f; min-height: 0; }
+  </style>
+</head>
+<body>
+  <div id="app" style="display:flex;flex-direction:column;flex:1;min-height:0">
+    <header>
+      <h1>Vega Ops Console</h1>
+      <span class="tag" id="envTag">—</span>
+      <div class="header-actions">
+        <button id="refreshBtn">Atualizar</button>
+        <button id="termLockBtn" class="hidden danger">Bloquear SSH</button>
+        <button id="termRenewBtn" class="hidden">Renew SSH</button>
+      </div>
+    </header>
+
+    <nav class="tabs" role="tablist">
+      <button class="active" data-tab="status" role="tab">Status</button>
+      <button data-tab="terminal" role="tab">Terminal</button>
+    </nav>
+
+    <main id="main">
+      <!-- STATUS -->
+      <section id="panel-status" class="panel active" role="tabpanel">
+        <div class="card" id="stackCard">
+          <h2>Stack / imagens</h2>
+          <div class="row" style="margin-bottom:12px">
+            <span class="pill" id="stackVersion">Versão: —</span>
+            <span class="pill muted" id="stackTag">tag: —</span>
+          </div>
+          <p class="muted" id="stackDigest" style="margin:0 0 12px;font-size:12px;word-break:break-all"></p>
+          <div class="row">
+            <button class="primary" id="stackUpdateBtn">Atualizar imagens (pull)</button>
+            <span class="muted" id="stackUpdateMsg"></span>
+          </div>
+        </div>
+        <div class="cards" id="statusCards"></div>
+        <div class="card" style="margin-top:16px">
+          <h2>Detalhe dos containers</h2>
+          <table>
+            <thead><tr><th>Serviço</th><th>Estado</th><th>Status</th></tr></thead>
+            <tbody id="svcBody"><tr><td colspan="3" class="muted">Carregando…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- TERMINAL -->
+      <section id="panel-terminal" class="panel" role="tabpanel">
+        <div id="termGate" class="term-gate">
+          <h2 style="margin:0 0 8px;font-size:15px;color:var(--muted);text-transform:uppercase">
+            Terminal (SSH via browser)</h2>
+          <p class="muted">Escotilha de emergência — shell do host. Informe a senha do operador
+            (<code>CONTROL_PASSWORD</code>).</p>
+          <div class="row" style="margin-top:16px">
+            <input id="termPw" type="password" placeholder="Senha" autocomplete="current-password" />
+            <button class="primary" id="termUnlockBtn">Desbloquear</button>
+          </div>
+          <p id="termErr" class="muted hidden" style="color:var(--err);margin-top:10px"></p>
+        </div>
+        <div id="termWarn" class="alert warn hidden"></div>
+        <div id="termFrameWrap" class="hidden">
+          <iframe id="termFrame" title="Terminal SSH"></iframe>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let STATE = {};
+    const TERM_KEY = "vega.control.terminal.unlocked";
+    let activeTab = "status";
+
+    async function api(path, opts = {}) {
+      return fetch(path, Object.assign({
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+      }, opts));
+    }
+
+    function switchTab(name) {
+      activeTab = name;
+      document.querySelectorAll("nav.tabs button").forEach((b) => {
+        b.classList.toggle("active", b.dataset.tab === name);
+      });
+      document.querySelectorAll(".panel").forEach((p) => {
+        p.classList.toggle("active", p.id === "panel-" + name);
+      });
+      const terminalMode = name === "terminal" && isTerminalUnlocked();
+      $("main").classList.toggle("terminal-mode", terminalMode);
+      if (name === "terminal") syncTerminalUI();
+    }
+
+    function renderCards(cards) {
+      const el = $("statusCards");
+      el.innerHTML = "";
+      for (const c of cards) {
+        const div = document.createElement("div");
+        const na = c.state === "n/a";
+        div.className = "status-card " + (c.up ? "up" : (na ? "" : "down"));
+        const port = c.port ? `:${c.port}` : "";
+        const status = na ? "N/A" : (c.up ? "No ar" : "Fora do ar");
+        div.innerHTML = `
+          <h3><span class="dot ${c.up ? "on" : (na ? "off" : "err")}"></span> ${c.label}</h3>
+          <div class="pill">${status} · ${c.state}</div>
+          <div class="meta">${c.detail || ""}${port ? " · porta" + port : ""}</div>`;
+        el.appendChild(div);
+      }
+    }
+
+    function syncHeaderTerminalButtons() {
+      const unlocked = isTerminalUnlocked();
+      $("termLockBtn").classList.toggle("hidden", !unlocked);
+      $("termRenewBtn").classList.toggle("hidden", !unlocked);
+    }
+
+    function updateTermStatus(s) {
+      const warn = $("termWarn");
+      if (!isTerminalUnlocked()) {
+        warn.classList.add("hidden");
+        return;
+      }
+      if (!s.ttyd_configured) {
+        warn.textContent = "CONTROL_PASSWORD não configurada no .env.";
+        warn.className = "alert err"; warn.classList.remove("hidden"); return;
+      }
+      if (!s.ttyd_available) {
+        warn.textContent = `ttyd não está rodando na porta ${s.ttyd_port}. Rode: ./scripts/control.sh`;
+        warn.className = "alert warn"; warn.classList.remove("hidden"); return;
+      }
+      warn.classList.add("hidden");
+    }
+
+    function isTerminalUnlocked() {
+      return sessionStorage.getItem(TERM_KEY) === "1";
+    }
+
+    function frameUrlKey(url) {
+      if (!url) return "";
+      const u = new URL(url, window.location.origin);
+      return u.pathname + u.search;
+    }
+
+    function setTerminalFrame(url, force = false) {
+      const wrap = $("termFrameWrap");
+      if (!url) {
+        wrap.querySelectorAll("iframe").forEach((f) => f.remove());
+        wrap.classList.add("hidden");
+        return;
+      }
+      let frame = $("termFrame");
+      if (!frame) {
+        frame = document.createElement("iframe");
+        frame.id = "termFrame";
+        frame.title = "Terminal SSH";
+        wrap.appendChild(frame);
+      }
+      wrap.classList.remove("hidden");
+      const next = frameUrlKey(url);
+      if (!force && frame.src && frameUrlKey(frame.src) === next) return;
+      frame.src = url;
+    }
+
+    function spawnTerminalFrame(url) {
+      const wrap = $("termFrameWrap");
+      const old = $("termFrame");
+      if (old) {
+        old.id = "";
+        old.style.display = "none";
+      } else if (!wrap.querySelector("iframe")) {
+        const neu = document.createElement("iframe");
+        neu.id = "termFrame";
+        neu.title = "Terminal SSH";
+        neu.src = url;
+        wrap.appendChild(neu);
+        wrap.classList.remove("hidden");
+        return;
+      }
+      const neu = document.createElement("iframe");
+      neu.id = "termFrame";
+      neu.title = "Terminal SSH";
+      neu.src = url;
+      wrap.appendChild(neu);
+      wrap.classList.remove("hidden");
+    }
+
+    function syncTerminalUI() {
+      const unlocked = isTerminalUnlocked();
+      $("termGate").classList.toggle("hidden", unlocked);
+      $("main").classList.toggle("terminal-mode", activeTab === "terminal" && unlocked);
+      syncHeaderTerminalButtons();
+      if (unlocked) {
+        updateTermStatus(STATE);
+        const url = sessionStorage.getItem("vega.control.terminal.url") || "";
+        if (url.startsWith("/shell/")) setTerminalFrame(url);
+        else ensureTerminalSession();
+      } else {
+        setTerminalFrame(null);
+        $("termWarn").classList.add("hidden");
+      }
+    }
+
+    async function lockTerminal() {
+      await api("/api/terminal/close", { method: "POST" }).catch(() => {});
+      sessionStorage.removeItem(TERM_KEY);
+      sessionStorage.removeItem("vega.control.terminal.url");
+      $("termPw").value = "";
+      $("termErr").classList.add("hidden");
+      setTerminalFrame(null);
+      syncHeaderTerminalButtons();
+      if (activeTab === "terminal") syncTerminalUI();
+    }
+
+    async function ensureTerminalSession() {
+      if (!isTerminalUnlocked()) return;
+      const r = await api("/api/terminal/renew", { method: "POST" });
+      if (!r.ok) {
+        if (r.status === 401) await lockTerminal();
+        return;
+      }
+      const data = await r.json();
+      sessionStorage.setItem("vega.control.terminal.url", data.url);
+      spawnTerminalFrame(data.url);
+    }
+
+    async function unlockTerminal() {
+      $("termErr").classList.add("hidden");
+      const r = await api("/api/terminal/open", {
+        method: "POST",
+        body: JSON.stringify({ password: $("termPw").value }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        $("termErr").textContent = err.detail || "Senha inválida.";
+        $("termErr").classList.remove("hidden");
+        return;
+      }
+      const data = await r.json();
+      sessionStorage.setItem(TERM_KEY, "1");
+      sessionStorage.setItem("vega.control.terminal.url", data.url);
+      $("termPw").value = "";
+      syncTerminalUI();
+    }
+
+    async function renewTerminal() {
+      $("termErr").classList.add("hidden");
+      const r = await api("/api/terminal/renew", { method: "POST" });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        if (r.status === 401) {
+          await lockTerminal();
+          $("termErr").textContent = "Sessão expirada. Desbloqueie novamente.";
+          $("termErr").classList.remove("hidden");
+          return;
+        }
+        $("termWarn").textContent = err.detail || "Não foi possível renovar o terminal.";
+        $("termWarn").className = "alert err";
+        $("termWarn").classList.remove("hidden");
+        return;
+      }
+      const data = await r.json();
+      sessionStorage.setItem("vega.control.terminal.url", data.url);
+      spawnTerminalFrame(data.url);
+    }
+
+    function renderStack(stack) {
+      const ver = stack.vega_version || "—";
+      const sha = stack.git_sha ? ` (${stack.git_sha})` : "";
+      $("stackVersion").textContent = "Versão: " + ver + sha;
+      $("stackTag").textContent = "IMAGE_TAG=" + (stack.image_tag || "latest");
+      const lines = [];
+      if (stack.backend_digest) lines.push("backend: " + stack.backend_digest);
+      if (stack.frontend_digest) lines.push("frontend: " + stack.frontend_digest);
+      $("stackDigest").textContent = lines.join(" · ") || "Digests locais indisponíveis (imagens não pulled neste host).";
+    }
+
+    async function stackUpdate() {
+      const btn = $("stackUpdateBtn");
+      const msg = $("stackUpdateMsg");
+      btn.disabled = true;
+      msg.textContent = "Atualizando… (fresh-state + pull — pode levar alguns minutos)";
+      msg.style.color = "var(--muted)";
+      try {
+        const r = await api("/api/stack/update", { method: "POST", body: "{}" });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          msg.textContent = typeof err.detail === "string" ? err.detail.slice(0, 200) : "Falha na atualização.";
+          msg.style.color = "var(--err)";
+          return;
+        }
+        const data = await r.json();
+        renderStack(data.stack || {});
+        msg.textContent = "Atualização concluída.";
+        msg.style.color = "var(--ok)";
+        await refreshState();
+      } catch (e) {
+        msg.textContent = String(e);
+        msg.style.color = "var(--err)";
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function refreshState() {
+      const s = await (await api("/api/state")).json();
+      STATE = s;
+      $("envTag").textContent = s.environment;
+      renderStack(s.stack || {});
+      renderCards(s.cards || []);
+      const body = $("svcBody");
+      body.innerHTML = "";
+      if (!s.services.length) {
+        body.innerHTML = '<tr><td colspan="3" class="muted">Nenhum serviço Docker no ar.</td></tr>';
+      } else {
+        for (const svc of s.services) {
+          const tr = document.createElement("tr");
+          const stateCls = svc.state === "running" ? "on" : "err";
+          tr.innerHTML = `<td>${svc.name}</td>
+            <td><span class="pill"><span class="dot ${stateCls}"></span>${svc.state}</span></td>
+            <td class="muted">${svc.status || ""}</td>`;
+          body.appendChild(tr);
+        }
+      }
+      if (isTerminalUnlocked()) updateTermStatus(s);
+    }
+
+    async function boot() {
+      const old = sessionStorage.getItem("vega.control.terminal.url") || "";
+      if (old && !old.startsWith("/shell/")) sessionStorage.removeItem("vega.control.terminal.url");
+      syncHeaderTerminalButtons();
+      await refreshState();
+      if (isTerminalUnlocked()) ensureTerminalSession();
+    }
+
+    document.querySelectorAll("nav.tabs button").forEach((btn) => {
+      btn.onclick = () => switchTab(btn.dataset.tab);
+    });
+    $("refreshBtn").onclick = refreshState;
+    $("stackUpdateBtn").onclick = stackUpdate;
+    $("termUnlockBtn").onclick = unlockTerminal;
+    $("termPw").addEventListener("keydown", (e) => { if (e.key === "Enter") unlockTerminal(); });
+    $("termLockBtn").onclick = lockTerminal;
+    $("termRenewBtn").onclick = renewTerminal;
+
+    boot();
+  </script>
+</body>
+</html>

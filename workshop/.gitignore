@@ -1,0 +1,7 @@
+# Hugo build artifacts
+/public/
+/resources/_gen/
+.hugo_build.lock
+/export/
+.venv-export/
+/__vega-export.html

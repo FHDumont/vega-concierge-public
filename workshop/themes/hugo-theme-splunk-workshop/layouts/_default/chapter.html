@@ -1,0 +1,5 @@
+{{ define "main" }}
+{{ partial "shell/three-column.html" (dict
+  "page"         .
+  "innerPartial" "page/chapter.html") }}
+{{ end }}

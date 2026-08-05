@@ -1,0 +1,148 @@
+- id: home
+  translation: "Home"
+- id: workshops
+  translation: "Workshops"
+- id: previous
+  translation: "Previous"
+- id: next
+  translation: "Next"
+- id: onThisPage
+  translation: "On this page"
+- id: skipToContent
+  translation: "Skip to content"
+- id: editOnGitHub
+  translation: "Edit this page on GitHub"
+- id: searchPlaceholder
+  translation: "Search workshops…"   # used inside the modal as the input placeholder
+- id: searchTrigger
+  translation: "Search"              # the header button label (button, not input)
+- id: searchHint
+  translation: "Press / to search"
+- id: searchEmpty
+  translation: "No matches"
+- id: keyboardShortcuts
+  translation: "Keyboard shortcuts"   # header `?` button label + dialog title
+- id: categoryOther
+  translation: "Other"                # cards-by-category fallback bucket title
+- id: recentlyUpdated
+  translation: "Recently updated"      # browse page — rail heading
+- id: updatedLabel
+  translation: "Updated"               # browse row — git-Lastmod recency badge/age
+- id: newLabel
+  translation: "New"                   # browse row — opt-in `new = true` badge
+- id: browseFilter
+  translation: "Filter workshops by name, topic, or difficulty…"
+- id: browseCount
+  translation: "{{ .Workshops }} workshops · {{ .Categories }} categories"
+- id: workshopsCount
+  translation:
+    one: "{{ .Count }} workshop"
+    other: "{{ .Count }} workshops"
+- id: pagesCount
+  translation:
+    one: "{{ .Count }} page"
+    other: "{{ .Count }} pages"
+- id: copyCode
+  translation: "Copy"
+- id: copied
+  translation: "Copied"
+- id: completed
+  translation: "Completed"             # screen-reader label on the card-completion tick badge
+- id: chapter
+  translation: "Chapter"
+- id: notFoundTitle
+  translation: "This page has no trace."
+- id: notFoundLead
+  translation: "We searched every metric, log, and span for this URL — nothing matched. The workshops list, however, is well-instrumented."
+- id: notFoundEyebrow
+  translation: "404 · No span found"
+- id: notFoundQueryLabel
+  translation: "query"                 # 404 page — left column of the fake-query panel
+- id: notFoundResultLabel
+  translation: "result"
+- id: notFoundResultValue
+  translation: "0 events in the last 30 days"
+- id: takeMeHome
+  translation: "Take me home"
+- id: browseWorkshops
+  translation: "Browse workshops"
+- id: viewOnGitHub
+  translation: "View on GitHub"
+- id: builtWithHugo
+  translation: "Built with Hugo"
+- id: theme
+  translation: "Theme"
+- id: languageSwitcher
+  translation: "Language"
+- id: overview
+  translation: "Overview"
+- id: openMenu
+  translation: "Open menu"
+- id: yourPosition
+  translation: "Reading progress"
+- id: tip
+  translation: "Tip"
+- id: note
+  translation: "Note"
+- id: info
+  translation: "Info"
+- id: warning
+  translation: "Warning"
+- id: danger
+  translation: "Danger"
+- id: success
+  translation: "Success"
+- id: exercise
+  translation: "Exercise"
+- id: solution
+  translation: "Show solution"
+- id: checkpoint
+  translation: "Checkpoint"
+- id: quickCheck
+  translation: "Quick check"
+- id: quizQuestion
+  translation: "Question"
+- id: exerciseDefault
+  translation: "Try it"
+- id: objectivesTitle
+  translation: "What you'll learn"      # default `{{< objectives >}}` heading
+- id: prerequisitesTitle
+  translation: "Before you start"       # default `{{< prerequisites >}}` heading
+- id: acknowledge
+  translation: "Acknowledge"           # label in the acknowledge bar header
+- id: acknowledgeDefault
+  translation: "Please acknowledge"    # fallback title when none is provided
+- id: iUnderstand
+  translation: "I understand"          # acknowledge modal CTA button
+- id: expand
+  translation: "Expand"
+- id: details
+  translation: "Details"
+- id: presenterNote
+  translation: "Presenter Note"
+- id: slidesKicker
+  translation: "Slide deck"          # `{{< slides >}}` preview-card kicker
+- id: slidesOpen
+  translation: "Open presentation"   # `{{< slides >}}` preview-card CTA
+- id: slidesSlide
+  translation: "slide"               # singular suffix on the slide count
+- id: slidesSlides
+  translation: "slides"              # plural suffix on the slide count
+- id: lastModified
+  translation: "Last Modified"
+- id: author
+  translation: "Author"
+- id: authors
+  translation: "Authors"
+- id: workshopVersion
+  translation: "Workshop Version"
+- id: difficultyBeginner
+  translation: "Beginner"
+- id: difficultyEasy
+  translation: "Easy"
+- id: difficultyIntermediate
+  translation: "Intermediate"
+- id: difficultyAdvanced
+  translation: "Advanced"
+- id: difficultyExpert
+  translation: "Expert"

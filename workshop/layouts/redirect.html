@@ -1,0 +1,3 @@
+{{ define "main" }}
+  {{ partial "redirect-target.html" (dict "to" (.Params.redirect_to | default "/workshops/vega/")) }}
+{{ end }}

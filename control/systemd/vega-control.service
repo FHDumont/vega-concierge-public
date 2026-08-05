@@ -1,0 +1,21 @@
+# Vega Ops Console — painel de manutenção (F-047, ADR-025). Serviço de HOST (watchdog nativo).
+# Instalar em /etc/systemd/system/ (ver control/systemd/install.sh) e habilitar no boot.
+[Unit]
+Description=Vega Ops Console (control panel)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Ajuste User/WorkingDirectory conforme a AMI (padrão do lab: /opt/vega-concierge).
+WorkingDirectory=/opt/vega-concierge/control
+# .env do repo carrega CONTROL_PASSWORD e VEGA_REPO_DIR.
+EnvironmentFile=-/opt/vega-concierge/.env
+Environment=VEGA_REPO_DIR=/opt/vega-concierge
+ExecStart=/opt/vega-concierge/control/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 9000
+# Watchdog: nunca deixa o painel fora do ar (é a ferramenta de manutenção da infra).
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
