@@ -101,13 +101,13 @@ def new_session_id(candidate: str | None = None) -> str:
 
 
 def callbacks() -> list:
-    """`[GalileoAsyncCallback()]` quando habilitado, `[]` caso contrário. Um por request."""
+    """`[VegaGalileoCallback()]` quando habilitado, `[]` caso contrário. Um por request."""
     if not is_enabled():
         return []
     try:
-        from galileo.handlers.langchain import GalileoAsyncCallback
+        from .galileo_callback import VegaGalileoCallback
 
-        return [GalileoAsyncCallback()]
+        return [VegaGalileoCallback()]
     except Exception as exc:  # noqa: BLE001 — pacote ausente ou SDK sem credencial válida
         _warn_once(exc)
         return []

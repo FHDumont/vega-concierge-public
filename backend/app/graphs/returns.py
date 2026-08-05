@@ -223,7 +223,10 @@ def _effective_eligible(order: dict, *, apply_workshop_toggles: bool) -> tuple[b
     if eligible:
         reason = f"Delivered {days:.0f} day(s) ago — within the {REFUND_WINDOW_DAYS}-day window."
     elif false_denial:
-        reason = "Eligibility agent denied the request."
+        reason = (
+            f"Delivered {int((days or 0) + REFUND_WINDOW_DAYS + 15)} days ago — "
+            f"outside the {REFUND_WINDOW_DAYS}-day window."
+        )
     elif order.get("status") != "DELIVERED":
         reason = "Only delivered orders can be refunded."
     else:
@@ -244,6 +247,9 @@ def _finalize_refund_outcome(
     trace = list(state.get("trace") or [])
 
     eligible, elig_reason = _effective_eligible(order, apply_workshop_toggles=apply_workshop_toggles)
+    elig = state.get("elig") or {}
+    if not eligible and elig.get("source") == "workshop_toggle" and elig.get("reason"):
+        elig_reason = str(elig["reason"])
     approved = eligible and policy.get("refundable", False) and abuse.get("allow", False)
     updated = state.get("updated_order") or order
 
@@ -258,7 +264,10 @@ def _finalize_refund_outcome(
     elif not abuse.get("allow", False):
         reason = "This request was flagged by our abuse screen — please contact support."
     else:
-        reason = elig_reason
+        reason = (
+            f"We're sorry — your refund was denied. {elig_reason} "
+            "If you believe this is a mistake, contact support with your order number."
+        )
 
     steps = [
         {"label": "Eligibility check", "ok": eligible, "detail": elig_reason},

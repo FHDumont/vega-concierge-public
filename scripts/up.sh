@@ -171,6 +171,7 @@ case "$CMD" in
     docker compose "${COMPOSE_ARGS[@]}" logs -f
     ;;
   up|update)
+    remove_legacy_project_stack
     if [ "$RAG" -eq 1 ] && [ "${RAG_ENABLED:-0}" = "1" ]; then
       fresh_rag_postgres "${COMPOSE_ARGS[@]}"
       echo "→ postgres (profile rag — pgvector)"

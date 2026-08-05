@@ -1,4 +1,8 @@
 # Vega Concierge — workshop stack (1 VM por participante)
+# `name` fixo e IGUAL ao de compose.plain.yml/compose.o11y.yml: sem ele o projeto virava o nome do
+# diretório (`vega-concierge`) e dev.sh convivia com o stack de up.sh — dois pgvector, dois volumes,
+# e o postgres de um segurando :5434 do outro.
+name: vega
 services:
   backend:
     build: ./backend

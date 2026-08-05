@@ -120,6 +120,7 @@ CHAT_GRAPH_NODES: dict[str, str] = {
     "gift": "chat.write_gift_message",
     "product_qa": "chat.answer_product_question",
     "returns": "chat.process_order_refund",
+    "destructive_action": "chat.run_destructive_concierge_action",
     "finalize": "chat.assemble_shopper_reply",
 }
 
@@ -141,6 +142,7 @@ CHAT_ROUTE_TO_NODE: dict[str, str] = {
     "gift": CHAT_GRAPH_NODES["gift"],
     "product_qa": CHAT_GRAPH_NODES["product_qa"],
     "returns": CHAT_GRAPH_NODES["returns"],
+    "destructive_action": CHAT_GRAPH_NODES["destructive_action"],
     "complete": CHAT_GRAPH_NODES["finalize"],
 }
 

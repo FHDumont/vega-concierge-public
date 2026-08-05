@@ -147,6 +147,33 @@ def policy_documents() -> list[Document]:
     return docs
 
 
+def policy_overview_chunks() -> list[dict]:
+    """Um trecho representativo por arquivo de política — overview determinístico (workshop)."""
+    skip_sections = {"using the store", "overview", "introduction", "about", "contact"}
+    chunks: list[dict] = []
+    if not POLICIES_DIR.is_dir():
+        return chunks
+    for path in sorted(POLICIES_DIR.glob("*.md")):
+        markdown = _read_policy_markdown(path)
+        sections = _split_sections(markdown, path.stem)
+        if sections:
+            filtered = [
+                doc for doc in sections
+                if doc.metadata.get("section", "").lower() not in skip_sections
+            ]
+            pool = filtered or sections
+            pick = max(pool, key=lambda doc: len(doc.page_content or ""))
+            chunks.extend(documents_to_policy_chunks([pick]))
+        else:
+            title = path.stem.replace("_", " ").title()
+            chunks.append({
+                "source": path.stem,
+                "section": title,
+                "text": markdown.strip()[:400],
+            })
+    return chunks
+
+
 def catalog_documents() -> list[Document]:
     """Chunks de catálogo: marketing (`CATALOG`) + FAQ técnico por SKU (`products_qa.csv`)."""
     from .tools import CATALOG
@@ -231,6 +258,44 @@ class VegaKeywordRetriever(BaseRetriever):
         return [self.documents[i] for _, i in hits[: self.k]] or self.documents[: self.k]
 
 
+class VegaDegradingRetriever(BaseRetriever):
+    """Envolve retriever pgvector; falha de consulta → keyword in-process (ADR-031).
+
+    `with_fallbacks` quebra callbacks LangChain (`BaseRunManager` + `name`) — por isso o
+    try/except fica dentro de `_get_relevant_documents`, igual ao padrão de `retrieve()`."""
+
+    collection: str
+    k: int = DEFAULT_K
+    _primary: BaseRetriever = PrivateAttr()
+    _fallback: BaseRetriever = PrivateAttr()
+
+    def model_post_init(self, _context) -> None:
+        self._primary = get_retriever(self.collection, k=self.k)
+        if isinstance(self._primary, VegaKeywordRetriever):
+            self._fallback = self._primary
+        else:
+            self._fallback = VegaKeywordRetriever(
+                documents=_CORPORA[self.collection](), k=self.k
+            )
+
+    def _get_relevant_documents(
+        self, query: str, *, run_manager: CallbackManagerForRetrieverRun
+    ) -> list[Document]:
+        if isinstance(self._primary, VegaKeywordRetriever):
+            return self._primary._get_relevant_documents(query, run_manager=run_manager)
+        try:
+            return self._primary._get_relevant_documents(query, run_manager=run_manager)
+        except Exception:  # noqa: BLE001 — degradação deliberada (ADR-031)
+            log.warning(
+                "rag: retriever pgvector falhou em consulta; caindo para keyword",
+                exc_info=True,
+            )
+            with _lock:
+                _retrievers[f"{self.collection}:{self.k}"] = self._fallback
+            self._primary = self._fallback
+            return self._fallback._get_relevant_documents(query, run_manager=run_manager)
+
+
 # --- Retriever pgvector (opt-in) --------------------------------------------
 
 def is_pgvector_enabled() -> bool:
@@ -268,6 +333,20 @@ def embeddings():
     )
 
 
+_engine = None
+
+
+def _pg_engine():
+    """Engine compartilhada com `pool_pre_ping`: sem isso, um Postgres reiniciado deixa o pool
+    com conexões mortas e toda consulta falha (`AdminShutdown`) até o processo reiniciar."""
+    global _engine
+    if _engine is None:
+        from sqlalchemy import create_engine
+
+        _engine = create_engine(database_url(), pool_pre_ping=True, pool_recycle=300)
+    return _engine
+
+
 def vector_store(collection: str):
     """`PGVector` da collection. Levanta se as deps de `requirements-rag.txt` não estão instaladas."""
     from langchain_postgres import PGVector
@@ -275,7 +354,7 @@ def vector_store(collection: str):
     return PGVector(
         embeddings=embeddings(),
         collection_name=collection,
-        connection=database_url(),
+        connection=_pg_engine(),
         use_jsonb=True,
     )
 
@@ -344,16 +423,21 @@ def retrieve(collection: str, query: str, *, k: int = DEFAULT_K, config=None) ->
     return get_retriever(collection, k=k).invoke(query, config=config)
 
 
-def policy_retriever_runnable(*, k: int = DEFAULT_K) -> BaseRetriever:
+def _retriever_runnable(collection: str, label: str, k: int):
+    """Retriever com `run_name` legível e degradação keyword em falha de CONSULTA (ADR-031)."""
+    return VegaDegradingRetriever(collection=collection, k=k).with_config(
+        {"run_name": label, "name": label}
+    )
+
+
+def policy_retriever_runnable(*, k: int = DEFAULT_K):
     """Retriever de políticas com `run_name`/`name` legíveis — aninha como L4r sob a feature chain."""
-    label = RETRIEVE_STORE_POLICIES_RUN_NAME
-    return get_retriever(COLLECTION_POLICIES, k=k).with_config({"run_name": label, "name": label})
+    return _retriever_runnable(COLLECTION_POLICIES, RETRIEVE_STORE_POLICIES_RUN_NAME, k)
 
 
-def catalog_retriever_runnable(*, k: int = 20) -> BaseRetriever:
+def catalog_retriever_runnable(*, k: int = 20):
     """Retriever de catálogo com `run_name`/`name` legíveis — aninha como L4r sob a feature chain."""
-    label = RETRIEVE_CATALOG_RUN_NAME
-    return get_retriever(COLLECTION_CATALOG, k=k).with_config({"run_name": label, "name": label})
+    return _retriever_runnable(COLLECTION_CATALOG, RETRIEVE_CATALOG_RUN_NAME, k)
 
 
 def documents_to_policy_chunks(docs: list[Document]) -> list[dict]:

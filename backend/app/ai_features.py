@@ -206,8 +206,8 @@ def _reply_language_instruction(question: str) -> str:
 
 
 _POLICY_OVERVIEW_HINTS = (
-    "policies", "policy", "políticas", "politicas", "rules", "terms",
-    "what are your", "what is the policies", "store policies", "your policies",
+    "policies", "policy", "políticas", "politicas", "rules", "rule", "terms",
+    "what are your", "what is your", "what is the policies", "store policies", "your policies",
 )
 _POLICY_TOPIC_MARKERS = (
     ("return", ("return", "refund")),
@@ -228,15 +228,24 @@ def _is_policy_overview_question(question: str) -> bool:
 
 def _policy_overview_from_chunks(chunks: list[dict]) -> str:
     """Resumo multi-tópico determinístico a partir dos trechos recuperados."""
-    sections = policy_sections_from_chunks(chunks)
+    sections = policy_sections_from_chunks(chunks, body_max_len=320)
     if sections:
-        bodies = [f"{s['title']}: {s['body']}" for s in sections[:4]]
-        return "Here's an overview of Vega's store policies: " + " ".join(bodies)
+        bodies = [f"{s['title']}: {s['body']}" for s in sections[:6]]
+        return "Here's an overview of Vega's store policies:\n\n" + "\n\n".join(bodies)
     return (
         "Vega's store policies include a 30-day return window from delivery with full refunds, "
         "free standard shipping in Brazil within about 2 business days, a 12-month warranty on "
         "defects, and payment by credit card or Pix with no charge if an order fails."
     )
+
+
+def _overview_display_answer(layout: dict | None, text: str) -> str:
+    """Texto visível no bubble — lead + seções quando houver layout estruturado."""
+    if layout and layout.get("sections"):
+        lead = (layout.get("lead") or "").strip() or "Here's an overview of Vega's store policies:"
+        parts = [f"{s['title']}: {s['body']}" for s in layout["sections"]]
+        return f"{lead}\n\n" + "\n\n".join(parts)
+    return (text or "").strip()
 
 
 def _store_overview_answer_ok(answer: str) -> bool:
@@ -282,14 +291,28 @@ def store_chat(question: str, *, config=None) -> dict:
     overview = _is_policy_overview_question(question)
     _maybe_latency()
     lang_instr = _reply_language_instruction(question)
+    overview_chunks: list[dict] = []
+    if overview and grounded:
+        overview_chunks = rag.policy_overview_chunks()
+        if overview_chunks:
+            text = _policy_overview_from_chunks(overview_chunks)
+            layout = build_store_chat_layout(question, text, overview_chunks, overview=True)
+            answer = _overview_display_answer(layout, text)
+            return {
+                "answer": answer,
+                "grounded": True,
+                "layout": layout,
+                "full_answer": text,
+            }
     if grounded:
         if overview:
             context_suffix = (
-                "The customer wants a broad overview of Vega's store policies. Summarize in 4-6 "
-                "sentences covering returns/refunds, shipping, warranty, and payment using ONLY the "
-                "policy excerpts above — include concrete numbers and timeframes when present. "
-                f"{lang_instr} No markdown."
+                "The customer wants a broad overview of Vega's store policies. Summarize in 5-7 "
+                "sentences covering returns/refunds, shipping, warranty, payment, and privacy/terms "
+                "using ONLY the policy excerpts above — include concrete numbers and timeframes when "
+                f"present. {lang_instr} No markdown."
             )
+            max_tokens = 320
         else:
             context_suffix = (
                 "Answer using ONLY the store policy excerpts above when relevant. For greetings or "
@@ -297,12 +320,13 @@ def store_chat(question: str, *, config=None) -> dict:
                 "recommend products unless they explicitly asked to shop. Be concise (1-3 sentences). "
                 f"{lang_instr} No markdown."
             )
+            max_tokens = 180
         text, r, _ = feature_complete_turn(
             "store_chat", question,
             context_suffix=_with_injection(context_suffix),
             policy_retrieval=True,
             policy_k=4 if overview else None,
-            max_tokens=280 if overview else 180,
+            max_tokens=max_tokens,
             verbose=FLAGS.cost_spike, config=config,
         )
     else:  # hallucination: sem as políticas reais → o modelo "inventa" prazos e regras
@@ -316,7 +340,9 @@ def store_chat(question: str, *, config=None) -> dict:
         )
     if _is_stub(r):
         chunks_for_layout = (
-            rag.policy_chunks_offline(question, k=4 if overview else 2)
+            overview_chunks
+            if overview and overview_chunks
+            else rag.policy_chunks_offline(question, k=6 if overview else 2)
             if grounded else []
         )
         text = (
@@ -325,13 +351,18 @@ def store_chat(question: str, *, config=None) -> dict:
             else _store_chat_fallback(question, chunks_for_layout, grounded)
         )
     elif grounded and overview and not _store_overview_answer_ok(text):
-        chunks_for_layout = rag.policy_chunks_offline(question, k=4)
+        chunks_for_layout = overview_chunks or rag.policy_overview_chunks()
         text = _policy_overview_from_chunks(chunks_for_layout)
+    elif overview and overview_chunks:
+        chunks_for_layout = overview_chunks
     else:
         # RAG já rodou dentro da feature chain — layout deriva da resposta (sem 2º retriever órfão).
         chunks_for_layout = []
     layout = build_store_chat_layout(question, text, chunks_for_layout, overview=overview)
-    answer = layout["lead"] if layout and layout.get("lead") else text.strip()
+    if overview and layout and layout.get("sections"):
+        answer = _overview_display_answer(layout, text)
+    else:
+        answer = layout["lead"] if layout and layout.get("lead") else text.strip()
     return {"answer": answer, "grounded": grounded, "layout": layout, "full_answer": text.strip()}
 
 

@@ -69,14 +69,18 @@ def _first_policy_paragraph(text: str, *, max_len: int = 220) -> str:
     return ""
 
 
-def policy_sections_from_chunks(chunks: list[dict]) -> list[dict[str, str]]:
+def policy_sections_from_chunks(
+    chunks: list[dict],
+    *,
+    body_max_len: int = 220,
+) -> list[dict[str, str]]:
     sections: list[dict[str, str]] = []
     seen: set[str] = set()
     for chunk in chunks or []:
         title = _chunk_topic(chunk)
         if title in seen:
             continue
-        body = _first_policy_paragraph(chunk.get("text") or "")
+        body = _first_policy_paragraph(chunk.get("text") or "", max_len=body_max_len)
         if not body:
             continue
         sections.append({"title": title, "body": body})
@@ -141,7 +145,10 @@ def build_store_chat_layout(
     if not answer:
         return None
 
-    sections = policy_sections_from_chunks(chunks or []) if chunks else []
+    sections = (
+        policy_sections_from_chunks(chunks or [], body_max_len=320 if overview else 220)
+        if chunks else []
+    )
     if not sections:
         sections = _sections_from_answer(answer)
 
@@ -162,7 +169,7 @@ def build_store_chat_layout(
             sections = [{"title": topic_title, "body": answer}]
 
     if overview and sections:
-        return {"lead": "Here's an overview of Vega's store policies:", "sections": sections[:5]}
+        return {"lead": "Here's an overview of Vega's store policies:", "sections": sections[:6]}
 
     if len(sections) >= 2:
         lead = _first_sentence(answer) if len(answer) > 120 else sections[0]["body"][:120]

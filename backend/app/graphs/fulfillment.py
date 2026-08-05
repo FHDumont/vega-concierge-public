@@ -13,6 +13,7 @@ from typing_extensions import TypedDict
 
 from ..tool_arg_normalize import format_tool_error
 from .. import orders, tools
+from ..problems import FLAGS
 from ..langchain_tools import (
     FULFILLMENT_TOOLS,
     charge_payment_tool,
@@ -55,6 +56,7 @@ class FulfillmentState(ReactState, total=False):
     payment: dict
     notification: dict
     checkout_success: bool
+    failure_reason: str | None
 
 
 def _parse_tool_content(content) -> object:
@@ -165,7 +167,11 @@ def resolve_quote_node(state: FulfillmentState, config: RunnableConfig) -> dict:
                 f"Resolve quote: discard check_inventory sku={inventory.get('sku')!r} (not in cart)"
             )
         trace.append("Resolve quote fallback: check_inventory tool")
-        inventory = check_inventory_tool.invoke({"sku": sku}, config=config)
+        try:
+            inventory = check_inventory_tool.invoke({"sku": sku}, config=config)
+        except RuntimeError as exc:
+            inventory = {"ok": False, "sku": sku, "error": str(exc)}
+            trace.append(f"Resolve quote: inventory error — {exc}")
     if sku and not _sku_matches_cart(quote, cart_skus):
         if quote:
             trace.append(
@@ -244,18 +250,56 @@ def decrement_stock_node(state: FulfillmentState, config: RunnableConfig) -> dic
     return {"trace": trace}
 
 
+def _inventory_service_failed(state: FulfillmentState, messages: list[BaseMessage] | None = None) -> bool:
+    if FLAGS.inventory_outage:
+        return True
+    inventory = state.get("inventory") or {}
+    if isinstance(inventory, dict) and inventory.get("error"):
+        return True
+    for m in messages or []:
+        if isinstance(m, ToolMessage) and getattr(m, "name", None) == "check_inventory":
+            parsed = _parse_tool_content(m.content)
+            if isinstance(parsed, dict) and parsed.get("error"):
+                return True
+            raw = str(m.content or "").lower()
+            if "inventory service unavailable" in raw or "503" in raw:
+                return True
+    return False
+
+
+def _derive_checkout_failure_reason(state: FulfillmentState, messages: list[BaseMessage] | None = None) -> str:
+    if _inventory_service_failed(state, messages):
+        return "inventory_unavailable"
+    if not state.get("allow", True):
+        return "fraud_blocked"
+    if state.get("stock_ok") is False:
+        return "out_of_stock"
+    payment = state.get("payment") or {}
+    if payment and not payment.get("paid"):
+        return "payment_failed"
+    return "unknown"
+
+
 def persist_order_node(state: FulfillmentState, config: RunnableConfig) -> dict:
     order = dict(state["order"])
+    messages = list(state.get("messages") or [])
     success = (
-        state.get("allow", False)
+        not _inventory_service_failed(state, messages)
+        and state.get("allow", False)
         and state.get("stock_ok", False)
         and state.get("payment", {}).get("paid", False)
     )
     status = "PAID" if success else "FAILED"
-    order = orders.transition(order["id"], status)
+    failure_reason = None if success else _derive_checkout_failure_reason(state, messages)
+    order = orders.transition(order["id"], status, failure_reason=failure_reason)
     trace = list(state.get("trace") or [])
-    trace.append(f"Persist order: status={status}")
-    return {"order": order, "checkout_success": success, "trace": trace}
+    trace.append(f"Persist order: status={status} reason={failure_reason or '—'}")
+    return {
+        "order": order,
+        "checkout_success": success,
+        "failure_reason": failure_reason,
+        "trace": trace,
+    }
 
 
 def send_notification_node(state: FulfillmentState, config: RunnableConfig) -> dict:
@@ -364,6 +408,7 @@ def _graph_result(result: dict, *, order: dict | None) -> dict:
         "quote": result.get("quote") or {},
         "fraud": result.get("fraud") or {},
         "inventory": result.get("inventory") or {},
+        "failure_reason": result.get("failure_reason"),
     }
     if order is not None:
         out["order"] = result.get("order") or order

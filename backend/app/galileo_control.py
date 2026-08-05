@@ -86,15 +86,17 @@ def init_once() -> None:
         return
     try:
         import agent_control
+        from agent_control.settings import configure_settings
         from galileo import galileo_context, get_agent_control_target
 
         galileo_context.init(project=galileo_obs.project(), log_stream=galileo_obs.log_stream())
         target = get_agent_control_target()
         api_key = os.getenv("GALILEO_API_KEY", "").strip()
+        server_url = _agent_control_url()
         agent_control.init(
             agent_name="vega-concierge",
             agent_description="Vega Concierge workshop store — Agent Control",
-            server_url=_agent_control_url(),
+            server_url=server_url,
             api_key=api_key,
             api_key_header=os.getenv("AGENT_CONTROL_API_KEY_HEADER", "Galileo-API-Key"),
             target_type=target.target_type,
@@ -103,6 +105,14 @@ def init_once() -> None:
             observability_enabled=True,
             observability_sink_name="registered",
         )
+        # `agent_control.init(server_url=...)` only sets `_state.state.server_url`, which the
+        # step evaluation call (`control_decorators._get_server_url()`) never reads — that path
+        # pulls from the SDK's own pydantic-settings singleton (`AGENT_CONTROL_URL` env var,
+        # default `http://localhost:8000`). Without this, every `@control`-decorated step call
+        # (delete_product, returns.finalize, ...) silently posts to our OWN API port and 404s,
+        # which the tool call then swallows into a generic "unknown reason" error — no Block/Steer
+        # ever reaches the trace.
+        configure_settings(url=server_url, api_key=api_key)
         _ensure_decorated_steps()
         _initialized = True
         log.info("Agent Control inicializado (target=%s/%s)", target.target_type, target.target_id)

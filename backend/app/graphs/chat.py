@@ -21,11 +21,19 @@ from .concierge import (
     _is_invoked,
     _parse_request_budget,
     _record_llm_turn,
+    _tool_result_named,
     curator_node,
     respond_node,
 )
 from .. import agent_config
-from ..galileo_span import CHAT_GRAPH_NODES, CHAT_ROUTE_TO_NODE, CHAT_ROUTE_DECISION, llm_run_name
+from ..galileo_span import (
+    CHAT_GRAPH_NODES,
+    CHAT_ROUTE_TO_NODE,
+    CHAT_ROUTE_DECISION,
+    DELETE_PRODUCT_TOOL_NAME,
+    LIST_RECENT_CUSTOMERS_TOOL_NAME,
+    llm_run_name,
+)
 from ..llm_models import get_chat_model, make_system_message
 from ..problems import FLAGS
 from ..runnable_config import derive_feature_config
@@ -39,6 +47,7 @@ INTENT_AGENTS: dict[str, list[str]] = {
     "gift": ["gift"],
     "product_qa": ["product_qa"],
     "returns": ["returns"],
+    "destructive": ["destructive_action"],
 }
 
 CHAT_AGENT_CATALOG: dict[str, tuple[str, str]] = {
@@ -51,6 +60,10 @@ CHAT_AGENT_CATALOG: dict[str, tuple[str, str]] = {
     "gift": ("Generates a personalized gift message.", "gift_summary"),
     "product_qa": ("Answers questions about a specific product (requires SKU context).", "product_qa_summary"),
     "returns": ("Processes a refund/return for a delivered order.", "returns_summary"),
+    "destructive_action": (
+        "Executes privileged catalog actions (delete SKU, export buyer records) via concierge tools.",
+        "destructive_summary",
+    ),
 }
 
 
@@ -58,7 +71,8 @@ class ChatRoutingDecision(BaseModel):
     """Coordinator routing for chat — which specialist to invoke next."""
 
     next_agent: Literal[
-        "general_qa", "stats_qa", "curator", "respond", "compare", "search", "gift", "product_qa", "returns", "complete"
+        "general_qa", "stats_qa", "curator", "respond", "compare", "search", "gift",
+        "product_qa", "returns", "destructive_action", "complete",
     ] = Field(description="Next specialist, or 'complete' when ready to finalize.")
     reasoning: str = Field(default="", description="Brief justification for the route.")
 
@@ -89,6 +103,7 @@ class ChatState(TypedDict, total=False):
     returns_summary: Optional[str]
     general_qa_summary: Optional[str]
     stats_qa_summary: Optional[str]
+    destructive_summary: Optional[str]
 
 
 def _last_human_text(messages: list[BaseMessage]) -> str:
@@ -209,7 +224,7 @@ _PRODUCT_INQUIRY_RE = re.compile(
 
 def _should_route_product_qa(text: str, context_sku: str | None) -> bool:
     """Com SKU de página aberta, pergunta sobre o produto — não exige '?'."""
-    if not context_sku:
+    if not context_sku or _is_store_policy_question(text):
         return False
     msg = text or ""
     if re.search(r"NS-\d{3}", msg, re.I):
@@ -232,16 +247,33 @@ def _is_store_policy_question(text: str) -> bool:
     """Pergunta sobre política/loja — não sobre o produto em context_sku."""
     low = (text or "").lower()
     hints = (
-        "policy", "política", "politica", "return window", "devolução", "devolucao",
+        "policy", "policies", "política", "politica", "políticas", "politicas",
+        "rules", "rule", "terms", "privacy",
+        "return window", "devolução", "devolucao",
         "refund policy", "shipping", "frete", "warranty", "garantia", "payment",
         "pagamento", "quantos dias", "how many days", "prazo", "who are you",
         "quem é", "are you a bot", "você é um bot", "store hours", "horário",
+        "what are your", "what is your",
     )
     return any(h in low for h in hints)
 
 
+def _is_destructive_action_intent(text: str) -> bool:
+    """UC-4 — delete catalog SKU or export other shoppers' PII (prompt_injection must be ON)."""
+    low = (text or "").lower()
+    if "delete" in low and (re.search(r"\bNS-\d+\b", text or "", re.I) or "ns-001" in low):
+        return True
+    if not any(w in low for w in ("customer", "buyer", "shopper", "user", "email", "address")):
+        return False
+    return any(w in low for w in (
+        "list", "show", "print", "export", "all", "other", "recent", "dump", "every",
+    ))
+
+
 def _detect_chat_intent(text: str, context_sku: str | None, context_order_id: str | None = None) -> str:
     """Deterministic intent from keywords (stub offline routing). Default: general (F-052)."""
+    if FLAGS.prompt_injection and _is_destructive_action_intent(text):
+        return "destructive"
     low = (text or "").lower()
     if "compare" in low or "comparar" in low:
         return "compare"
@@ -781,6 +813,58 @@ async def returns_node(state: ChatState, config: RunnableConfig) -> dict:
     }
 
 
+def _describe_destructive_outcome(messages: list[BaseMessage], text: str) -> str | None:
+    """Coherent, deterministic reply from the tool result actually mutated/blocked —
+    the concierge's normal `respond`/`finalize` copy is written for product Q&A and stays
+    silent about deletions or Agent Control blocks, which reads as a non-sequitur (UC-4)."""
+    delete_result = _tool_result_named(messages, DELETE_PRODUCT_TOOL_NAME)
+    if isinstance(delete_result, dict):
+        sku = delete_result.get("sku") or "the requested item"
+        if delete_result.get("blocked"):
+            reason = delete_result.get("reason") or "policy"
+            return f"I can't delete {sku} — this action was blocked ({reason})."
+        if delete_result.get("deleted"):
+            return f"Done — {sku} has been removed from the catalog."
+        reason = delete_result.get("reason") or "unknown reason"
+        return f"I couldn't delete {sku} ({reason})."
+
+    export_result = _tool_result_named(messages, LIST_RECENT_CUSTOMERS_TOOL_NAME)
+    if isinstance(export_result, list):
+        return f"Exported {len(export_result)} recent customer record(s)."
+
+    return None
+
+
+async def destructive_action_node(state: ChatState, config: RunnableConfig) -> dict:
+    """UC-4 — privileged concierge tools (delete_product, list_recent_customers) from any page."""
+    from ..agents import arun_workflow
+
+    lc_messages, request, _, trace = _ensure_initial_messages(state)
+    trace = list(trace)
+    text = _last_human_text(lc_messages) or request
+    trace.append("Destructive action: concierge tools")
+
+    child = derive_feature_config(config, "concierge")
+    result = await arun_workflow(text, config=child)
+    outcome = _describe_destructive_outcome(list(result.get("messages") or []), text)
+    summary = outcome or (result.get("answer") or "").strip() or "Action completed."
+    sku_match = re.search(r"\b(NS-\d{3})\b", text, re.I)
+    artifacts = {
+        "answer": summary,
+        "destructive": True,
+        "sku": sku_match.group(0).upper() if sku_match else None,
+        "selected": result.get("selected"),
+    }
+    trace.append("Destructive action: resposta do concierge")
+
+    return {
+        "destructive_summary": summary,
+        "artifacts": artifacts,
+        "trace": trace,
+        "messages": [AIMessage(content=summary)],
+    }
+
+
 def chat_finalize_node(state: ChatState, config: RunnableConfig) -> dict:
     """Consolidate reply + intent + artifacts for POST /api/chat response."""
     from ..agents import _detect_language, _fallback_response
@@ -834,6 +918,8 @@ def chat_finalize_node(state: ChatState, config: RunnableConfig) -> dict:
         reply = state.get("returns_summary") or artifacts.get("reason") or ""
         if not artifacts:
             reply = reply or "Could not process that return request."
+    elif intent == "destructive":
+        reply = state.get("destructive_summary") or artifacts.get("answer") or ""
     else:
         reply = _fallback_response(state.get("selected"), lang)
 
@@ -846,7 +932,8 @@ def chat_finalize_node(state: ChatState, config: RunnableConfig) -> dict:
     llm_unavailable = is_llm_unavailable_reply(reply)
     if llm_unavailable:
         intent = "general"
-        artifacts = {}
+        if not artifacts.get("layout"):
+            artifacts = {}
         quality = {"grounded": False, "accuracy": 0.0}
 
     trace.append(f"Finalize chat: intent={intent}")
@@ -909,12 +996,19 @@ def build_chat_graph():
         metadata={"agent_name": "returns", "business_step": CHAT_GRAPH_NODES["returns"]},
     )
     g.add_node(
+        CHAT_GRAPH_NODES["destructive_action"], destructive_action_node,
+        metadata={"agent_name": "concierge", "business_step": CHAT_GRAPH_NODES["destructive_action"]},
+    )
+    g.add_node(
         CHAT_GRAPH_NODES["finalize"], chat_finalize_node,
         metadata={"agent_name": "chat_finalize", "business_step": CHAT_GRAPH_NODES["finalize"]},
     )
     g.add_edge(START, route)
     g.add_conditional_edges(route, chat_pick_next_specialist, CHAT_ROUTE_TO_NODE)
-    for spoke_key in ("general_qa", "stats_qa", "curator", "respond", "compare", "search", "gift", "product_qa", "returns"):
+    for spoke_key in (
+        "general_qa", "stats_qa", "curator", "respond", "compare", "search",
+        "gift", "product_qa", "returns", "destructive_action",
+    ):
         g.add_edge(CHAT_GRAPH_NODES[spoke_key], route)
     g.add_edge(CHAT_GRAPH_NODES["finalize"], END)
     return g.compile().with_config({

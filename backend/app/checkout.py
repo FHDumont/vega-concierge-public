@@ -13,6 +13,7 @@ Mapa de problemas "decisão errada × dado correto" (ligado aos toggles do Probl
 - `price_hallucination` → quote fora do catálogo correto (não bloqueia a venda)."""
 from . import orders
 from .graphs.fulfillment import arun_fulfillment_graph, run_fulfillment_graph
+from .problems import FLAGS
 from .runnable_config import build_runnable_config, make_thread_id, resolve_config
 
 
@@ -51,9 +52,17 @@ def place_order(
         result = run_fulfillment_graph(
             items, total, order=order, config=fulfillment_config,
         )
-        return result.get("order") or orders.transition(order["id"], "FAILED")
+        if result.get("order"):
+            return result["order"]
+        reason = result.get("failure_reason") or (
+            "inventory_unavailable" if FLAGS.inventory_outage else "unknown"
+        )
+        return orders.transition(order["id"], "FAILED", failure_reason=reason)
     except Exception:
-        return orders.transition(order["id"], "FAILED")
+        return orders.transition(
+            order["id"], "FAILED",
+            failure_reason="inventory_unavailable" if FLAGS.inventory_outage else "unknown",
+        )
 
 
 async def aplace_order(
@@ -72,6 +81,14 @@ async def aplace_order(
         result = await arun_fulfillment_graph(
             items, total, order=order, config=fulfillment_config,
         )
-        return result.get("order") or orders.transition(order["id"], "FAILED")
+        if result.get("order"):
+            return result["order"]
+        reason = result.get("failure_reason") or (
+            "inventory_unavailable" if FLAGS.inventory_outage else "unknown"
+        )
+        return orders.transition(order["id"], "FAILED", failure_reason=reason)
     except Exception:
-        return orders.transition(order["id"], "FAILED")
+        return orders.transition(
+            order["id"], "FAILED",
+            failure_reason="inventory_unavailable" if FLAGS.inventory_outage else "unknown",
+        )

@@ -93,8 +93,8 @@ No workshop o SSH costuma estar bloqueado. O painel (`http://<VM-IP>:9000`) gere
 ```bash
 cd backend
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-python3 run_demo.py
+pip install -r requirements.txt -r requirements-dev.txt
+pytest
 ```
 
 ## Simulador de tráfego — `/admin/simulator`

@@ -49,6 +49,8 @@ def init_db() -> None:
             conn.execute("ALTER TABLE orders ADD COLUMN history TEXT NOT NULL DEFAULT '[]'")
         if "user_id" not in cols:
             conn.execute("ALTER TABLE orders ADD COLUMN user_id TEXT")
+        if "failure_reason" not in cols:
+            conn.execute("ALTER TABLE orders ADD COLUMN failure_reason TEXT")
 
 
 def _new_id() -> str:
@@ -60,7 +62,7 @@ def _now_iso() -> str:
 
 
 def _row_to_order(row: sqlite3.Row) -> dict:
-    return {
+    order = {
         "id": row["id"],
         "items": json.loads(row["items"]),
         "customer": json.loads(row["customer"]),
@@ -69,6 +71,10 @@ def _row_to_order(row: sqlite3.Row) -> dict:
         "created_at": row["created_at"],
         "history": json.loads(row["history"] or "[]"),
     }
+    keys = row.keys()
+    if "failure_reason" in keys and row["failure_reason"]:
+        order["failure_reason"] = row["failure_reason"]
+    return order
 
 
 def _ts_of(order: dict, status: str) -> datetime | None:
@@ -133,15 +139,23 @@ def create_order(items: list[dict], customer: dict, total: float, status: str,
     return order
 
 
-def transition(order_id: str, status: str) -> dict | None:
+def transition(order_id: str, status: str, *, failure_reason: str | None = None) -> dict | None:
     """Avança o status e registra a transição com timestamp no histórico."""
     order = get_order(order_id, advance=False)
     if order is None:
         return None
     history = order["history"] + [{"status": status, "at": _now_iso()}]
     with _connect() as conn:
-        conn.execute("UPDATE orders SET status = ?, history = ? WHERE id = ?",
-                     (status, json.dumps(history), order_id))
+        if failure_reason:
+            conn.execute(
+                "UPDATE orders SET status = ?, history = ?, failure_reason = ? WHERE id = ?",
+                (status, json.dumps(history), failure_reason, order_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE orders SET status = ?, history = ?, failure_reason = NULL WHERE id = ?",
+                (status, json.dumps(history), order_id),
+            )
     return get_order(order_id, advance=False)
 
 

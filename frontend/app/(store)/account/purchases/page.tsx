@@ -86,6 +86,7 @@ function PurchaseHistory({
           onBack={back}
           backLabel="← Purchase history"
           showSummary
+          showNotificationPreview
           showRefund
           onRefunded={(o) => setDetail(o)}
         />

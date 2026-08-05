@@ -34,6 +34,47 @@ const STEP_OF: Record<Stage, number> = {
   confirmed: 2,
 };
 
+const CHECKOUT_FAILURE_COPY: Record<string, { title: string; body: string }> = {
+  inventory_unavailable: {
+    title: "Inventory service unavailable",
+    body:
+      "We couldn't verify stock — our inventory service returned error 503 while checking your cart. " +
+      "Your card was not charged. This is a temporary outage on our side; please try again in a few minutes.",
+  },
+  fraud_blocked: {
+    title: "Order held for review",
+    body:
+      "We couldn't complete your purchase because our fraud check flagged this order. " +
+      "Your card was not charged. Contact support if you believe this is a mistake.",
+  },
+  payment_failed: {
+    title: "Payment could not be processed",
+    body:
+      "Your bank or our payment gateway declined the charge. Nothing was captured — please verify your card and try again.",
+  },
+  out_of_stock: {
+    title: "Item out of stock",
+    body:
+      "One or more items in your cart are no longer available at the quantity requested. " +
+      "Update your cart and try again.",
+  },
+  unknown: {
+    title: "We couldn't place your order",
+    body: "Something went wrong while completing your purchase. Please try again.",
+  },
+};
+
+function CheckoutFailureMessage({ order }: { order: Order | null }) {
+  const key = order?.failure_reason || "unknown";
+  const copy = CHECKOUT_FAILURE_COPY[key] || CHECKOUT_FAILURE_COPY.unknown;
+  return (
+    <div className="ns-alert error">
+      <b>{copy.title}</b>
+      <div style={{ marginTop: 4 }}>{copy.body}</div>
+    </div>
+  );
+}
+
 function Field({
   label,
   value,
@@ -333,14 +374,8 @@ export default function CheckoutPage() {
       ) : stage === "failed" ? (
         /* FAILED — pedido bloqueado (fraude/estoque) ou erro */
         <div className="ns-panelcard ns-checkout-done">
-          <div className="ns-alert error">
-            <b>We couldn’t place your order</b>
-            <div style={{ marginTop: 4 }}>
-              Something went wrong while completing your purchase. Please try again.
-            </div>
-          </div>
-          {/* IA-Checkout (F-024): explicação amigável quando barrado por fraude (se aplicável) */}
-          {order && <FraudExplain orderId={order.id} />}
+          <CheckoutFailureMessage order={order} />
+          {order?.failure_reason === "fraud_blocked" && order && <FraudExplain orderId={order.id} />}
           <div className="ns-btn-row" style={{ marginTop: 16 }}>
             <Link href="/" className="ns-btn-ghost block">Back to store</Link>
             <button type="button" className="ns-btn-primary block" onClick={() => setStage("payment")}>

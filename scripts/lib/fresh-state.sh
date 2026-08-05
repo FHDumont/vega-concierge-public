@@ -79,11 +79,38 @@ fresh_sqlite_compose() {
     -c 'rm -f /data/vega.db /data/vega.db-wal /data/vega.db-shm; echo "  /data/vega.db removed"'
 }
 
+_compose_project_name() {
+  docker compose "$@" config --format json 2>/dev/null \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin).get("name",""))' 2>/dev/null || true
+}
+
+# Antes de `name: vega` no docker-compose.yml, dev.sh rodava no projeto `vega-concierge` e up.sh no
+# `vega`: dois stacks vivos ao mesmo tempo. O legado precisa sair, senão o postgres antigo continua
+# segurando :5434 e o start "limpo" nem sobe.
+remove_legacy_project_stack() {
+  local legacy="vega-concierge" ids vols
+  ids="$(docker ps -aq --filter "label=com.docker.compose.project=$legacy" 2>/dev/null || true)"
+  vols="$(docker volume ls -q --filter "label=com.docker.compose.project=$legacy" 2>/dev/null || true)"
+  [ -n "$ids$vols" ] || return 0
+  echo "→ fresh-state: removendo stack legado do projeto '$legacy' (conflito de porta/volume)…"
+  [ -n "$ids" ] && docker rm -f $ids >/dev/null 2>&1 || true
+  [ -n "$vols" ] && docker volume rm $vols >/dev/null 2>&1 || true
+}
+
 fresh_rag_postgres() {
   echo "→ fresh-state: pgvector volume (reindex do zero)…"
   docker compose "$@" stop postgres 2>/dev/null || true
-  local vol
-  vol="$(docker volume ls -q | grep vega-vectors | head -1 || true)"
+  local proj vol
+  proj="$(_compose_project_name "$@")"
+  if [ -z "$proj" ]; then
+    echo "  warn: projeto compose não resolvido — volume preservado (não arrisca apagar o de outro stack)" >&2
+    return 0
+  fi
+  # Buscar por `docker volume ls | grep vega-vectors | head -1` apagava o volume de QUALQUER
+  # projeto: derrubava o Postgres de um backend vivo e toda consulta virava psycopg AdminShutdown.
+  vol="$(docker volume ls -q \
+    --filter "label=com.docker.compose.project=$proj" \
+    --filter "label=com.docker.compose.volume=vega-vectors" 2>/dev/null | head -1 || true)"
   if [ -n "$vol" ]; then
     if docker volume rm "$vol" >/dev/null 2>&1; then
       echo "  removed $vol"

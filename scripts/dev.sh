@@ -42,6 +42,11 @@ set +a
 
 # shellcheck disable=SC1091
 . "$ROOT/scripts/lib/fresh-state.sh"
+remove_legacy_project_stack
+# dev.sh roda a app no HOST. Um backend/frontend containerizado ainda de pé segura :8000/:3000, e o
+# navegador acaba falando com o container antigo — que, depois do reindex do pgvector, responde com
+# pool de conexões morto ("Something went wrong" em todo chat).
+(cd "$ROOT" && docker compose stop backend frontend >/dev/null 2>&1) || true
 fresh_sqlite_host
 
 if [ "$RAG" = "1" ]; then

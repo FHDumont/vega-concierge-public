@@ -218,6 +218,14 @@ function ArtifactBlock({
   if (intent === "gift") return <GiftArtifact artifacts={artifacts} />;
   if (intent === "product_qa") return <ProductQaChip artifacts={artifacts} />;
   if (intent === "returns") return <ReturnsArtifact artifacts={artifacts} />;
+  if (intent === "destructive") {
+    const sku = artifacts.sku as string | undefined;
+    return sku ? (
+      <div className="ns-chat-artifact">
+        <span className="ns-chip">{sku}</span>
+      </div>
+    ) : null;
+  }
   if (intent === "general" || intent === "stats") {
     return <AnswerLayoutBlock layout={artifacts.layout as AnswerLayout | undefined} />;
   }

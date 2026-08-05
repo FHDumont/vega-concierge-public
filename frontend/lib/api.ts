@@ -47,6 +47,7 @@ export type Order = {
   status: OrderStatus;
   created_at: string;
   history?: OrderTransition[]; // transições do ciclo de vida (F-005)
+  failure_reason?: string; // checkout FAILED — inventory, fraud, payment (workshop UX)
 };
 
 // Conta de usuário (F-008). `tier` é computado pelo gasto acumulado no backend;

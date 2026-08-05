@@ -424,7 +424,10 @@ def refund_eligibility(order: dict, *, config=None, apply_workshop_toggles: bool
     if eligible:
         reason = f"Delivered {days:.0f} day(s) ago — within the {REFUND_WINDOW_DAYS}-day window."
     elif false_denial:
-        reason = "Eligibility agent denied the request."
+        reason = (parsed.get("reason") or "").strip() or (
+            f"Delivered {int((days or 0) + REFUND_WINDOW_DAYS + 15)} days ago — "
+            f"outside the {REFUND_WINDOW_DAYS}-day window."
+        )
     elif order.get("status") != "DELIVERED":
         reason = "Only delivered orders can be refunded."
     else:

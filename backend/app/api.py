@@ -1,4 +1,5 @@
 """API FastAPI do Vega Concierge. Loja + Behind the Scenes."""
+import logging
 import os
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,6 +14,8 @@ from . import checkout, simulator, llm, ai_features, compare, returns
 from .runnable_config import ai_request_scope
 from . import galileo_control
 from .tools import seed_workshop_stock
+
+log = logging.getLogger(__name__)
 
 orders.init_db()  # create_all no boot (ADR-006)
 users.init_db()   # tabela de usuários (F-008) + papel OWNER (F-020)
@@ -321,6 +324,7 @@ async def chat(req: ChatRequest, authorization: str | None = Header(default=None
                 config=config,
             )
     except Exception as e:
+        log.exception("POST /api/chat failed")
         final = {"answer": "Something went wrong. Please try again.", "intent": "error",
                  "artifacts": {}, "language": None, "trace": []}
         error = str(e)
