@@ -31,4 +31,13 @@ if [ "$missing" -ne 0 ]; then
   exit 1
 fi
 
+case "${OLLAMA_BASE_URL:-}" in
+  *127.0.0.1*|*localhost*)
+    echo "validate-prod-env: OLLAMA_BASE_URL=${OLLAMA_BASE_URL} é URL de dev (host)." >&2
+    echo "  Para ./scripts/up.sh use: OLLAMA_BASE_URL=http://host.docker.internal:11434" >&2
+    echo "  (compose.plain.yml fixa host.docker.internal no container; corrija o .env p/ consistência.)" >&2
+    exit 1
+    ;;
+esac
+
 echo "→ validate-prod-env: OK (${DEPLOYMENT_ENVIRONMENT})"

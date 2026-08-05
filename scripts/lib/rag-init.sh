@@ -67,24 +67,39 @@ if [ "$RAG_INIT_VIA" = "host" ]; then
 fi
 
 if [ "$RAG_INIT_VIA" = "docker" ]; then
-  # Container: 127.0.0.1/localhost apontam pro loopback DO container, não pro Ollama no host.
-  case "${OLLAMA_BASE_URL:-}" in
-    *127.0.0.1*|*localhost*)
-      echo "→ rag-init: WARN — OLLAMA_BASE_URL=${OLLAMA_BASE_URL} inválido dentro do container." >&2
-      echo "  Ajustando p/ http://host.docker.internal:11434 (up.sh pull-only / compose)." >&2
-      OLLAMA_BASE_URL="http://host.docker.internal:11434"
-      export OLLAMA_BASE_URL
-      ;;
-  esac
   internal_url="postgresql+psycopg://${RAG_DB_USER}:${RAG_DB_PASSWORD}@postgres:5432/${RAG_DB_NAME}"
-  # shellcheck disable=SC2086
-  # extra_hosts vem do serviço backend em compose*.yml (host.docker.internal:host-gateway).
-  docker compose -f "$COMPOSE_FILE" --profile rag run --rm --no-deps \
+  ollama_url="http://host.docker.internal:11434"
+
+  # up.sh roda `up -d` antes do rag-init — exec no backend herda extra_hosts do compose.plain.yml.
+  # Evita `compose run` (one-off sem extra_hosts em alguns runtimes) e ignora OLLAMA errado no .env.
+  if ! docker compose -f "$COMPOSE_FILE" --profile rag ps --status running -q backend 2>/dev/null | grep -q .; then
+    echo "rag-init: backend container não está running — suba o stack antes (up.sh faz up -d primeiro)." >&2
+    exit 1
+  fi
+
+  echo "→ rag-init: exec backend (OLLAMA=${ollama_url})…"
+
+  if ! docker compose -f "$COMPOSE_FILE" --profile rag exec -T \
+      -e "OLLAMA_BASE_URL=${ollama_url}" backend python -c "
+import urllib.request
+urllib.request.urlopen('${ollama_url}/api/tags', timeout=5)
+" >/dev/null 2>&1; then
+    echo "rag-init: Ollama unreachable from backend container at ${ollama_url}." >&2
+    echo "  On the VM host, check: curl -sf http://127.0.0.1:11434/api/tags" >&2
+    echo "  Linux (VM/EC2): default Ollama binds 127.0.0.1 only — Docker cannot reach it via host-gateway." >&2
+    echo "  Fix: sudo mkdir -p /etc/systemd/system/ollama.service.d" >&2
+    echo "       printf '[Service]\\nEnvironment=OLLAMA_HOST=0.0.0.0:11434\\n' | sudo tee /etc/systemd/system/ollama.service.d/bind-all.conf" >&2
+    echo "       sudo systemctl daemon-reload && sudo systemctl restart ollama" >&2
+    echo "  Then: curl -sf http://127.0.0.1:11434/api/tags && ./scripts/up.sh" >&2
+    exit 1
+  fi
+
+  docker compose -f "$COMPOSE_FILE" --profile rag exec -T \
     -e RAG_ENABLED=1 \
     -e "RAG_DATABASE_URL=${internal_url}" \
     -e "RAG_EMBEDDING_PROVIDER=${RAG_EMBEDDING_PROVIDER}" \
     -e "RAG_EMBEDDING_MODEL=${RAG_EMBEDDING_MODEL:-nomic-embed-text}" \
-    -e "OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}" \
+    -e "OLLAMA_BASE_URL=${ollama_url}" \
     -e "OPENAI_API_KEY=${OPENAI_API_KEY:-}" \
     -e "REFUND_WINDOW_DAYS=${REFUND_WINDOW_DAYS:-30}" \
     backend python setup_vectordb.py

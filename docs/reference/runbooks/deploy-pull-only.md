@@ -64,7 +64,7 @@ docker manifest inspect ghcr.io/<owner>/vega-frontend:latest
 
 ## AMI golden (manual, uma vez)
 
-1. Ubuntu + Docker + compose plugin + **hugo extended** + **ttyd** + **Ollama** (+ modelos `nomic-embed-text`, `llama3.2`).
+1. Ubuntu + Docker + compose plugin + **hugo extended** + **ttyd** + **Ollama** (+ modelos `nomic-embed-text`, `llama3.2`). **Linux:** Ollama deve escutar em `0.0.0.0:11434` (não só `127.0.0.1`) — ver troubleshooting abaixo.
 2. Clone público do repo em `/opt/vega-concierge` (sem token git):
    ```bash
    git clone https://github.com/FHDumont/vega-concierge-public.git /opt/vega-concierge
@@ -119,6 +119,7 @@ curl -s http://localhost:8000/api/health | python3 -m json.tool
 | RAG dim mismatch | Volume indexado com embedding errado | `up.sh` refaz fresh-state (volume pgvector) |
 | Resposta `[stub:` | Provider LLM ausente | Admin → providers |
 | Wizard pedido em prod | Fluxo antigo | Use `.env` baked + `validate-prod-env.sh` |
+| Ollama OK no host, ConnectionError no container (rag-init) | Linux: Ollama só em `127.0.0.1`; container usa `host.docker.internal` → host-gateway | `sudo mkdir -p /etc/systemd/system/ollama.service.d` · `printf '[Service]\nEnvironment=OLLAMA_HOST=0.0.0.0:11434\n' \| sudo tee /etc/systemd/system/ollama.service.d/bind-all.conf` · `sudo systemctl daemon-reload && sudo systemctl restart ollama` · validar: `ss -tlnp \| grep 11434` mostra `0.0.0.0:11434` |
 
 ## Tags de imagem
 
