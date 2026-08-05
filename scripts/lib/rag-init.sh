@@ -47,10 +47,39 @@ fi
 
 echo "→ rag-init: indexing corpora (via=${RAG_INIT_VIA})…"
 
+# Host-side index (dev.sh / up.sh --build): host.docker.internal só resolve DENTRO de containers.
+# .env.example usa host.docker.internal — correto p/ backend em Docker, errado p/ Python no host.
+if [ "$RAG_INIT_VIA" = "host" ]; then
+  case "${OLLAMA_BASE_URL:-}" in
+    *host.docker.internal*)
+      OLLAMA_BASE_URL="http://127.0.0.1:11434"
+      export OLLAMA_BASE_URL
+      echo "→ rag-init: OLLAMA_BASE_URL ajustado p/ host → ${OLLAMA_BASE_URL}"
+      ;;
+  esac
+  case "${RAG_DATABASE_URL:-}" in
+    *@postgres:*)
+      RAG_DATABASE_URL="postgresql+psycopg://${RAG_DB_USER}:${RAG_DB_PASSWORD}@127.0.0.1:${RAG_DB_PORT}/${RAG_DB_NAME}"
+      export RAG_DATABASE_URL
+      echo "→ rag-init: RAG_DATABASE_URL ajustado p/ host → ${RAG_DATABASE_URL}"
+      ;;
+  esac
+fi
+
 if [ "$RAG_INIT_VIA" = "docker" ]; then
+  # Container: 127.0.0.1/localhost apontam pro loopback DO container, não pro Ollama no host.
+  case "${OLLAMA_BASE_URL:-}" in
+    *127.0.0.1*|*localhost*)
+      echo "→ rag-init: WARN — OLLAMA_BASE_URL=${OLLAMA_BASE_URL} inválido dentro do container." >&2
+      echo "  Ajustando p/ http://host.docker.internal:11434 (up.sh pull-only / compose)." >&2
+      OLLAMA_BASE_URL="http://host.docker.internal:11434"
+      export OLLAMA_BASE_URL
+      ;;
+  esac
   internal_url="postgresql+psycopg://${RAG_DB_USER}:${RAG_DB_PASSWORD}@postgres:5432/${RAG_DB_NAME}"
   # shellcheck disable=SC2086
   docker compose -f "$COMPOSE_FILE" --profile rag run --rm --no-deps \
+    --add-host=host.docker.internal:host-gateway \
     -e RAG_ENABLED=1 \
     -e "RAG_DATABASE_URL=${internal_url}" \
     -e "RAG_EMBEDDING_PROVIDER=${RAG_EMBEDDING_PROVIDER}" \

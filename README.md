@@ -15,7 +15,14 @@ Loja de e-commerce com assistente **multi-agente (LangGraph)** para workshops Sp
 
 ## Como rodar
 
-**Primeira execução (dev/compose):** `./scripts/dev.sh` e `./scripts/up.sh --build` rodam o wizard (`setup-wizard.sh`) se o `.env` estiver incompleto. **Produção/AMI:** `.env` baked — sem wizard (ver `docs/reference/workshop-env-contract.md`).
+**Primeira execução:** copie o template de produção e suba o stack:
+
+```bash
+cp .env.example .env    # template p/ ./scripts/up.sh (pull GHCR)
+./scripts/up.sh
+```
+
+Dev local (`./scripts/dev.sh` ou `./scripts/up.sh --build`) roda o wizard e ajusta URLs p/ o host — ver comentários `[dev]` no `.env.example`.
 
 ### Dev — hot reload, sem Docker
 
