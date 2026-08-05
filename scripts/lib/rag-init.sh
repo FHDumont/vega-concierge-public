@@ -78,8 +78,8 @@ if [ "$RAG_INIT_VIA" = "docker" ]; then
   esac
   internal_url="postgresql+psycopg://${RAG_DB_USER}:${RAG_DB_PASSWORD}@postgres:5432/${RAG_DB_NAME}"
   # shellcheck disable=SC2086
+  # extra_hosts vem do serviço backend em compose*.yml (host.docker.internal:host-gateway).
   docker compose -f "$COMPOSE_FILE" --profile rag run --rm --no-deps \
-    --add-host=host.docker.internal:host-gateway \
     -e RAG_ENABLED=1 \
     -e "RAG_DATABASE_URL=${internal_url}" \
     -e "RAG_EMBEDDING_PROVIDER=${RAG_EMBEDDING_PROVIDER}" \
