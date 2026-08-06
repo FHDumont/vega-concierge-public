@@ -10,7 +10,7 @@ Persistido no MESMO SQLite (ADR-006), tabela `llm_agents`. NÃO guarda segredo.
 import sqlite3
 from datetime import datetime, timezone
 
-from .orders import DB_PATH  # mesmo arquivo SQLite (ADR-006)
+from .db import connect
 
 # Agentes de LLM da orquestração (F-025 → F-050 / ADR-029). Ops de negócio são tools sem LLM
 # (`langchain_tools` / `ToolNode`). Concierge = coordinator (routing only); curator/respond =
@@ -156,19 +156,13 @@ FEATURE_NAMES = [d["agent"] for d in FEATURE_DEFAULTS]
 _DEFAULT_BY_NAME = {d["agent"]: d for d in _ALL_DEFAULTS}
 
 
-def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
 def init_db() -> None:
     """create_all no boot: tabela de config por agente se não existir."""
-    with _connect() as conn:
+    with connect() as conn:
         conn.execute(
             """CREATE TABLE IF NOT EXISTS llm_agents (
                 agent         TEXT PRIMARY KEY,           -- nome do nó (concierge, catalogo, ...)
@@ -184,7 +178,7 @@ def init_db() -> None:
 def seed_defaults() -> None:
     """Semeia os agentes da orquestração (F-025) com os prompts atuais, idempotente: só insere os que faltam
     (não sobrescreve edição do owner). Roda no boot depois de init_db."""
-    with _connect() as conn:
+    with connect() as conn:
         existing = {r["agent"] for r in conn.execute("SELECT agent FROM llm_agents").fetchall()}
         for d in _ALL_DEFAULTS:
             if d["agent"] in existing:
@@ -212,7 +206,7 @@ def migrate_f052_prompts() -> None:
         ),
     }
     try:
-        with _connect() as conn:
+        with connect() as conn:
             for agent, needles in markers.items():
                 row = conn.execute(
                     "SELECT role, system_prompt FROM llm_agents WHERE agent = ?", (agent,),
@@ -246,7 +240,7 @@ def list_agents() -> list[dict]:
     """Todos os agentes configuráveis (orquestração F-025 + features de loja F-022) em ordem canônica,
     com a config persistida (ou default p/ os que faltam)."""
     try:
-        with _connect() as conn:
+        with connect() as conn:
             rows = {r["agent"]: r for r in conn.execute("SELECT * FROM llm_agents").fetchall()}
     except sqlite3.OperationalError:
         rows = {}
@@ -256,7 +250,7 @@ def list_agents() -> list[dict]:
 def get_agent(name: str) -> dict:
     """Config de UM agente. Tolerante a tabela/linha ausente → default (standalone/run_demo)."""
     try:
-        with _connect() as conn:
+        with connect() as conn:
             row = conn.execute("SELECT * FROM llm_agents WHERE agent = ?", (name,)).fetchone()
     except sqlite3.OperationalError:
         row = None
@@ -272,7 +266,7 @@ def update_agent(name: str, *, connection=None, model=None, role=None, system_pr
     if name not in _DEFAULT_BY_NAME:
         return None
     # Garante a linha (caso a tabela tenha sido semeada antes deste agente existir).
-    with _connect() as conn:
+    with connect() as conn:
         if conn.execute("SELECT 1 FROM llm_agents WHERE agent = ?", (name,)).fetchone() is None:
             d = _default_dict(name)
             conn.execute(

@@ -23,6 +23,7 @@ from ..langchain_tools import (
 )
 from ..problems import FLAGS
 from ..tools import REFUND_WINDOW_DAYS
+from ..runnable_config import resolve_config, set_current_runnable_config
 from .react import ReactState, invoke_react_agent, make_named_tools_route
 
 
@@ -354,3 +355,27 @@ def build_returns_graph():
         "metadata": {"workflow_name": "returns.workflow"},
         "run_name": "returns.workflow",
     })
+
+
+async def arun_refund(order: dict, *, config=None) -> dict:
+    """Ponto de entrada do `POST /api/orders/{id}/refund` — roda a cadeia de reembolso a partir
+    de um pedido real. Idempotente na prática."""
+    resolved = resolve_config(config, feature="returns", order_id=order.get("id"))
+    token = set_current_runnable_config(resolved)
+    try:
+        result = await build_returns_graph().ainvoke(
+            {"order": order, "messages": [], "trace": []},
+            config=resolved,
+        )
+    finally:
+        set_current_runnable_config(None, token)
+    return {
+        "eligible": result["eligible"],
+        "approved": result["approved"],
+        "refunded": result["refunded"],
+        "refund_amount": result["refund_amount"],
+        "status": result["status"],
+        "reason": result["reason"],
+        "steps": result["steps"],
+        "order": result.get("updated_order") or order,
+    }

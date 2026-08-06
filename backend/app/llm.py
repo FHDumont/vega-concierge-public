@@ -4,15 +4,13 @@ Adapters reais (OpenAI-compatível e Anthropic) + StubLLM offline como último r
 A cascata tenta os providers habilitados na ordem; em falha (erro/timeout/rate-limit)
 cai para o próximo; o StubLLM garante que a app continua standalone sem nenhuma chave.
 
-O provider é resolvido POR CHAMADA a partir da config corrente (`_load_provider_configs`),
-não fixado no import — mudar a config aplica sem restart. A FONTE da config evolui sem
-que os consumidores (`get_llm`) mudem: env (etapa 1) → SQLite (etapa 2) → ConfigSource
-local/remota (etapa 4 / F-021). Só `_load_provider_configs` troca de implementação.
+O provider é resolvido POR CHAMADA a partir da config corrente, não fixado no import — mudar a
+config aplica sem restart. QUAL config usar, em que ordem, é decisão de `llm_providers` (base
+única, F-BACKEND-1); este módulo só sabe FALAR com cada provider.
 
 HTTP via SDKs oficiais (`openai`, `anthropic`) — F-OBS-PREP-1 / ADR-027; readiness
 Splunk Agent Observability/OTel. Chaves de API são SEGREDOS: nunca são logadas nem retornadas.
 """
-import os
 import random
 import time
 from dataclasses import dataclass
@@ -21,10 +19,12 @@ from anthropic import Anthropic, AnthropicBedrock
 from openai import OpenAI
 
 from .http_ssl import sync_http_client
+from .llm_providers import bedrock_region, load_provider_configs, resolve_provider_configs
+from .settings import settings
 
 # Timeout por chamada ao provider (s). Curto p/ a cascata cair rápido no fallback.
-LLM_TIMEOUT_S = float(os.getenv("LLM_TIMEOUT_S", "20"))
-DEFAULT_STUB_MODEL = os.getenv("LLM_STUB_MODEL", "gpt-4o-mini")
+LLM_TIMEOUT_S = settings.llm_timeout_s
+DEFAULT_STUB_MODEL = settings.llm_stub_model
 
 
 @dataclass
@@ -152,12 +152,6 @@ class AnthropicAdapter:
         )
 
 
-def _bedrock_region(base_url: str) -> str:
-    """Região AWS a partir de `base_url` (campo reutilizado p/ bedrock) ou env."""
-    region = (base_url or os.getenv("AWS_DEFAULT_REGION", "us-east-1")).strip()
-    return region or "us-east-1"
-
-
 def make_bedrock_client(region: str, api_key: str, model: str, timeout: float = LLM_TIMEOUT_S):
     """Cliente Bedrock via API key (UI). Usa AnthropicBedrock (bedrock-runtime) — Mantle exige IAM."""
     if not api_key:
@@ -177,7 +171,7 @@ class BedrockAdapter:
 
     def __init__(self, name: str, base_url: str, api_key: str, model: str):
         self.name = name
-        self.region = _bedrock_region(base_url)
+        self.region = bedrock_region(base_url)
         self.api_key = api_key or ""
         self.model = model
         self._client = make_bedrock_client(self.region, self.api_key, self.model)
@@ -207,48 +201,6 @@ class BedrockAdapter:
 
 # kind da config → classe do adapter. Acrescentar outro provider = uma linha aqui.
 _ADAPTERS = {"openai": OpenAICompatAdapter, "anthropic": AnthropicAdapter, "bedrock": BedrockAdapter}
-
-
-# --- Type presets de conexão (F-021, etapa 2) -------------------------------
-# Catálogo de "Types" para a UI de conexão: ao escolher um Type, a tela faz PREFILL de
-# `kind` + `base_url` + uma lista de **modelos econômicos** sugeridos (dropdown editável).
-# São defaults CONVENIENTES e **editáveis** — NÃO autoritativos: pricing/modelos mudam, então
-# o owner ajusta livremente. `custom` deixa tudo livre. Todos OpenAI-compatíveis exceto Claude
-# (kind anthropic → AnthropicAdapter). Modelos = a classe mais barata de cada provider.
-TYPE_PRESETS: list[dict] = [
-    {"type": "openai", "label": "OpenAI", "kind": "openai",
-     "base_url": "https://api.openai.com/v1",
-     "models": ["gpt-4o-mini", "gpt-4.1-mini", "gpt-4.1-nano", "o4-mini", "gpt-3.5-turbo"]},
-    {"type": "claude", "label": "Claude (Anthropic)", "kind": "anthropic",
-     "base_url": "https://api.anthropic.com",
-     "models": ["claude-haiku-4-5", "claude-3-5-haiku-latest", "claude-3-haiku-20240307",
-                "claude-3-5-sonnet-latest"]},
-    {"type": "grok", "label": "Grok (xAI)", "kind": "openai",
-     "base_url": "https://api.x.ai/v1",
-     "models": ["grok-3-mini", "grok-2-1212", "grok-beta"]},
-    {"type": "groq", "label": "Groq", "kind": "openai",
-     "base_url": "https://api.groq.com/openai/v1",
-     "models": ["llama-3.1-8b-instant", "llama-3.3-70b-versatile", "gemma2-9b-it",
-                "mixtral-8x7b-32768"]},
-    {"type": "openrouter", "label": "OpenRouter", "kind": "openai",
-     "base_url": "https://openrouter.ai/api/v1",
-     "models": ["openai/gpt-4o-mini", "anthropic/claude-3.5-haiku",
-                "meta-llama/llama-3.1-8b-instruct", "google/gemini-flash-1.5"]},
-    {"type": "bedrock", "label": "Amazon Bedrock", "kind": "bedrock",
-     "base_url": "us-east-1",
-     "models": ["us.anthropic.claude-haiku-4-5-20251001-v1:0",
-                "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
-                "us.anthropic.claude-opus-4-5-20251101-v1:0",
-                "anthropic.claude-3-haiku-20240307-v1:0",
-                "anthropic.claude-3-5-sonnet-20241022-v2:0",
-                "anthropic.claude-3-opus-20240229-v1:0"]},
-    {"type": "custom", "label": "Custom", "kind": "openai", "base_url": "", "models": []},
-]
-
-
-def list_type_presets() -> list[dict]:
-    """Presets de Type p/ a UI de conexão (cópia defensiva — convenientes/editáveis)."""
-    return [dict(p) for p in TYPE_PRESETS]
 
 
 def build_adapter(cfg: dict):
@@ -295,19 +247,10 @@ class CascadeLLM:
 
 # --- Resolução da config (fonte evolui; consumidores não) -------------------
 
-def _load_provider_configs() -> list[dict]:
-    """Providers habilitados, em ordem — resolvidos pela FONTE de config ATIVA (etapa 4).
-    Hoje é a `LocalConfigSource` (SQLite via `llm_config`); a F-021 troca p/ uma fonte remota
-    via `config_source.set_active_source`, sem que este consumidor mude. Tabela ausente /
-    standalone → lista vazia → só stub. Provider inicial: `seed_ollama_default` no boot (Ollama Local)."""
-    from . import config_source  # import tardio: evita ciclo e mantém llm.py importável standalone
-    return config_source.get_active_source().get_llm_config()
-
-
 def get_llm() -> CascadeLLM:
     """Cascata resolvida a partir da config CORRENTE (por chamada, não no import) — mudar
     a config aplica sem restart. Sempre termina no StubLLM (último recurso offline)."""
-    adapters = [a for a in (build_adapter(c) for c in _load_provider_configs()) if a is not None]
+    adapters = [a for a in (build_adapter(c) for c in load_provider_configs()) if a is not None]
     adapters.append(StubLLM())
     return CascadeLLM(adapters)
 
@@ -317,11 +260,7 @@ def get_llm_for(connection: str = "", model: str = "") -> CascadeLLM:
     cascata completa); `model` = override opcional do modelo. Sempre termina no StubLLM →
     fixar numa conexão desabilitada/ausente cai p/ o stub (offline). Sem connection nem model
     é equivalente a `get_llm()` (cascata corrente)."""
-    cfgs = _load_provider_configs()
-    if connection:  # fixa este agente num provider específico da cascata
-        cfgs = [c for c in cfgs if c.get("id") == connection or c.get("name") == connection]
-    if model:  # override do modelo (aplica ao(s) provider(s) resolvido(s))
-        cfgs = [{**c, "model": model} for c in cfgs]
+    cfgs = resolve_provider_configs(connection, model)
     adapters = [a for a in (build_adapter(c) for c in cfgs) if a is not None]
     adapters.append(StubLLM(model or DEFAULT_STUB_MODEL))
     return CascadeLLM(adapters)

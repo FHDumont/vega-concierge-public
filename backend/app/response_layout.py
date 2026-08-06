@@ -4,6 +4,15 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from . import rag
+from .catalog_format import (
+    _account_stats_lines,
+    _availability,
+    _catalog_stats_lines,
+    _sales_stats_lines,
+    _usd,
+)
+
 _POLICY_LABELS = {
     "returns": "Returns & refunds",
     "shipping": "Shipping & delivery",
@@ -189,26 +198,21 @@ def build_store_chat_layout(
 
 
 def build_stats_layout(facts: dict, scopes: set[str]) -> dict[str, Any] | None:
-    """Stats answers — fact rows from authoritative context."""
-    from .ai_features import (
-        _account_stats_lines,
-        _catalog_stats_lines,
-        _sales_stats_lines,
-        account_stats,
-        catalog_stats,
-        store_sales_stats,
-    )
+    """Stats answers — fact rows from authoritative context.
 
+    `facts` já vem completo do `_build_stats_context` para cada escopo ativo — este layout só
+    formata, não vai buscar dado nenhum.
+    """
     rows: list[dict[str, str]] = []
     active = scopes or set()
     if "catalog" in active:
-        cat = facts.get("catalog") or catalog_stats()
+        cat = facts.get("catalog") or {}
         for line in _catalog_stats_lines(cat):
             fact = _line_to_fact(line)
             if fact:
                 rows.append(fact)
     if "sales" in active:
-        sales = facts.get("sales") or store_sales_stats()
+        sales = facts.get("sales") or {}
         for line in _sales_stats_lines(sales):
             fact = _line_to_fact(line)
             if fact:
@@ -251,9 +255,6 @@ def build_product_qa_layout(
     product: dict, answer: str, *, question: str = "",
 ) -> dict[str, Any] | None:
     """Product Q&A — facts + spec bullets; sem duplicar lead truncado + seção Answer."""
-    from . import rag
-    from .ai_features import _availability, _usd
-
     answer = (answer or "").strip()
     if not answer:
         return None
@@ -290,8 +291,6 @@ def build_product_qa_layout(
 
 def build_compare_layout(verdict: str, product_a: dict, product_b: dict) -> dict[str, Any] | None:
     """Compare verdict — bullets when the model wrote multiple sentences."""
-    from .ai_features import _usd
-
     verdict = (verdict or "").strip()
     if not verdict:
         return None

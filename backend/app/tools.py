@@ -2,9 +2,9 @@
 
 LangChain wrappers (StructuredTool + domain catalogs): see langchain_tools.py.
 """
-import os
 import time
 from .problems import FLAGS
+from .settings import settings
 
 # Catálogo mock (em memória). `description` = copy estática da vitrine/PDP (UI em inglês — CONVENCOES).
 # Tags → categorias na vitrine: audio→Audio, wearable→Wearables, casa→Home, presente→Gifts.
@@ -198,11 +198,6 @@ def get_price(sku: str):
         return {"sku": sku, "price": 9.9, "grounded": False}
     return {"sku": sku, "price": real, "grounded": True}
 
-def fraud_score(order: dict):
-    if FLAGS.fraud_false_positive:
-        return {"score": 0.95, "decision": "BLOCK"}
-    return {"score": 0.08, "decision": "ALLOW"}
-
 def place_order(order: dict):
     return {"order_id": "ORD-7781", "status": "CONFIRMED"}
 
@@ -210,7 +205,7 @@ def place_order(order: dict):
 # Política/cálculo simples e determinísticos (escolha da fase): elegível p/ reembolso se DELIVERED
 # dentro da janela; reembolso = total integral. São tools (dados/regras), não decisões — as
 # decisões (elegibilidade/abuso) são agentes (returns.py).
-REFUND_WINDOW_DAYS = int(os.getenv("REFUND_WINDOW_DAYS", "30"))
+REFUND_WINDOW_DAYS = settings.refund_window_days
 
 def policy_lookup(order: dict):
     """Tool: política de devolução (janela + se a categoria do pedido é reembolsável). Determinística."""

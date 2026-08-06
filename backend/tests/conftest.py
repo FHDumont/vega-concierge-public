@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import os
 
-# Precisa valer ANTES de importar `app.*` — vários módulos leem env no import (mesma ordem dos
-# antigos `run_*.py`).
+# Precisa valer ANTES de importar `app.*` — `app.settings` resolve a config no import, e os
+# módulos leem os valores dela também no import (mesma ordem dos antigos `run_*.py`).
 os.environ.setdefault("DEPLOYMENT_ENVIRONMENT", "user-42")
+# Sem arquivo de env: a suíte roda só com ambiente do SO + defaults, para não herdar as
+# credenciais do `.env` de desenvolvimento da máquina (que a colocariam online).
+os.environ.setdefault("VEGA_ENV_FILE", "")
 
 import pytest
 

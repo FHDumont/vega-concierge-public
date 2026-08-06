@@ -15,16 +15,16 @@ Owner-only em tudo (a API gateia com `_require_owner`). Registro de clientes viv
 (reseta no restart — mesma régua de DT-010).
 """
 import hmac
-import os
 import threading
 import time
 from datetime import datetime, timezone
 
 from . import config_source, hub_settings, llm_config
+from .settings import settings
 
 
 def _env() -> str:
-    return os.getenv("DEPLOYMENT_ENVIRONMENT", "local-dev")
+    return settings.deployment_environment
 
 
 def _now_iso() -> str:

@@ -39,3 +39,30 @@ def test_llm_config_module_keeps_its_name():
     import app.llm_config as module
 
     assert module.__name__ == "app.llm_config"
+
+
+def _imported_modules(module_file: str) -> set[str]:
+    """Módulos irmãos importados por um arquivo de `app/`, em QUALQUER nível (topo ou dentro de
+    função) — é justamente o import adiado que costuma reintroduzir ciclo sem ninguém notar."""
+    import ast
+
+    tree = ast.parse((BACKEND_ROOT / "app" / module_file).read_text())
+    out: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.level:
+            if node.module:
+                out.add(node.module.split(".")[0])
+            else:
+                out.update(a.name.split(".")[0] for a in node.names)
+    return out
+
+
+def test_response_layout_does_not_import_ai_features():
+    # O ciclo ai_features ↔ response_layout foi quebrado pelo catalog_format (F-BACKEND-1).
+    assert "ai_features" not in _imported_modules("response_layout.py")
+
+
+def test_catalog_format_stays_pure_formatting():
+    # Se catalog_format passar a consultar catálogo, pedidos ou LLM, o ciclo volta pelos fundos.
+    imported = _imported_modules("catalog_format.py")
+    assert not imported & {"ai_features", "response_layout", "tools", "orders", "llm", "rag"}, imported

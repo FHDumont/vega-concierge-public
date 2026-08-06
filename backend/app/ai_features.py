@@ -14,7 +14,6 @@ Princípios da spec:
   dado do produto (a copy estática / um resumo curto) em vez do texto cru do stub.
 """
 import json
-import os
 import re
 import time
 from datetime import datetime, timedelta, timezone
@@ -30,6 +29,13 @@ from .galileo_span import (
     replay_stats_answer_run_name,
 )
 from .runnable_config import current_runnable_config, resolve_config
+from .catalog_format import (
+    _account_stats_lines,
+    _availability,
+    _catalog_stats_lines,
+    _sales_stats_lines,
+    _usd,
+)
 from .response_layout import (
     build_product_qa_layout,
     is_product_overview_question,
@@ -41,6 +47,7 @@ from .agents import _detect_language, feature_complete, feature_complete_turn
 from .problems import FLAGS
 from .tools import CATALOG
 from .users import GOLD_THRESHOLD, PLATINUM_THRESHOLD
+from .settings import settings
 
 
 def _find(sku: str) -> dict | None:
@@ -72,14 +79,6 @@ def _accumulate_units(units: dict[str, int], items: list[dict]) -> None:
         if qty:
             label = _order_item_name(it)
             units[label] = units.get(label, 0) + qty
-
-
-def _usd(v: float) -> str:
-    return f"${v:,.2f}"
-
-
-def _availability(p: dict) -> str:
-    return "out of stock" if p["stock"] == 0 else ("low stock" if p["stock"] <= 3 else "in stock")
 
 
 def _product_context(p: dict) -> str:
@@ -134,15 +133,6 @@ def catalog_index_from_documents(docs: list[Document]) -> str:
     ordered = [p for s in skus if (p := _find(s))]
     seen = {p["sku"] for p in ordered}
     return _catalog_index(ordered + [p for p in CATALOG if p["sku"] not in seen])
-
-
-def _ranked_catalog(query: str, feature: str, *, config=None) -> list[dict]:
-    """Catálogo ordenado por relevância à query. Devolve o MESMO conjunto de produtos — só a
-    ordem muda —, então um retriever ruim não remove candidato válido do prompt."""
-    skus = rag.rank_skus(query, k=len(CATALOG), config=resolve_config(config, feature=feature))
-    ordered = [p for s in skus if (p := _find(s))]
-    seen = {p["sku"] for p in ordered}
-    return ordered + [p for p in CATALOG if p["sku"] not in seen]
 
 
 def _stable_sku_list(skus: list[str] | None) -> list[str]:
@@ -797,8 +787,8 @@ def fraud_explain(order: dict) -> dict:
 # → recomputa quando os dados mudam, hit quando iguais). Standalone (stub)/parse fail → texto
 # determinístico. Com `price_hallucination` o LLM NÃO recebe os números (inventa) → ungrounded.
 
-ADMIN_WINDOW_DAYS = int(os.getenv("ADMIN_INSIGHTS_WINDOW_DAYS", "7"))
-ADMIN_RESTOCK_AT = int(os.getenv("ADMIN_RESTOCK_AT", "3"))
+ADMIN_WINDOW_DAYS = settings.admin_insights_window_days
+ADMIN_RESTOCK_AT = settings.admin_restock_at
 _PAID_STATUSES = ("PAID", "SHIPPED", "DELIVERED")
 
 
@@ -1114,64 +1104,6 @@ def _stats_scope(question: str) -> set[str]:
     if any(h in low for h in _ACCOUNT_STATS_HINTS):
         scopes.add("account")
     return scopes
-
-
-def _catalog_stats_lines(cat: dict) -> list[str]:
-    lines: list[str] = []
-    if cat.get("most_expensive"):
-        p = cat["most_expensive"]
-        lines.append(f"Most expensive: {p['name']} ({p['sku']}) — {_usd(p['price'])}")
-    if cat.get("cheapest"):
-        p = cat["cheapest"]
-        lines.append(f"Cheapest: {p['name']} ({p['sku']}) — {_usd(p['price'])}")
-    pr = cat.get("price_range") or {}
-    if pr:
-        lines.append(
-            f"Price range: {_usd(pr['min'])} – {_usd(pr['max'])} ({cat.get('product_count', 0)} products)"
-        )
-    if cat.get("out_of_stock"):
-        names = ", ".join(p["name"] for p in cat["out_of_stock"][:3])
-        lines.append(f"Out of stock: {names}")
-    if cat.get("low_stock"):
-        names = ", ".join(f"{p['name']} ({p['stock']} left)" for p in cat["low_stock"][:3])
-        lines.append(f"Low stock: {names}")
-    return lines
-
-
-def _sales_stats_lines(sales: dict) -> list[str]:
-    lines: list[str] = []
-    if sales.get("bestseller"):
-        b = sales["bestseller"]
-        lines.append(f"Best seller (all-time units): {b['name']} ({b['units']} sold)")
-    top = sales.get("top_products") or []
-    if len(top) > 1:
-        rest = ", ".join(f"{n} ({q})" for n, q in top[1:3])
-        lines.append(f"Also popular: {rest}")
-    if sales.get("total_units"):
-        lines.append(f"Total units sold (paid orders): {sales['total_units']}")
-    if sales.get("avg_ticket"):
-        lines.append(f"Store avg ticket: {_usd(sales['avg_ticket'])}")
-    if not lines and sales.get("paid_orders") == 0:
-        lines.append("No paid orders yet — no sales data.")
-    return lines
-
-
-def _account_stats_lines(acct: dict) -> list[str]:
-    top = ", ".join(f"{n} (×{q})" for n, q in acct.get("top_products") or []) or "—"
-    lines = [
-        f"Customer: {acct['name']}",
-        f"Total spent: {_usd(acct['spend'])}",
-        f"Orders placed: {acct['orders']} (paid {acct['paid']})",
-        f"Most bought by this customer: {top}",
-        f"Membership tier: {acct['tier']}",
-    ]
-    if acct.get("last"):
-        lines.append(f"Latest order: {acct['last']}")
-    if acct["tier"] == "STANDARD":
-        lines.append(f"Next tier: GOLD at {_usd(GOLD_THRESHOLD)} total spend.")
-    elif acct["tier"] == "GOLD":
-        lines.append(f"Next tier: PLATINUM at {_usd(PLATINUM_THRESHOLD)} total spend.")
-    return lines
 
 
 def _build_stats_context(scopes: set[str], user_id: str | None) -> tuple[str, dict]:

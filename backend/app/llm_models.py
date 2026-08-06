@@ -7,7 +7,6 @@ Sem imports de galileo/opentelemetry/openinference nesta fase.
 from __future__ import annotations
 
 import json
-import os
 import random
 import re
 import time
@@ -23,16 +22,15 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 
-from . import agent_config
 from .galileo_span import default_llm_run_name
 from .http_ssl import async_http_client, sync_http_client
-from .llm import DEFAULT_STUB_MODEL, LLM_TIMEOUT_S, LLMResult, _load_provider_configs, make_bedrock_client
+from .llm import DEFAULT_STUB_MODEL, LLM_TIMEOUT_S, LLMResult, make_bedrock_client
+from .llm_providers import bedrock_region, provider_configs_for_agent
+from .settings import settings
 
 # Prompt-cache do *provider* (Anthropic cache_control) — orthogonal ao cache F-022 de resposta.
 # Default off: lab multi-gateway; ligar só com Claude real. OpenAI cacheia prefixo automaticamente.
-_PROVIDER_PROMPT_CACHE_ON = os.getenv("LLM_PROVIDER_PROMPT_CACHE", "0").strip().lower() in (
-    "1", "true", "yes", "on",
-)
+_PROVIDER_PROMPT_CACHE_ON = settings.llm_provider_prompt_cache
 
 
 def provider_prompt_cache_enabled() -> bool:
@@ -220,7 +218,7 @@ class VegaStubChatModel(BaseChatModel):
                 system, request, "No matching customer records found.", **kwargs,
             )
 
-        from .agents import (
+        from .agents import (  # import tardio: ciclo llm_models↔agents
             _detect_language,
             _extract_constraints_fallback,
             _fallback_response,
@@ -386,7 +384,7 @@ def _messages_to_parts(messages: list[BaseMessage]) -> tuple[str, str]:
 
 
 def _parse_request_from_messages(messages: list[BaseMessage]) -> tuple[str, float]:
-    from .agents import resolve_budget
+    from .agents import resolve_budget  # import tardio: ciclo llm_models↔agents
 
     request = ""
     for m in messages:
@@ -748,9 +746,7 @@ def build_chat_model(cfg: dict, *, llm_run_name: str | None = None) -> BaseChatM
         model._vega_family = "anthropic"  # type: ignore[attr-defined]
         return model
     if kind == "bedrock":
-        import os
-
-        region = (cfg.get("base_url") or os.getenv("AWS_DEFAULT_REGION", "us-east-1")).strip()
+        region = bedrock_region(cfg.get("base_url", ""))
         kwargs = {
             "model": cfg["model"],
             "anthropic_api_key": cfg["api_key"],
@@ -767,35 +763,9 @@ def build_chat_model(cfg: dict, *, llm_run_name: str | None = None) -> BaseChatM
     return None
 
 
-def _get_current_provider_cfgs() -> list[dict] | None:
-    from . import agents  # import tardio — evita ciclo agents ↔ llm_models
-    return agents._current_provider_cfgs.get()
-
-
-def _provider_cfgs_for_agent(agent_name: str) -> tuple[list[dict], str]:
-    """Configs de provider + modelo do stub para um agente (espelha get_llm_for)."""
-    stub_model = DEFAULT_STUB_MODEL
-    if agent_name:
-        cfg = agent_config.get_agent(agent_name)
-        stub_model = cfg.get("model") or DEFAULT_STUB_MODEL
-        if cfg.get("connection") or cfg.get("model"):
-            cfgs = _load_provider_configs()
-            if cfg.get("connection"):
-                conn = cfg["connection"]
-                cfgs = [c for c in cfgs if c.get("id") == conn or c.get("name") == conn]
-            if cfg.get("model"):
-                cfgs = [{**c, "model": cfg["model"]} for c in cfgs]
-                stub_model = cfg["model"]
-            return cfgs, stub_model
-    frozen = _get_current_provider_cfgs()
-    if frozen is not None:
-        return frozen, stub_model
-    return _load_provider_configs(), stub_model
-
-
 def resolve_chat_models(agent_name: str = "") -> list[BaseChatModel]:
     """Lista ordenada de modelos LangChain + stub no fim (cascata de fallback)."""
-    cfgs, stub_model = _provider_cfgs_for_agent(agent_name)
+    cfgs, stub_model = provider_configs_for_agent(agent_name)
     label = default_llm_run_name(agent_name) if agent_name else None
     models = [m for m in (build_chat_model(c, llm_run_name=label) for c in cfgs) if m is not None]
     models.append(make_stub_chat_model(stub_model, name=label))

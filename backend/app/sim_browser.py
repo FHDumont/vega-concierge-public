@@ -18,9 +18,9 @@ from typing import Awaitable, Callable
 
 # URL do frontend que o navegador vai dirigir (env; default = dev local).
 # Em compose, aponte p/ o serviço do front (ex.: http://frontend:3000).
-import os
+from .settings import settings
 
-BASE_URL = os.environ.get("SIM_BROWSER_BASE_URL", "http://localhost:3000")
+BASE_URL = settings.sim_browser_base_url
 _SIM_PASSWORD = "sim1234"  # mesma senha fixa do pool de demo (espelha simulator.py)
 _NAV_TIMEOUT_MS = 20_000   # timeout por ação de navegação/espera
 

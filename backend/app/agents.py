@@ -16,7 +16,8 @@ from langchain_core.messages import AIMessage, HumanMessage
 from .graphs.concierge import build_concierge_graph
 from .graphs.chat import build_chat_graph
 from .runnable_config import resolve_config, set_current_runnable_config
-from .llm import get_llm, get_llm_for, _load_provider_configs, LLMResult
+from .llm import get_llm, LLMResult
+from .llm_providers import current_provider_cfgs as _current_provider_cfgs, load_provider_configs
 from . import agent_config, llm_activity
 from .llm_models import (
     CascadeError,
@@ -60,21 +61,12 @@ def resolve_budget(text: str) -> float:
 # fixado no import (F-020). Os nós leem a cascata daqui; fora de um run (ex.: run_demo
 # chama build_graph direto) cada nó resolve sob demanda via get_llm().
 _current_llm: contextvars.ContextVar = contextvars.ContextVar("current_llm", default=None)
-_current_provider_cfgs: contextvars.ContextVar = contextvars.ContextVar("current_provider_cfgs", default=None)
 
 class OrderState(TypedDict, total=False):
     request: str; constraints: dict; candidates: List[dict]
     selected: Optional[dict]; answer: str; language: str
     inventory_status: dict; quote: dict; fraud_result: dict; order: dict
     messages: List[str]; quality: dict
-
-
-def _resolve_agent_llm(cfg: dict):
-    """LLM de um agente: fixado numa conexão/modelo → resolve o seu; senão usa a cascata do run
-    corrente (pipeline) ou a cascata da config corrente (chamada avulsa, ex.: feature F-022)."""
-    if cfg["connection"] or cfg["model"]:
-        return get_llm_for(cfg["connection"], cfg["model"])
-    return _current_llm.get() or get_llm()
 
 
 def _run_agent_llm(agent_name: str, prompt: str, verbose: bool = False, *,
@@ -506,12 +498,6 @@ def fraud_decision(quote: dict, total: float, *, config=None) -> dict:
     }
 
 
-def fulfillment_decide(items: list[dict], total: float, *, config=None) -> dict:
-    """Decisão do fechamento via grafo ReAct (F-OBS-PREP-4). Mantido p/ compat."""
-    from .graphs.fulfillment import run_fulfillment_graph
-    return run_fulfillment_graph(items, total, config=config)
-
-
 def build_graph():
     """Grafo de COMPRA (recomendação): hub-and-spoke concierge (coordinator → curator/respond)."""
     return build_concierge_graph()
@@ -523,7 +509,7 @@ def run_workflow(
     config=None,
 ):
     # Resolve a cascata UMA vez por execução, a partir da config corrente (F-020).
-    cfgs = _load_provider_configs()
+    cfgs = load_provider_configs()
     token_cfgs = _current_provider_cfgs.set(cfgs)
     token = _current_llm.set(get_llm())
     resolved = resolve_config(config, feature="concierge")
@@ -544,7 +530,7 @@ async def arun_workflow(
     *,
     config=None,
 ):
-    cfgs = _load_provider_configs()
+    cfgs = load_provider_configs()
     token_cfgs = _current_provider_cfgs.set(cfgs)
     token = _current_llm.set(get_llm())
     resolved = resolve_config(config, feature="concierge")
@@ -580,7 +566,7 @@ async def arun_chat_workflow(
     config=None,
 ):
     """Multi-turn chat workflow via build_chat_graph()."""
-    cfgs = _load_provider_configs()
+    cfgs = load_provider_configs()
     token_cfgs = _current_provider_cfgs.set(cfgs)
     token = _current_llm.set(get_llm())
     resolved = resolve_config(config, feature="chat")

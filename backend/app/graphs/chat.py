@@ -441,7 +441,7 @@ def _invoke_chat_routing_decision(
         _emit_chat_route_decision_span(decision, config=config)
         return decision
 
-    from ..agents import _parse_json
+    from ..agents import _parse_json  # import tardio: ciclo graphs.chat↔agents
     from ..llm_models import VegaStubChatModel, resolve_chat_models, _with_run_name
 
     instructions = _build_chat_coordinator_instructions(remaining, intent)
@@ -573,7 +573,7 @@ def _resolve_two_skus(text: str, budget: float) -> tuple[str | None, str | None]
 
 async def compare_node(state: ChatState, config: RunnableConfig) -> dict:
     """Specialist: compare two products."""
-    from .. import compare as compare_mod
+    from .compare import arun_compare  # import tardio: ciclo chat↔compare
     from ..response_layout import build_compare_layout
 
     lc_messages, request, budget, trace = _ensure_initial_messages(state)
@@ -586,7 +586,7 @@ async def compare_node(state: ChatState, config: RunnableConfig) -> dict:
     artifacts: dict = {}
     summary = "Could not compare — products not found."
     if sku_a and sku_b:
-        result = await compare_mod.arun_compare(sku_a, sku_b, config=config)
+        result = await arun_compare(sku_a, sku_b, config=config)
         if result:
             layout = build_compare_layout(
                 result["verdict"], result["product_a"], result["product_b"],
@@ -614,7 +614,7 @@ async def compare_node(state: ChatState, config: RunnableConfig) -> dict:
 
 def search_node(state: ChatState, config: RunnableConfig) -> dict:
     """Specialist: semantic search."""
-    from .. import ai_features
+    from .. import ai_features  # import tardio: ciclo graphs.chat↔ai_features
 
     lc_messages, request, _, trace = _ensure_initial_messages(state)
     trace = list(trace)
@@ -640,7 +640,7 @@ def search_node(state: ChatState, config: RunnableConfig) -> dict:
 
 def gift_node(state: ChatState, config: RunnableConfig) -> dict:
     """Specialist: gift message generation."""
-    from .. import ai_features
+    from .. import ai_features  # import tardio: ciclo graphs.chat↔ai_features
 
     lc_messages, request, _, trace = _ensure_initial_messages(state)
     trace = list(trace)
@@ -662,7 +662,7 @@ def gift_node(state: ChatState, config: RunnableConfig) -> dict:
 
 def product_qa_node(state: ChatState, config: RunnableConfig) -> dict:
     """Specialist: product Q&A (requires context SKU)."""
-    from .. import ai_features
+    from .. import ai_features  # import tardio: ciclo graphs.chat↔ai_features
 
     lc_messages, request, _, trace = _ensure_initial_messages(state)
     trace = list(trace)
@@ -704,7 +704,7 @@ def product_qa_node(state: ChatState, config: RunnableConfig) -> dict:
 
 def general_qa_node(state: ChatState, config: RunnableConfig) -> dict:
     """Specialist: general store Q&A grounded in written policies (F-052)."""
-    from .. import ai_features
+    from .. import ai_features  # import tardio: ciclo graphs.chat↔ai_features
 
     lc_messages, request, _, trace = _ensure_initial_messages(state)
     trace = list(trace)
@@ -730,7 +730,7 @@ def general_qa_node(state: ChatState, config: RunnableConfig) -> dict:
 
 def stats_qa_node(state: ChatState, config: RunnableConfig) -> dict:
     """Specialist: catalog/sales/account statistics (F-053)."""
-    from .. import ai_features
+    from .. import ai_features  # import tardio: ciclo graphs.chat↔ai_features
 
     lc_messages, request, _, trace = _ensure_initial_messages(state)
     trace = list(trace)
@@ -767,7 +767,8 @@ def _resolve_order_id(text: str, context_order_id: str) -> str | None:
 
 async def returns_node(state: ChatState, config: RunnableConfig) -> dict:
     """Specialist: refund/return for a delivered order."""
-    from .. import orders, returns as returns_mod
+    from .. import orders
+    from .returns import arun_refund  # import tardio: ciclo chat↔returns
 
     lc_messages, request, _, trace = _ensure_initial_messages(state)
     trace = list(trace)
@@ -792,7 +793,7 @@ async def returns_node(state: ChatState, config: RunnableConfig) -> dict:
             summary = f"Order {order_id} is not eligible for refund (status: {order['status']})."
             trace.append(f"Returns: status {order['status']}")
         else:
-            result = await returns_mod.arun_refund(order, config=config)
+            result = await arun_refund(order, config=config)
             artifacts = {
                 "approved": result["approved"],
                 "refunded": result["refunded"],
@@ -837,7 +838,7 @@ def _describe_destructive_outcome(messages: list[BaseMessage], text: str) -> str
 
 async def destructive_action_node(state: ChatState, config: RunnableConfig) -> dict:
     """UC-4 — privileged concierge tools (delete_product, list_recent_customers) from any page."""
-    from ..agents import arun_workflow
+    from ..agents import arun_workflow  # import tardio: ciclo graphs.chat↔agents
 
     lc_messages, request, _, trace = _ensure_initial_messages(state)
     trace = list(trace)
@@ -867,7 +868,7 @@ async def destructive_action_node(state: ChatState, config: RunnableConfig) -> d
 
 def chat_finalize_node(state: ChatState, config: RunnableConfig) -> dict:
     """Consolidate reply + intent + artifacts for POST /api/chat response."""
-    from ..agents import _detect_language, _fallback_response
+    from ..agents import _detect_language, _fallback_response  # import tardio: ciclo graphs.chat↔agents
     from ..llm_models import is_llm_unavailable_reply
 
     messages = list(state.get("messages") or [])

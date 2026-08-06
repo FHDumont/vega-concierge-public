@@ -4,19 +4,19 @@ Substitui o `time.sleep(0.4)` que fazia as vezes de "pagamento" no checkout. Tem
 latência e taxa de falha CONFIGURÁVEIS (env) e responde aos toggles do ProblemPanel
 (`payment_outage` força falha; `payment_latency` injeta latência alta) — no mesmo
 padrão dos demais problemas (a app quebra de forma visível). Lógica: PENDING→PAID/FAILED."""
-import os
 import random
 import time
 
 from .problems import FLAGS
+from .settings import settings
 
 # Configuráveis por env (flag): latência base e taxa de falha do "gateway".
 # Default: ~400ms (espelha o antigo sleep) e 0% de falha → checkout confiável na demo;
 # as falhas vêm do toggle payment_outage (didático). PAYMENT_LATENCY_SPIKE_MS é o
 # acréscimo quando payment_latency está ON.
-BASE_LATENCY_MS = float(os.getenv("PAYMENT_LATENCY_MS", "400"))
-FAIL_RATE = float(os.getenv("PAYMENT_FAIL_RATE", "0.0"))
-LATENCY_SPIKE_MS = float(os.getenv("PAYMENT_LATENCY_SPIKE_MS", "1500"))
+BASE_LATENCY_MS = settings.payment_latency_ms
+FAIL_RATE = settings.payment_fail_rate
+LATENCY_SPIKE_MS = settings.payment_latency_spike_ms
 
 
 def charge(order: dict) -> dict:

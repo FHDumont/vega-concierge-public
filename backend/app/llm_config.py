@@ -15,21 +15,16 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 
-from .orders import DB_PATH  # mesmo arquivo SQLite (ADR-006)
+from .db import DB_PATH, connect
+from .settings import settings
 
 _KINDS = ("openai", "anthropic", "bedrock")  # kinds suportados (ver llm._ADAPTERS)
 _PERSIST_FILENAME = "llm_providers.json"
 
 
-def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
 def init_db() -> None:
     """create_all no boot: tabela de provedores de LLM se não existir."""
-    with _connect() as conn:
+    with connect() as conn:
         conn.execute(
             """CREATE TABLE IF NOT EXISTS llm_providers (
                 id          TEXT PRIMARY KEY,
@@ -83,7 +78,7 @@ def list_enabled_with_keys() -> list[dict]:
     """Provedores HABILITADOS em ordem, COM a chave — consumido por `llm.get_llm`.
     Tolerante a tabela ausente (run_demo/standalone sem init_db) → lista vazia (só stub)."""
     try:
-        with _connect() as conn:
+        with connect() as conn:
             rows = conn.execute(
                 "SELECT * FROM llm_providers WHERE enabled = 1 ORDER BY ord, created_at"
             ).fetchall()
@@ -95,7 +90,7 @@ def list_enabled_with_keys() -> list[dict]:
 
 def get_provider_with_key(provider_id: str) -> dict | None:
     """Provider COM chave (uso interno — ex.: endpoint de Test). Nunca vai ao front cru."""
-    with _connect() as conn:
+    with connect() as conn:
         row = conn.execute("SELECT * FROM llm_providers WHERE id = ?", (provider_id,)).fetchone()
     if row is None:
         return None
@@ -106,13 +101,13 @@ def get_provider_with_key(provider_id: str) -> dict | None:
 # --- CRUD (a API só devolve a versão mascarada) -----------------------------
 
 def list_providers() -> list[dict]:
-    with _connect() as conn:
+    with connect() as conn:
         rows = conn.execute("SELECT * FROM llm_providers ORDER BY ord, created_at").fetchall()
     return [_mask(r) for r in rows]
 
 
 def _get_masked(provider_id: str) -> dict | None:
-    with _connect() as conn:
+    with connect() as conn:
         row = conn.execute("SELECT * FROM llm_providers WHERE id = ?", (provider_id,)).fetchone()
     return _mask(row) if row else None
 
@@ -122,10 +117,10 @@ def create_provider(name: str, kind: str, base_url: str, model: str,
     kind = kind if kind in _KINDS else "openai"
     pid = _new_id()
     if order is None:  # acrescenta no fim da cascata
-        with _connect() as conn:
+        with connect() as conn:
             row = conn.execute("SELECT COALESCE(MAX(ord), -1) + 1 AS nxt FROM llm_providers").fetchone()
             order = row["nxt"]
-    with _connect() as conn:
+    with connect() as conn:
         conn.execute(
             "INSERT INTO llm_providers (id, name, kind, base_url, model, api_key, enabled, ord, created_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -151,7 +146,7 @@ def update_provider(provider_id: str, *, name=None, kind=None, base_url=None,
     if not sets:
         return _get_masked(provider_id)
     vals.append(provider_id)
-    with _connect() as conn:
+    with connect() as conn:
         cur = conn.execute(f"UPDATE llm_providers SET {', '.join(sets)} WHERE id = ?", vals)
         if cur.rowcount == 0:
             return None
@@ -159,14 +154,14 @@ def update_provider(provider_id: str, *, name=None, kind=None, base_url=None,
 
 
 def delete_provider(provider_id: str) -> bool:
-    with _connect() as conn:
+    with connect() as conn:
         cur = conn.execute("DELETE FROM llm_providers WHERE id = ?", (provider_id,))
     return cur.rowcount > 0
 
 
 def reorder(ids: list[str]) -> list[dict]:
     """Reordena a cascata pela ordem dos ids recebidos (índice → `ord`)."""
-    with _connect() as conn:
+    with connect() as conn:
         for i, pid in enumerate(ids):
             conn.execute("UPDATE llm_providers SET ord = ? WHERE id = ?", (i, pid))
     return list_providers()
@@ -176,7 +171,7 @@ def reorder(ids: list[str]) -> list[dict]:
 
 def persist_dir() -> str:
     """Diretório host/container p/ backup de providers (`VEGA_PERSIST_DIR` ou `.vega-persist`)."""
-    root = os.getenv("VEGA_PERSIST_DIR", "").strip()
+    root = settings.vega_persist_dir.strip()
     if not root:
         root = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), ".vega-persist")
     os.makedirs(root, exist_ok=True)
@@ -189,7 +184,7 @@ def persist_file_path() -> str:
 
 def _read_provider_rows() -> list[dict]:
     try:
-        with _connect() as conn:
+        with connect() as conn:
             rows = conn.execute(
                 "SELECT * FROM llm_providers ORDER BY ord, created_at"
             ).fetchall()
@@ -213,7 +208,7 @@ def restore_providers_backup() -> int:
     path = persist_file_path()
     if not os.path.isfile(path):
         return 0
-    with _connect() as conn:
+    with connect() as conn:
         n = conn.execute("SELECT COUNT(*) AS n FROM llm_providers").fetchone()["n"]
     if n:
         return 0
@@ -225,7 +220,7 @@ def restore_providers_backup() -> int:
     if not isinstance(rows, list) or not rows:
         return 0
     restored = 0
-    with _connect() as conn:
+    with connect() as conn:
         for row in rows:
             if not isinstance(row, dict):
                 continue
@@ -256,16 +251,16 @@ def restore_providers_backup() -> int:
 def seed_ollama_default() -> None:
     """Se a tabela está vazia, cria provider 'Ollama Local' (OpenAI-compat /v1, chave dummy).
     Idempotente: não faz nada se já existe algum provider."""
-    with _connect() as conn:
+    with connect() as conn:
         n = conn.execute("SELECT COUNT(*) AS n FROM llm_providers").fetchone()["n"]
     if n:
         return
-    base = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434").rstrip("/")
+    base = settings.ollama_base_url.rstrip("/")
     create_provider(
         name="Ollama Local",
         kind="openai",
         base_url=f"{base}/v1",
-        model=os.getenv("OLLAMA_CHAT_MODEL", "llama3.2"),
+        model=settings.ollama_chat_model,
         api_key="ollama",
         enabled=True,
         order=0,

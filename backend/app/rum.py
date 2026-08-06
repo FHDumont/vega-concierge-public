@@ -12,20 +12,14 @@ Mesmo assim a EDIÇÃO é owner-only (snippet bruto = JS arbitrário em todos os
 """
 import sqlite3
 
-from .orders import DB_PATH  # mesmo arquivo SQLite (ADR-006)
+from .db import connect
 
 _ROW_ID = 1  # tabela de 1 linha (singleton de config)
 
 
-def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
 def init_db() -> None:
     """create_all no boot: tabela de config do RUM (1 linha) + linha default (off, vazio)."""
-    with _connect() as conn:
+    with connect() as conn:
         conn.execute(
             """CREATE TABLE IF NOT EXISTS rum_config (
                 id      INTEGER PRIMARY KEY,
@@ -42,7 +36,7 @@ def init_db() -> None:
 def get_config() -> dict:
     """Config persistida ({enabled, snippet}). Tolerante a tabela ausente → default (off, vazio)."""
     try:
-        with _connect() as conn:
+        with connect() as conn:
             row = conn.execute("SELECT * FROM rum_config WHERE id = ?", (_ROW_ID,)).fetchone()
     except sqlite3.OperationalError:
         return {"enabled": False, "snippet": ""}
@@ -62,7 +56,7 @@ def update_config(enabled: bool | None = None, snippet: str | None = None) -> di
         vals.append(snippet)
     if sets:
         vals.append(_ROW_ID)
-        with _connect() as conn:
+        with connect() as conn:
             conn.execute(f"UPDATE rum_config SET {', '.join(sets)} WHERE id = ?", vals)
     return get_config()
 

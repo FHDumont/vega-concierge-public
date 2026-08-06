@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import logging
 import math
-import os
 import re
 import threading
 import csv
@@ -31,6 +30,7 @@ from langchain_core.retrievers import BaseRetriever
 from pydantic import PrivateAttr
 
 from .galileo_span import RETRIEVE_CATALOG_RUN_NAME, RETRIEVE_STORE_POLICIES_RUN_NAME
+from .settings import settings
 
 log = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ PRODUCTS_QA_CSV = Path(__file__).resolve().parent.parent / "data" / "catalog" / 
 COLLECTION_POLICIES = "vega_policies"
 COLLECTION_CATALOG = "vega_catalog"
 
-DEFAULT_K = int(os.getenv("RAG_TOP_K", "3"))
+DEFAULT_K = settings.rag_top_k
 
 # Termos PT → EN. O conteúdo de loja é em inglês (CONVENCOES), mas o shopper escreve nos dois
 # idiomas (o concierge detecta pt/en desde a F-025) — sem isso o keyword retriever não acha nada
@@ -299,15 +299,15 @@ class VegaDegradingRetriever(BaseRetriever):
 # --- Retriever pgvector (opt-in) --------------------------------------------
 
 def is_pgvector_enabled() -> bool:
-    return os.getenv("RAG_ENABLED", "0") == "1" and bool(os.getenv("RAG_DATABASE_URL", ""))
+    return settings.rag_enabled and bool(settings.rag_database_url)
 
 
 def database_url() -> str:
-    return os.getenv("RAG_DATABASE_URL", "")
+    return settings.rag_database_url
 
 
 def embedding_provider() -> str:
-    return os.getenv("RAG_EMBEDDING_PROVIDER", "ollama").strip().lower()
+    return settings.rag_embedding_provider.strip().lower()
 
 
 def embeddings():
@@ -316,8 +316,8 @@ def embeddings():
     if provider == "ollama":
         from langchain_ollama import OllamaEmbeddings
 
-        base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
-        model = os.getenv("RAG_EMBEDDING_MODEL", "nomic-embed-text")
+        base_url = settings.ollama_base_url
+        model = settings.rag_embedding_model or "nomic-embed-text"
         return OllamaEmbeddings(base_url=base_url, model=model)
     if provider == "openai":
         from langchain_openai import OpenAIEmbeddings
@@ -325,7 +325,7 @@ def embeddings():
         from .http_ssl import sync_http_client
 
         return OpenAIEmbeddings(
-            model=os.getenv("RAG_EMBEDDING_MODEL", "text-embedding-3-small"),
+            model=settings.rag_embedding_model or "text-embedding-3-small",
             http_client=sync_http_client(60.0),
         )
     raise ValueError(

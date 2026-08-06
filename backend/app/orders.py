@@ -9,29 +9,22 @@ Ciclo de vida (F-005, ADR-008): status PAID→SHIPPED→DELIVERED é COMPUTADO p
 decorrido desde o PAID (determinístico, sem thread de background) e MATERIALIZADO de
 forma lazy no histórico a cada leitura. `history` guarda cada transição com timestamp."""
 import json
-import os
 import sqlite3
 import uuid
 from datetime import datetime, timezone, timedelta
 
-# Arquivo do BD ao lado do pacote (backend/vega.db). Override por env (testes/compose).
-DB_PATH = os.getenv("ORDERS_DB", os.path.join(os.path.dirname(os.path.dirname(__file__)), "vega.db"))
+from .db import connect
+from .settings import settings
 
 # Offsets do ciclo de vida (segundos desde o PAID). Curtos p/ caber no workshop; via env.
-SHIP_AFTER_S = int(os.getenv("ORDER_SHIP_AFTER_S", "30"))
-DELIVER_AFTER_S = int(os.getenv("ORDER_DELIVER_AFTER_S", "90"))
-
-
-def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+SHIP_AFTER_S = settings.order_ship_after_s
+DELIVER_AFTER_S = settings.order_deliver_after_s
 
 
 def init_db() -> None:
     """create_all no boot: cria a tabela de pedidos se não existir.
     Migração leve: adiciona `history` (F-005) e `user_id` (F-008) em BDs antigos."""
-    with _connect() as conn:
+    with connect() as conn:
         conn.execute(
             """CREATE TABLE IF NOT EXISTS orders (
                 id          TEXT PRIMARY KEY,
@@ -105,7 +98,7 @@ def _advance_lifecycle(order: dict) -> dict:
         return order
     history = order["history"] + [{"status": s, "at": at.isoformat()} for s, at in new_transitions]
     status = new_transitions[-1][0]
-    with _connect() as conn:
+    with connect() as conn:
         conn.execute("UPDATE orders SET status = ?, history = ? WHERE id = ?",
                      (status, json.dumps(history), order["id"]))
     order = dict(order)
@@ -130,7 +123,7 @@ def create_order(items: list[dict], customer: dict, total: float, status: str,
         "created_at": now,
         "history": [{"status": status, "at": now}],
     }
-    with _connect() as conn:
+    with connect() as conn:
         conn.execute(
             "INSERT INTO orders (id, items, customer, total, status, created_at, history, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (order["id"], json.dumps(order["items"]), json.dumps(order["customer"]),
@@ -145,7 +138,7 @@ def transition(order_id: str, status: str, *, failure_reason: str | None = None)
     if order is None:
         return None
     history = order["history"] + [{"status": status, "at": _now_iso()}]
-    with _connect() as conn:
+    with connect() as conn:
         if failure_reason:
             conn.execute(
                 "UPDATE orders SET status = ?, history = ?, failure_reason = ? WHERE id = ?",
@@ -160,7 +153,7 @@ def transition(order_id: str, status: str, *, failure_reason: str | None = None)
 
 
 def get_order(order_id: str, advance: bool = True) -> dict | None:
-    with _connect() as conn:
+    with connect() as conn:
         row = conn.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
     if row is None:
         return None
@@ -169,14 +162,14 @@ def get_order(order_id: str, advance: bool = True) -> dict | None:
 
 
 def list_orders() -> list[dict]:
-    with _connect() as conn:
+    with connect() as conn:
         rows = conn.execute("SELECT * FROM orders ORDER BY created_at DESC").fetchall()
     return [_advance_lifecycle(_row_to_order(r)) for r in rows]
 
 
 def list_orders_for_user(user_id: str) -> list[dict]:
     """Pedidos de um usuário (histórico de compras, F-008), mais recentes primeiro."""
-    with _connect() as conn:
+    with connect() as conn:
         rows = conn.execute(
             "SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC", (user_id,)
         ).fetchall()
@@ -186,7 +179,7 @@ def list_orders_for_user(user_id: str) -> list[dict]:
 def order_owner(order_id: str) -> str | None:
     """user_id dono do pedido (F-019, autorização do detalhe no histórico);
     None = pedido de convidado ou inexistente. `user_id` é interno (não vai no shape Order)."""
-    with _connect() as conn:
+    with connect() as conn:
         row = conn.execute("SELECT user_id FROM orders WHERE id = ?", (order_id,)).fetchone()
     return row["user_id"] if row else None
 
@@ -198,7 +191,7 @@ _SPENT_STATUSES = ("PAID", "SHIPPED", "DELIVERED")
 def spend_for_user(user_id: str) -> float:
     """Gasto acumulado do usuário (soma dos pedidos pagos) — base do tier (F-008)."""
     placeholders = ",".join("?" * len(_SPENT_STATUSES))
-    with _connect() as conn:
+    with connect() as conn:
         row = conn.execute(
             f"SELECT COALESCE(SUM(total), 0) AS spent FROM orders "
             f"WHERE user_id = ? AND status IN ({placeholders})",
@@ -251,7 +244,7 @@ def clear_all() -> int:
     """Apaga TODOS os pedidos (resetar vendas entre turmas — F-014). Retorna quantos
     foram apagados. Destrutivo: a confirmação fica na UI. Não re-semeia o usuário de
     DEMO (o seed roda só no boot) — o histórico dele zera até um novo seed/compra."""
-    with _connect() as conn:
+    with connect() as conn:
         n = conn.execute("SELECT COUNT(*) AS n FROM orders").fetchone()["n"]
         conn.execute("DELETE FROM orders")
     return int(n)

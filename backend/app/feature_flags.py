@@ -14,7 +14,7 @@ Persistência: tabela de 1 linha (`feature_flags`) no mesmo SQLite (ADR-006), de
 """
 import sqlite3
 
-from .orders import DB_PATH  # mesmo arquivo SQLite (ADR-006)
+from .db import connect
 
 _ROW_ID = 1  # tabela de 1 linha (singleton de flags)
 
@@ -23,15 +23,9 @@ FLAG_KEYS = ["behind_the_scenes", "admin", "simulator", "inspector"]
 DEFAULTS = {k: True for k in FLAG_KEYS}
 
 
-def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
 def init_db() -> None:
     """create_all no boot: tabela de flags (1 linha) + linha default idempotente (tudo ON)."""
-    with _connect() as conn:
+    with connect() as conn:
         conn.execute(
             """CREATE TABLE IF NOT EXISTS feature_flags (
                 id                INTEGER PRIMARY KEY,
@@ -51,7 +45,7 @@ def init_db() -> None:
 def get_local_flags() -> dict:
     """Flags persistidas nesta loja. Tolerante a tabela ausente → defaults (tudo ON)."""
     try:
-        with _connect() as conn:
+        with connect() as conn:
             row = conn.execute("SELECT * FROM feature_flags WHERE id = ?", (_ROW_ID,)).fetchone()
     except sqlite3.OperationalError:
         return dict(DEFAULTS)
@@ -69,7 +63,7 @@ def update_flags(**partial) -> dict:
             vals.append(1 if partial[k] else 0)
     if sets:
         vals.append(_ROW_ID)
-        with _connect() as conn:
+        with connect() as conn:
             conn.execute(f"UPDATE feature_flags SET {', '.join(sets)} WHERE id = ?", vals)
     return get_local_flags()
 

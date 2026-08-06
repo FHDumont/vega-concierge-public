@@ -91,7 +91,7 @@ def _remaining_agents(state: ConciergeState) -> list[str]:
 
 
 def _parse_request_budget(messages: list[BaseMessage], state: ConciergeState) -> tuple[str, float]:
-    from ..agents import resolve_budget
+    from ..agents import resolve_budget  # import tardio: ciclo graphs.concierge↔agents
 
     request = (state.get("request") or "").strip()
     last_human = ""
@@ -105,7 +105,7 @@ def _parse_request_budget(messages: list[BaseMessage], state: ConciergeState) ->
 
 
 def _context_system_message(budget: float, request: str) -> SystemMessage:
-    from ..agents import parse_budget_from_text
+    from ..agents import parse_budget_from_text  # import tardio: ciclo graphs.concierge↔agents
 
     parts = ["Never invent SKUs or prices — use catalog tools via the curator specialist."]
     if parse_budget_from_text(request) is not None:
@@ -128,7 +128,7 @@ def _ensure_initial_messages(state: ConciergeState) -> tuple[list[BaseMessage], 
             trace.append("Coordinator: recebeu o pedido do shopper")
         else:
             request = ""
-        from ..agents import resolve_budget
+        from ..agents import resolve_budget  # import tardio: ciclo graphs.concierge↔agents
         budget = resolve_budget(request)
     else:
         request, budget = _parse_request_budget(lc_messages, state)
@@ -193,7 +193,7 @@ def _invoke_routing_decision(
             reasoning=f"Deterministic → only {remaining[0]} remaining.",
         )
 
-    from ..agents import _parse_json
+    from ..agents import _parse_json  # import tardio: ciclo graphs.concierge↔agents
 
     instructions = _build_coordinator_instructions(remaining)
     invoke_messages: list[BaseMessage] = [
@@ -338,7 +338,7 @@ def curator_node(state: ConciergeState, config: RunnableConfig) -> dict:
     cfg = agent_config.get_agent("curator")
     system = agent_config.effective_system(cfg)
     if FLAGS.prompt_injection:
-        from ..ai_features import _injection_context
+        from ..ai_features import _injection_context  # import tardio: ciclo graphs.concierge↔ai_features
 
         injection = _injection_context()
         if injection:
@@ -388,7 +388,7 @@ def curator_node(state: ConciergeState, config: RunnableConfig) -> dict:
         latency_ms=latency_ms,
     )
 
-    from ..agents import (
+    from ..agents import (  # import tardio: ciclo graphs.concierge↔agents
         _extract_constraints_fallback,
         _pick_selected,
     )
@@ -433,7 +433,7 @@ def curator_node(state: ConciergeState, config: RunnableConfig) -> dict:
 
 def respond_node(state: ConciergeState, config: RunnableConfig) -> dict:
     """Specialist: compose shopper-facing answer (no tools)."""
-    from ..agents import _detect_language, _fallback_response, call_agent
+    from ..agents import _detect_language, _fallback_response, call_agent  # import tardio: ciclo graphs.concierge↔agents
 
     lc_messages, request, budget, trace = _ensure_initial_messages(state)
     trace = list(trace)
@@ -443,7 +443,7 @@ def respond_node(state: ConciergeState, config: RunnableConfig) -> dict:
     lang = constraints.get("language") or _detect_language(request)
     constraints["language"] = lang
 
-    from ..agents import parse_budget_from_text
+    from ..agents import parse_budget_from_text  # import tardio: ciclo graphs.concierge↔agents
 
     budget_line = ""
     if parse_budget_from_text(request) is not None:
@@ -496,7 +496,7 @@ def _extract_dollar_amounts(text: str) -> list[float]:
 
 def finalize_node(state: ConciergeState, config: RunnableConfig) -> dict:
     """Grounding guard + deterministic fallback; preserves /api/run contract."""
-    from ..agents import (
+    from ..agents import (  # import tardio: ciclo graphs.concierge↔agents
         _compose_response,
         _detect_language,
         _extract_constraints_fallback,

@@ -13,7 +13,6 @@ Não resolve config — quem chama (`agents.feature_complete`) usa o resultado (
 dependência nova; thread-safe (endpoints sync rodam em threadpool).
 """
 import hashlib
-import os
 import threading
 import time
 from typing import Literal
@@ -32,20 +31,19 @@ from .galileo_span import (
 )
 from .llm import LLMResult, StubLLM
 from .runnable_config import current_runnable_config
+from .settings import settings
 
 # Knobs por env (defaults convenientes p/ o workshop; rate generoso p/ não atrapalhar uso normal,
 # mas conter floods do simulador / cost_spike). TTL do cache em segundos.
-CACHE_TTL_S = float(os.getenv("LLM_CACHE_TTL_S", "300"))
-CACHE_MAX = int(os.getenv("LLM_CACHE_MAX", "256"))
-RATE_MAX = int(os.getenv("LLM_RATE_MAX", "30"))          # nº de chamadas reais ao provider...
-RATE_WINDOW_S = float(os.getenv("LLM_RATE_WINDOW_S", "60"))  # ...por janela (s); <=0 desliga.
-
-_CACHE_DISABLED_VALUES = frozenset({"0", "false", "no", "off"})
+CACHE_TTL_S = settings.llm_cache_ttl_s
+CACHE_MAX = settings.llm_cache_max
+RATE_MAX = settings.llm_rate_max              # nº de chamadas reais ao provider...
+RATE_WINDOW_S = settings.llm_rate_window_s    # ...por janela (s); <=0 desliga.
 
 
 def cache_globally_enabled() -> bool:
     """True quando `LLM_CACHE_ENABLED` está ligado (default `1`). Falsy: 0/false/no/off."""
-    return os.getenv("LLM_CACHE_ENABLED", "1").strip().lower() not in _CACHE_DISABLED_VALUES
+    return settings.llm_cache_enabled
 
 
 def normalize(text: str) -> str:

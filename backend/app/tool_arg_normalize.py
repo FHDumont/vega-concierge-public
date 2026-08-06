@@ -48,6 +48,36 @@ def _coerce_budget(value: Any) -> float | None:
     return None
 
 
+def normalize_sku_arg(raw: dict) -> tuple[str | None, dict | None]:
+    """Acha um SKU em qualquer campo do payload; erro estruturado quando não há nenhum.
+
+    Base compartilhada por `get_price` e `check_inventory` — as duas tools que o modelo escolhe
+    sozinho e que precisam de um SKU e só."""
+    sku = raw.get("sku")
+    if not isinstance(sku, str) or not _SKU_PATTERN.fullmatch(sku or ""):
+        sku = _extract_sku(sku) if sku else None
+    if not sku:
+        for val in raw.values():
+            sku = _extract_sku(val)
+            if sku:
+                break
+    if not sku or not _SKU_PATTERN.fullmatch(sku):
+        return None, {"ok": False, "error": "invalid_sku", "hint": "pass sku: NS-001"}
+    return sku.upper(), None
+
+
+def normalize_check_inventory_args(raw: dict) -> tuple[dict | None, dict | None]:
+    """`check_inventory` chamada sem `sku` (ou com o SKU enterrado noutro campo).
+
+    Sem isto o `args_schema` estrito estoura `ValidationError` e o trace do checkout ganha um
+    span vermelho com URL do pydantic no meio do happy path — foi o que a navegação ao vivo
+    pegou. `get_price` já tinha esse reparo desde a F-TRACE-UX-1; esta ficou de fora."""
+    sku, err = normalize_sku_arg(raw)
+    if err:
+        return None, err
+    return {"sku": sku}, None
+
+
 def normalize_get_price_args(raw: dict) -> tuple[dict | None, dict | None]:
     """Extract a single SKU from common malformations; error dict when none found."""
     sku = raw.get("sku")
@@ -75,7 +105,10 @@ def normalize_get_price_args(raw: dict) -> tuple[dict | None, dict | None]:
                 if sku:
                     break
 
-    if not sku or not _SKU_PATTERN.fullmatch(sku):
+    # `sku` pode ter chegado como lista (`{"sku": ["NS-004"]}`) — `fullmatch` estouraria TypeError.
+    if not isinstance(sku, str) or not _SKU_PATTERN.fullmatch(sku):
+        sku = _extract_sku(sku)
+    if not sku:
         return None, {"ok": False, "error": "invalid_sku", "hint": "pass sku: NS-001"}
 
     out: dict = {"sku": sku.upper()}

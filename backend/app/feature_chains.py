@@ -185,7 +185,7 @@ def _merge_policy_context(state: dict) -> dict:
 
 
 def _merge_catalog_context(state: dict) -> dict:
-    from .ai_features import catalog_index_from_documents
+    from .ai_features import catalog_index_from_documents  # import tardio: ciclo feature_chains↔ai_features
 
     catalog_block = catalog_index_from_documents(state.get("catalog_docs") or [])
     suffix = state.get("context_suffix") or ""
@@ -201,7 +201,7 @@ def _merge_combined_context(state: dict, *, catalog_mode: str) -> dict:
         if catalog_mode == "full":
             parts.append(rag.format_catalog_documents(catalog_docs))
         else:
-            from .ai_features import catalog_index_from_documents
+            from .ai_features import catalog_index_from_documents  # import tardio: ciclo feature_chains↔ai_features
 
             block = catalog_index_from_documents(catalog_docs)
             parts.append(f"Catalog (sku: name [tags] price, most relevant first):\n{block}")

@@ -7,6 +7,8 @@ import json
 
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.tools import StructuredTool
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from . import notifications, orders, payments
@@ -22,6 +24,7 @@ from .galileo_span import (
     SEND_ORDER_NOTIFICATION_TOOL_NAME,
 )
 from .tool_arg_normalize import (
+    normalize_check_inventory_args,
     normalize_get_price_args,
     normalize_search_catalog_args,
 )
@@ -54,7 +57,10 @@ class GetPriceInput(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    sku: str | None = Field(default=None, description="Product SKU from the catalog (e.g. NS-001).")
+    # `Any` de propósito: o modelo manda `"NS-001"`, `["NS-001"]` ou lixo, e quem decide o
+    # que é SKU é o `tool_arg_normalize` (que já trata lista). Tipar `str` aqui devolveria a
+    # decisão ao pydantic, que só sabe estourar ValidationError.
+    sku: Any = Field(default=None, description="Product SKU from the catalog (e.g. NS-001).")
     skus: list | None = Field(default=None, description="Ignored batch — first SKU is used.")
     sku_a: str | None = Field(default=None, description="Compare batch — first SKU is used.")
     sku_b: str | None = Field(default=None, description="Compare batch — ignored after first SKU.")
@@ -79,7 +85,14 @@ class ListRecentCustomersInput(BaseModel):
 class CheckInventoryInput(BaseModel):
     """Arguments for check_inventory."""
 
-    sku: str = Field(description="Product SKU to check stock availability for.")
+    # `extra="allow"` deixa o SKU chegar ao reparo mesmo quando o modelo o põe noutro campo
+    # (mesma config de GetPriceInput). Sem isso o pydantic descarta o campo antes do wrapper.
+    model_config = ConfigDict(extra="allow")
+
+    # Opcional de propósito: o modelo às vezes chama sem `sku`, e o reparo é feito em
+    # `_check_inventory_tool` (mesmo padrão de GetPriceInput). Estrito aqui só trocaria um
+    # erro tratável por um ValidationError cru no trace.
+    sku: Any = Field(default=None, description="Product SKU to check stock availability for.")
 
 
 class OrderInput(BaseModel):
@@ -101,6 +114,13 @@ def _search_catalog_tool(query: str = "", budget: float | str | None = None, **k
     if err:
         return err
     return search_catalog(norm["query"], norm["budget"])
+
+
+def _check_inventory_tool(sku: str | None = None, **kwargs):
+    norm, err = normalize_check_inventory_args({"sku": sku, **kwargs})
+    if err:
+        return err
+    return check_inventory(norm["sku"])
 
 
 def _get_price_tool(sku: str | None = None, **kwargs):
@@ -154,7 +174,7 @@ class FulfillmentOrderJsonInput(BaseModel):
 
 def _check_refund_eligibility_tool(order_json: str, config: RunnableConfig) -> str:
     """`config` propagado p/ o LLM span filho aninhar no trace do returns."""
-    from . import agents
+    from . import agents  # import tardio: ciclo langchain_tools↔agents
 
     try:
         order = json.loads(order_json) if order_json else {}
@@ -168,7 +188,7 @@ def _check_refund_eligibility_tool(order_json: str, config: RunnableConfig) -> s
 
 def _screen_refund_abuse_tool(order_json: str, config: RunnableConfig) -> str:
     """`config` propagado p/ o LLM span filho aninhar no trace do returns."""
-    from . import agents
+    from . import agents  # import tardio: ciclo langchain_tools↔agents
 
     try:
         order = json.loads(order_json) if order_json else {}
@@ -186,7 +206,7 @@ def _decide_fraud_allow_or_block_tool(
     config: RunnableConfig,
 ) -> str:
     """`config` propagado p/ o LLM span filho aninhar no trace do checkout."""
-    from . import agents
+    from . import agents  # import tardio: ciclo langchain_tools↔agents
 
     try:
         quote = json.loads(quote_json) if quote_json else {}
@@ -306,7 +326,7 @@ get_price_tool = StructuredTool.from_function(
 )
 
 check_inventory_tool = StructuredTool.from_function(
-    func=check_inventory,
+    func=_check_inventory_tool,
     name="check_inventory",
     description=(
         "Check whether a SKU is in stock and return estimated delivery time. "

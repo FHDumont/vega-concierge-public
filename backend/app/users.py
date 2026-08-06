@@ -14,34 +14,28 @@ Decisões (demo, sem segurança de produção — ver DT-010):
 Usuários persistem em SQLite (mesmo arquivo dos pedidos — ADR-006).
 """
 import hashlib
-import os
 import secrets
 import sqlite3
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from .orders import DB_PATH  # mesmo arquivo SQLite dos pedidos (ADR-006)
+from .db import connect
 from .orders import create_order as _create_order  # seed do usuário de teste (F-010)
+from .settings import settings
 
 # Thresholds de tier por gasto acumulado (BRL). Configuráveis por env; valores simples p/ demo.
-GOLD_THRESHOLD = float(os.getenv("TIER_GOLD_USD", "1000"))
-PLATINUM_THRESHOLD = float(os.getenv("TIER_PLATINUM_USD", "5000"))
+GOLD_THRESHOLD = settings.tier_gold_usd
+PLATINUM_THRESHOLD = settings.tier_platinum_usd
 
-PBKDF2_ITERATIONS = int(os.getenv("AUTH_PBKDF2_ITERATIONS", "120000"))
+PBKDF2_ITERATIONS = settings.auth_pbkdf2_iterations
 
 # token → user_id (sessões de demo, em memória; resetam no restart — DT-010).
 _SESSIONS: dict[str, str] = {}
 
 
-def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
 def init_db() -> None:
     """create_all no boot: tabela de usuários se não existir."""
-    with _connect() as conn:
+    with connect() as conn:
         conn.execute(
             """CREATE TABLE IF NOT EXISTS users (
                 id          TEXT PRIMARY KEY,
@@ -142,7 +136,7 @@ def register(name: str, email: str, password: str) -> dict:
         "created_at": _now_iso(),
     }
     try:
-        with _connect() as conn:
+        with connect() as conn:
             conn.execute(
                 "INSERT INTO users (id, name, email, password, tier, created_at) VALUES (?, ?, ?, ?, ?, ?)",
                 (user["id"], user["name"], user["email"], user["password"], user["tier"], user["created_at"]),
@@ -158,20 +152,20 @@ def _row_to_user_dict(user: dict) -> dict:
 
 
 def get_user(user_id: str) -> dict | None:
-    with _connect() as conn:
+    with connect() as conn:
         row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     return _row_to_user(row) if row else None
 
 
 def get_user_by_email(email: str) -> dict | None:
-    with _connect() as conn:
+    with connect() as conn:
         row = conn.execute("SELECT * FROM users WHERE email = ?", (email.strip().lower(),)).fetchone()
     return _row_to_user(row) if row else None
 
 
 def authenticate(email: str, password: str) -> dict | None:
     """Verifica e-mail+senha; retorna o usuário (sem senha) ou None."""
-    with _connect() as conn:
+    with connect() as conn:
         row = conn.execute("SELECT * FROM users WHERE email = ?", (email.strip().lower(),)).fetchone()
     if row is None or not _verify_password(password, row["password"]):
         return None
@@ -180,20 +174,20 @@ def authenticate(email: str, password: str) -> dict | None:
 
 def update_tier(user_id: str, tier: str) -> None:
     """Materializa o tier computado na coluna (lazy, no /me)."""
-    with _connect() as conn:
+    with connect() as conn:
         conn.execute("UPDATE users SET tier = ? WHERE id = ?", (tier, user_id))
 
 
 def update_address(user_id: str, address: str) -> None:
     """Salva/edita o endereço do usuário no perfil (F-011)."""
-    with _connect() as conn:
+    with connect() as conn:
         conn.execute("UPDATE users SET address = ? WHERE id = ?", (address.strip(), user_id))
 
 
 # --- papel OWNER (gate da config de LLM — F-020) ----------------------------
 
 def update_role(user_id: str, role: str) -> None:
-    with _connect() as conn:
+    with connect() as conn:
         conn.execute("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
 
 
@@ -277,9 +271,9 @@ def seed_demo_user() -> None:
 # Único papel OWNER da app: acessa a tela/endpoints de config de LLM. Senha via env
 # OWNER_PASSWORD (default de DEMO — trocar em qualquer deploy; ver DT-012). Idempotente:
 # garante a conta E o papel no boot (se a conta já existir, só promove a OWNER).
-OWNER_EMAIL = os.getenv("OWNER_EMAIL", "fernando@fernando.com.br")
-OWNER_PASSWORD = os.getenv("OWNER_PASSWORD", "owner1234")  # default DEMO — DT-012
-OWNER_NAME = os.getenv("OWNER_NAME", "Fernando (Owner)")
+OWNER_EMAIL = settings.owner_email
+OWNER_PASSWORD = settings.owner_password  # default DEMO — DT-012
+OWNER_NAME = settings.owner_name
 
 
 def seed_owner_user() -> None:

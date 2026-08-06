@@ -17,10 +17,10 @@ este módulo só entrega o callback e o contexto de sessão.
 from __future__ import annotations
 
 import logging
-import os
 import uuid
 from contextlib import contextmanager
 from typing import Iterator
+from .settings import settings
 
 log = logging.getLogger(__name__)
 
@@ -29,26 +29,29 @@ _warned = False
 
 
 def is_enabled() -> bool:
-    return bool(os.getenv("GALILEO_API_KEY", "").strip())
+    return bool(settings.galileo_api_key.strip())
 
 
 def project() -> str:
-    return os.getenv("GALILEO_PROJECT", "vega-concierge")
+    return settings.galileo_project
 
 
 def log_stream() -> str:
     """`GALILEO_LOG_STREAM` é o nome que o SDK/console usa; `GALILEO_LOGSTREAM` é aceito porque
     é o que o `.env.example` trazia antes desta fase."""
-    return os.getenv("GALILEO_LOG_STREAM") or os.getenv("GALILEO_LOGSTREAM") or "default"
+    return settings.galileo_log_stream
 
 
 def console_url() -> str:
-    return os.getenv("GALILEO_CONSOLE_URL", "https://console.multitenant.galileocloud.io").strip()
+    return settings.galileo_console_url.strip()
 
 
 def agent_control_url() -> str:
-    """Mesma derivação de `galileo_control._agent_control_url` — exposta aqui p/ config pública."""
-    explicit = os.getenv("AGENT_CONTROL_URL", "").strip()
+    """URL do Agent Control — derivada do console quando não vier explícita.
+
+    Fonte única: `galileo_control.init_once` consome esta mesma função (F-BACKEND-1).
+    """
+    explicit = settings.agent_control_url.strip()
     if explicit:
         return explicit
     console = console_url()
@@ -60,11 +63,7 @@ def agent_control_url() -> str:
 def session_idle_minutes() -> int:
     """Minutos sem request de IA antes do front rotacionar a session Splunk Agent Observability (F-GALILEO-8).
     `0` = só rotaciona manualmente (botão BTS). Default 5."""
-    raw = os.getenv("VEGA_SESSION_IDLE_MINUTES", "5").strip()
-    try:
-        value = int(raw)
-    except ValueError:
-        return 5
+    value = settings.vega_session_idle_minutes
     if value < 0:
         return 0
     return min(value, 1440)

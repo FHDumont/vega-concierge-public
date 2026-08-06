@@ -87,14 +87,27 @@ FROZEN_ROUTES: set[tuple[str, tuple[str, ...]]] = {
 
 
 def _live_routes() -> set[tuple[str, tuple[str, ...]]]:
+    """Rotas efetivamente montadas na app.
+
+    O FastAPI não achata `include_router`: cada router incluído entra em `app.routes` como um
+    wrapper que guarda o router original. Por isso a varredura desce por `original_router`.
+    """
     from app.api import app
 
-    out = set()
-    for route in app.routes:
-        path = getattr(route, "path", None)
-        if path is None:
-            continue
-        out.add((path, tuple(sorted(getattr(route, "methods", None) or []))))
+    out: set[tuple[str, tuple[str, ...]]] = set()
+
+    def walk(routes) -> None:
+        for route in routes:
+            nested = getattr(route, "original_router", None)
+            if nested is not None:
+                walk(nested.routes)
+                continue
+            path = getattr(route, "path", None)
+            if path is None:
+                continue
+            out.add((path, tuple(sorted(getattr(route, "methods", None) or []))))
+
+    walk(app.routes)
     return out
 
 
@@ -233,3 +246,33 @@ def test_llm_type_presets_are_owner_gated(api_client, owner_headers):
     assert api_client.get("/api/admin/config/llm-types").status_code == 401
     presets = api_client.get("/api/admin/config/llm-types", headers=owner_headers).json()
     assert {p["type"] for p in presets} >= {"openai", "claude", "bedrock", "custom"}
+
+
+# --- bootstrap no startup, não no import --------------------------------------
+
+def test_importing_the_app_does_not_bootstrap_anything(monkeypatch):
+    """Desde a F-BACKEND-1 o bootstrap mora no `lifespan`. Importar `app.api` — o que
+    `fresh-state.sh` e qualquer inspeção de rotas fazem — não pode tocar no SQLite nem
+    inicializar o Agent Control."""
+    import importlib
+
+    from app import api
+
+    called: list[str] = []
+    monkeypatch.setattr(api.orders, "init_db", lambda: called.append("orders"))
+    monkeypatch.setattr(api.galileo_control, "init_once", lambda: called.append("control"))
+
+    importlib.reload(api)
+    assert called == []
+
+
+def test_starting_the_app_runs_the_bootstrap(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app import api
+
+    called: list[str] = []
+    monkeypatch.setattr(api, "_bootstrap", lambda: called.append("bootstrap"))
+    with TestClient(api.app):
+        pass
+    assert called == ["bootstrap"]

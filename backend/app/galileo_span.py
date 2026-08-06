@@ -10,8 +10,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from . import agent_config
-
 # Passo de negócio por agent_key configurável — independente de superfície.
 BUSINESS_STEPS: dict[str, str] = {
     "concierge": "route_shopper_request",
@@ -170,22 +168,6 @@ def default_llm_run_name(agent_key: str) -> str:
     return llm_run_name("feature", step)
 
 
-def span_name(agent_key: str) -> str:
-    """Rótulo Title Case legível — **deprecated** para traces; use `default_llm_run_name`."""
-    if not agent_key:
-        return ""
-    slug = _step_slug(agent_key)
-    if slug != agent_key.replace("-", "_"):
-        return slug.replace("_", " ").title()
-    try:
-        role = agent_config.get_agent(agent_key).get("role")
-        if role:
-            return role.strip().title()
-    except (KeyError, TypeError, AttributeError):
-        pass
-    return agent_key.replace("_", " ").title()
-
-
 def llm_run_name(workflow: str, step: str) -> str:
     """`run_name` para chains/structured-output — evita `RunnableSequence` no trace."""
     return f"{workflow}.{step}"
@@ -194,11 +176,6 @@ def llm_run_name(workflow: str, step: str) -> str:
 def agent_llm_run_name(workflow: str, agent_key: str) -> str:
     """`run_name` dotted para LLM spans de agentes em grafos — alinha com `feature.{step}`."""
     return llm_run_name(workflow, _step_slug(agent_key))
-
-
-def workflow_run_name(workflow: str) -> str:
-    """Trace raiz de um grafo LangGraph (`chat.workflow`, `compare.workflow`, …)."""
-    return f"{workflow}.workflow"
 
 
 @dataclass(frozen=True)

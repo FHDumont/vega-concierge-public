@@ -13,6 +13,7 @@ from ..langchain_tools import COMPARE_TOOLS, get_price_tool
 from ..problems import FLAGS
 from ..tools import CATALOG
 from ..galileo_span import ReactNodeNames
+from ..runnable_config import resolve_config, set_current_runnable_config
 from .react import ReactState, build_react_graph, invoke_react_agent
 
 
@@ -177,3 +178,26 @@ def build_compare_graph():
         workflow_name="compare.workflow",
         agent_tools_route_name="compare.route_after_coordinator_tools",
     )
+
+
+async def arun_compare(sku_a: str, sku_b: str, *, config=None) -> dict | None:
+    """Ponto de entrada do `POST /api/compare`. `None` se algum SKU não existe (404).
+    Honra os toggles (`price_hallucination`, `cost_spike`)."""
+    a, b = _find(sku_a), _find(sku_b)
+    if a is None or b is None:
+        return None
+    resolved = resolve_config(config, feature="compare")
+    token = set_current_runnable_config(resolved)
+    try:
+        result = await build_compare_graph().ainvoke(
+            {"sku_a": sku_a, "sku_b": sku_b, "product_a": a, "product_b": b,
+             "messages": [], "trace": []},
+            config=resolved,
+        )
+    finally:
+        set_current_runnable_config(None, token)
+    return {
+        "product_a": result["product_a"],
+        "product_b": result["product_b"],
+        "verdict": result["verdict"],
+    }

@@ -13,7 +13,7 @@ O `enrollment_token` é segredo (autentica o pull do hub): nunca é exposto cru 
 """
 import sqlite3
 
-from .orders import DB_PATH  # mesmo arquivo SQLite (ADR-006)
+from .db import connect
 
 _ROW_ID = 1  # tabela de 1 linha só (singleton de settings)
 
@@ -27,15 +27,9 @@ _DEFAULTS = {
 }
 
 
-def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
 def init_db() -> None:
     """create_all no boot: tabela de settings de fonte (1 linha) + linha default idempotente."""
-    with _connect() as conn:
+    with connect() as conn:
         conn.execute(
             """CREATE TABLE IF NOT EXISTS hub_settings (
                 id               INTEGER PRIMARY KEY,
@@ -58,7 +52,7 @@ def init_db() -> None:
 def get_settings() -> dict:
     """Settings COM segredos (uso interno: pull, serve). Tolerante a tabela ausente → defaults."""
     try:
-        with _connect() as conn:
+        with connect() as conn:
             row = conn.execute("SELECT * FROM hub_settings WHERE id = ?", (_ROW_ID,)).fetchone()
     except sqlite3.OperationalError:
         return dict(_DEFAULTS)
@@ -91,6 +85,6 @@ def update_settings(*, source=None, hub_url=None, enrollment_token=None,
         sets.append("serve_token = ?"); vals.append(serve_token.strip())
     if sets:
         vals.append(_ROW_ID)
-        with _connect() as conn:
+        with connect() as conn:
             conn.execute(f"UPDATE hub_settings SET {', '.join(sets)} WHERE id = ?", vals)
     return get_settings()

@@ -22,18 +22,18 @@ Sem deps novas: urllib (stdlib), espelhando `config_source.RemoteConfigSource`.
 """
 import hmac
 import json
-import os
 import urllib.error
 import urllib.request
 
 from . import hub, hub_settings
+from .settings import settings
 
 _PUSH_TIMEOUT_S = 6  # curto: alvo fora do ar → timeout/falha por IP, não trava o lote
 
 
 def enroll_secret() -> str:
     """Segredo compartilhado que gateia o endpoint de enroll (env baked no lab). '' = desligado."""
-    return os.getenv("ENROLL_TOKEN", "").strip()
+    return settings.enroll_token.strip()
 
 
 def verify_enroll_token(token: str | None) -> bool:

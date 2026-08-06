@@ -7,7 +7,6 @@ não — o único ponto do backend que sabe da existência do Splunk Agent Obser
 from __future__ import annotations
 
 import contextvars
-import os
 import uuid
 from contextlib import contextmanager
 from typing import Iterator
@@ -16,6 +15,7 @@ from langchain_core.runnables.config import RunnableConfig
 
 from . import galileo_obs
 from .problems import FLAGS
+from .settings import settings
 
 _current_runnable_config: contextvars.ContextVar[RunnableConfig | None] = contextvars.ContextVar(
     "current_runnable_config", default=None
@@ -23,7 +23,7 @@ _current_runnable_config: contextvars.ContextVar[RunnableConfig | None] = contex
 
 
 def _env() -> str:
-    return os.getenv("DEPLOYMENT_ENVIRONMENT", "local-dev")
+    return settings.deployment_environment
 
 
 def make_thread_id(*, user_id: str | None = None) -> str:

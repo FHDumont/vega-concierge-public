@@ -15,13 +15,13 @@ Princípios:
   restart (como os demais estados em memória — DT-007/DT-010). Thread-safe (endpoints sync rodam
   em threadpool; o simulador grava concorrente).
 """
-import os
 import threading
 from collections import deque
 from datetime import datetime, timezone
+from .settings import settings
 
 # Tamanho do ring buffer (últimas N chamadas) — configurável (decisão em aberto da spec).
-ACTIVITY_MAX = int(os.getenv("LLM_ACTIVITY_MAX", "200"))
+ACTIVITY_MAX = settings.llm_activity_max
 
 _lock = threading.Lock()
 _buf: deque = deque(maxlen=ACTIVITY_MAX)

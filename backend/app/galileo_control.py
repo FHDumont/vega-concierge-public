@@ -7,13 +7,13 @@ from __future__ import annotations
 
 import contextvars
 import logging
-import os
 from typing import Any, Callable
 
 from . import galileo_obs
 from .llm import LLMResult
 from .problems import FLAGS
 from .tools import REFUND_WINDOW_DAYS
+from .settings import settings
 
 log = logging.getLogger(__name__)
 
@@ -70,16 +70,6 @@ def _warn_once(exc: Exception) -> None:
         log.warning("Agent Control desabilitado nesta execução (%s: %s)", type(exc).__name__, exc)
 
 
-def _agent_control_url() -> str:
-    explicit = os.getenv("AGENT_CONTROL_URL", "").strip()
-    if explicit:
-        return explicit
-    console = os.getenv("GALILEO_CONSOLE_URL", "https://console.multitenant.galileocloud.io").strip()
-    if "console." in console:
-        return console.replace("console.", "agent-control.", 1)
-    return "https://agent-control.multitenant.galileocloud.io"
-
-
 def init_once() -> None:
     global _initialized
     if _initialized or not galileo_obs.is_enabled():
@@ -91,14 +81,14 @@ def init_once() -> None:
 
         galileo_context.init(project=galileo_obs.project(), log_stream=galileo_obs.log_stream())
         target = get_agent_control_target()
-        api_key = os.getenv("GALILEO_API_KEY", "").strip()
-        server_url = _agent_control_url()
+        api_key = settings.galileo_api_key.strip()
+        server_url = galileo_obs.agent_control_url()
         agent_control.init(
             agent_name="vega-concierge",
             agent_description="Vega Concierge workshop store — Agent Control",
             server_url=server_url,
             api_key=api_key,
-            api_key_header=os.getenv("AGENT_CONTROL_API_KEY_HEADER", "Galileo-API-Key"),
+            api_key_header=settings.agent_control_api_key_header,
             target_type=target.target_type,
             target_id=target.target_id,
             steps=register_steps(),
@@ -331,7 +321,7 @@ def controlled_finalize_refund(
 
 
 def _finalize_control_payload(order: dict, outcome: dict) -> dict:
-    from .graphs.returns import _days_since_delivery
+    from .graphs.returns import _days_since_delivery  # import tardio: ciclo galileo_control↔graphs.returns
 
     days = _days_since_delivery(order)
     return {
