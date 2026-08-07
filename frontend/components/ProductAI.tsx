@@ -32,22 +32,24 @@ const CHIP_POOL: Record<string, string[]> = {
 
 const DEFAULT_CHIPS = ["What's it best for?", "What are the key specs?", "Is it in stock?"];
 
+const PRICE_CHIP = "How much does it cost?";
+
 const TAG_PRIORITY = ["audio", "wearable", "casa", "presente"];
 
 function chipsForTags(tags: string[]): string[] {
-  const picked: string[] = [];
+  const picked: string[] = [PRICE_CHIP];
   for (const tag of TAG_PRIORITY) {
     if (!tags.includes(tag)) continue;
     for (const chip of CHIP_POOL[tag] ?? []) {
       if (!picked.includes(chip)) picked.push(chip);
-      if (picked.length >= 3) return picked;
+      if (picked.length >= 4) return picked;
     }
   }
   for (const chip of DEFAULT_CHIPS) {
     if (!picked.includes(chip)) picked.push(chip);
-    if (picked.length >= 3) break;
+    if (picked.length >= 4) break;
   }
-  return picked.slice(0, 3);
+  return picked.slice(0, 4);
 }
 
 export default function ProductAI({ sku, name, tags = [] }: { sku: string; name: string; tags?: string[] }) {

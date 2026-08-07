@@ -16,6 +16,9 @@ from pydantic import BaseModel
 class RunRequest(BaseModel):
     request: str = "a birthday gift under $300"
 
+class GiftRecommendRequest(BaseModel):
+    request: str = "a birthday gift under $300"
+
 class ChatMessageIn(BaseModel):
     role: Literal["user", "assistant"]
     content: str
@@ -31,6 +34,7 @@ class ChatRequest(BaseModel):
 class SecurityActionRequest(BaseModel):
     action: Literal["delete_product", "export_recent_customers"]
     sku: str | None = None
+    prompt: str | None = None
 
 class ProductQARequest(BaseModel):
     sku: str

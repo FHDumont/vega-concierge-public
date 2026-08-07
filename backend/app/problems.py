@@ -23,7 +23,7 @@ FLAGS = ProblemFlags()
 # Presets UC do workshop Splunk Agent Observability (F-GALILEO-3) — reset total + apply evita flags stale.
 UC_PRESETS: dict[str, dict[str, bool]] = {
     "uc-1": {"price_hallucination": True},
-    "uc-2": {"inventory_outage": True},
+    "uc-2": {"cost_spike": True},
     "uc-3": {"refund_false_denial": True},
     "uc-4": {"prompt_injection": True},
     "uc-5": {"price_hallucination": True},

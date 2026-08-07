@@ -121,6 +121,26 @@ def _returns_request_preview(order: dict) -> str:
         return _preview(f"Coordinate a refund request for order {order_id}.", limit=500)
 
 
+def _compact_gift_recommend_state(data: dict) -> dict:
+    """UC-2 (Agent Efficiency): expose redundant path facts at trace root for the session judge."""
+    observability = data.get("observability") if isinstance(data.get("observability"), dict) else {}
+    out: dict[str, Any] = {
+        "request": _request_preview(data),
+        "answer_preview": _preview(str(data.get("answer") or ""), limit=500),
+        "recommended": _compact_product(data.get("recommended")),
+        "quality": data.get("quality"),
+    }
+    if observability:
+        out["redundant_steps"] = list(observability.get("redundant_steps") or [])[:_MAX_LIST]
+        duplicate_tools = observability.get("duplicate_tool_calls")
+        if isinstance(duplicate_tools, dict):
+            out["duplicate_tool_calls"] = duplicate_tools
+        for key in ("retriever_passes", "llm_passes"):
+            if key in observability:
+                out[key] = observability[key]
+    return out
+
+
 def _compact_notification_copy_state(data: dict) -> dict:
     """UC-5 happy path: trace I/O must not replay demo payment/identity fields."""
     order = data.get("order") if isinstance(data.get("order"), dict) else {}
@@ -203,6 +223,10 @@ def compact_trace_payload(data: Any, *, name: str | None = None) -> Any:
         "answer" in data and ("candidates" in data or "selected" in data)
     ):
         return _compact_concierge_state(data)
+    if "gift_recommend.workflow" in run or (
+        "recommended" in data and isinstance(data.get("observability"), dict)
+    ):
+        return _compact_gift_recommend_state(data)
     if "returns.workflow" in run:
         return _compact_returns_state(data)
     if "notification_copy.workflow" in run or (

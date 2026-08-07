@@ -84,6 +84,18 @@ def session_idle_minutes() -> int:
     return min(value, 1440)
 
 
+def shopper_session_name(active_scenario: str | None = None) -> str | None:
+    """Console session label when a workshop UC preset is active — e.g. uc-1 → Session-UC1."""
+    from ..problems import FLAGS
+
+    scenario = (active_scenario if active_scenario is not None else FLAGS.active_scenario or "").strip()
+    if not scenario:
+        return None
+    if scenario.startswith("uc-"):
+        return f"Session-UC{scenario[3:]}"
+    return f"Session-{scenario.upper()}"
+
+
 def public_config() -> dict:
     """Metadados públicos (sem API key) — precedente: `rum.public_config()`."""
     return {
@@ -263,7 +275,11 @@ def session_scope(session_id: str | None = None, *, feature: str | None = None) 
     live_token = None
     try:
         try:
-            galileo_context.start_session(external_id=resolved)
+            session_kwargs: dict[str, str] = {"external_id": resolved}
+            session_name = shopper_session_name()
+            if session_name:
+                session_kwargs["name"] = session_name
+            galileo_context.start_session(**session_kwargs)
         except Exception as exc:  # noqa: BLE001 — sessão é enriquecimento, não requisito
             _warn_once(exc)
         # Trace vivo DEPOIS da sessão (a sessão precisa estar setada quando o trace é ingerido).

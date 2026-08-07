@@ -1,11 +1,9 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
-import type { GalileoConfig, Problems } from "@/lib/api";
+import type { Problems } from "@/lib/api";
 import { applyProblemPreset, setProblems } from "@/lib/api";
-import SimulateResult from "@/components/SimulateResult";
-import { WORKSHOP_UCS, problemKeysForPreset, type Enforcement } from "@/lib/galileo-workshop";
-import { runSimulateByUc, type SimulateRunResult } from "@/lib/workshop-simulate";
+import { WORKSHOP_UCS, GALILEO_EVALUATOR_INFO, problemKeysForPreset, type Enforcement } from "@/lib/galileo-workshop";
+import { useChat } from "@/lib/chat-context";
 
 const ENFORCEMENT_LABEL: Record<Enforcement, string> = {
   observe: "Observe",
@@ -16,19 +14,17 @@ const ENFORCEMENT_LABEL: Record<Enforcement, string> = {
 export default function WorkshopGuide({
   problems,
   onPresetApplied,
-  galileo,
-  sessionId,
+  onSessionReset,
 }: {
   problems: Problems;
   onPresetApplied: (flags: Problems) => void;
-  galileo: GalileoConfig | null;
-  sessionId: string | null;
+  onSessionReset?: () => void;
 }) {
-  const [simResults, setSimResults] = useState<Record<string, SimulateRunResult | null>>({});
-  const [simulating, setSimulating] = useState<string | null>(null);
+  const chat = useChat();
 
   async function toggleScenario(ucId: string, presetId: string, turnOn: boolean) {
     if (turnOn) {
+      onSessionReset?.();
       onPresetApplied(await applyProblemPreset(presetId));
       return;
     }
@@ -45,35 +41,14 @@ export default function WorkshopGuide({
     onPresetApplied(await applyProblemPreset("clear"));
   }
 
-  async function simulate(ucId: string) {
-    setSimulating(ucId);
-    try {
-      const result = await runSimulateByUc(ucId);
-      setSimResults((prev) => ({ ...prev, [ucId]: result }));
-      onPresetApplied(result.flags);
-    } catch (e) {
-      setSimResults((prev) => ({
-        ...prev,
-        [ucId]: {
-          ok: false,
-          summary: e instanceof Error ? e.message : String(e),
-          steps: [],
-          flags: problems,
-        },
-      }));
-    } finally {
-      setSimulating(null);
-    }
-  }
-
   return (
     <div className="ns-tech-card ns-pp ns-bts-workshop">
       <div className="ns-pp-head ns-bts-workshop-head">
         <div className="ns-bts-workshop-intro">
           <p className="ns-bts-side-title">Workshop scenarios</p>
           <p className="ns-bts-side-sub">
-            Five Splunk Agent Observability use cases — one scenario at a time. Turn ON to inject the failure, Simulate to run the real
-            store request, then open Console with the session ID above.
+            Five Splunk Agent Observability use cases — one scenario at a time. Turn ON to inject the failure, run it
+            in the store using the button or chips below, then open Console with the session ID above.
           </p>
         </div>
         <button type="button" className="ns-bts-workshop-clear" onClick={clearAll}>
@@ -84,12 +59,10 @@ export default function WorkshopGuide({
       <ul className="ns-pp-list">
         {WORKSHOP_UCS.map((uc) => {
           const active = problems.active_scenario === uc.presetId;
-          const simResult = simResults[uc.id];
-          const busy = simulating === uc.id;
           const ucLabel = uc.id.toUpperCase();
 
           return (
-            <li key={uc.id} className={`ns-pp-card sev-${uc.sev}${active ? " on" : ""}`}>
+            <li key={uc.id} className={`ns-pp-card${active ? " on" : ""}`}>
               <div className="ns-pp-card-head">
                 <span className="ns-pp-title">{uc.shortTitle}</span>
                 <div className="ns-pp-badges">
@@ -101,52 +74,60 @@ export default function WorkshopGuide({
                 </div>
               </div>
 
-              <dl className="ns-pp-detail ns-pp-detail-visible">
-                <div>
-                  <dt>What happens</dt>
-                  <dd>{uc.what}</dd>
+              <p className="ns-pp-summary">{uc.summary}</p>
+
+              <ol className="ns-pp-steps">
+                {uc.steps.map((step, index) => (
+                  <li key={step}>
+                    <span className="ns-pp-step-label">Step {index + 1}.</span> {step}
+                  </li>
+                ))}
+              </ol>
+
+              {uc.navigateAction && (
+                <div className="ns-pp-nav-action">
+                  <Link href={uc.navigateAction.href} className="ns-pp-action-btn">
+                    {uc.navigateAction.label} →
+                  </Link>
+                  {uc.navigateAction.loginHint && (
+                    <p className="ns-pp-nav-hint">{uc.navigateAction.loginHint}</p>
+                  )}
                 </div>
-                <div>
-                  <dt>How it breaks</dt>
-                  <dd>{uc.how}</dd>
+              )}
+
+              {uc.chatPrompts && uc.chatPrompts.length > 0 && (
+                <div className="ns-pp-chat-prompts">
+                  <p className="ns-pp-chat-prompts-label">Try in chatbot</p>
+                  <div className="ns-concierge-chips">
+                    {uc.chatPrompts.map((chip) => (
+                      <button
+                        key={chip.question}
+                        type="button"
+                        className="ns-chip"
+                        onClick={() => chat.openChat({ seed: chip.question })}
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div>
-                  <dt>Where to try</dt>
-                  <dd className="ns-pp-where">
-                    <Link href={uc.storePath} className="ns-pp-try-link">
-                      {uc.storePath}
-                    </Link>
-                    {uc.tryPrompt && (
-                      <>
-                        {" "}
-                        — prompt: <code>{uc.tryPrompt}</code>
-                      </>
-                    )}
-                  </dd>
+              )}
+
+              <div className="ns-pp-console-check">
+                <p className="ns-pp-console-check-label">Verify in Console</p>
+                <p>{uc.consoleCheck}</p>
+                <div className="ns-pp-eval-defs" aria-label="Galileo evaluators">
+                  {uc.evaluators.map((ev) => {
+                    const info = GALILEO_EVALUATOR_INFO[ev];
+                    return (
+                      <div key={ev} className="ns-pp-eval-def">
+                        <span className="ns-pp-eval-chip">{ev}</span>
+                        {info && <p className="ns-pp-eval-def-summary">{info.summary}</p>}
+                      </div>
+                    );
+                  })}
                 </div>
-                <div>
-                  <dt>In the app</dt>
-                  <dd>{uc.signalApp}</dd>
-                </div>
-                <div>
-                  <dt>In Splunk Agent Observability</dt>
-                  <dd>
-                    {uc.signalGalileo}
-                    <ul className="ns-pp-eval-list" aria-label="Evaluators to enable">
-                      {uc.evaluators.map((ev) => (
-                        <li key={ev}>
-                          <span className="ns-pp-eval-chip">{ev}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    {uc.galileoProtect && (
-                      <p className="ns-pp-protect">
-                        <strong>Protect:</strong> {uc.galileoProtect}
-                      </p>
-                    )}
-                  </dd>
-                </div>
-              </dl>
+              </div>
 
               {uc.toggleKeys.length > 0 && (
                 <p className="ns-bts-uc-toggles-label">
@@ -173,29 +154,7 @@ export default function WorkshopGuide({
                   </span>
                   <span className="ns-pp-switch-label">{active ? "Scenario ON" : "Scenario OFF"}</span>
                 </button>
-                <button
-                  type="button"
-                  className="ns-bts-uc-simulate"
-                  onClick={() => simulate(uc.id)}
-                  disabled={busy}
-                >
-                  {busy && <span className="ns-spinner" aria-hidden />}
-                  {busy ? "Simulating…" : "Simulate"}
-                </button>
               </div>
-
-              <SimulateResult result={simResult ?? null} sessionId={sessionId} galileo={galileo} />
-
-              {uc.hints && uc.hints.length > 0 && (
-                <details className="ns-bts-uc-details">
-                  <summary>Tips</summary>
-                  {uc.hints.map((hint) => (
-                    <p key={hint} className="ns-bts-uc-hint">
-                      {hint}
-                    </p>
-                  ))}
-                </details>
-              )}
             </li>
           );
         })}

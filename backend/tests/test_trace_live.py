@@ -132,6 +132,32 @@ def test_trace_without_feature_falls_back_to_a_generic_name(obs_live):
     assert obs_live.traces[0].name == "vega.request"
 
 
+def test_shopper_session_name_from_active_uc():
+    assert galileo_obs.shopper_session_name("uc-1") == "Session-UC1"
+    assert galileo_obs.shopper_session_name("uc-5") == "Session-UC5"
+    assert galileo_obs.shopper_session_name("") is None
+
+
+def test_session_scope_passes_uc_name_to_start_session(obs_live, monkeypatch):
+    from app.problems import FLAGS
+
+    captured: dict = {}
+
+    def _capture_start_session(**kwargs):
+        captured.update(kwargs)
+        return "sess-id"
+
+    monkeypatch.setattr(galileo_context, "start_session", _capture_start_session)
+    FLAGS.active_scenario = "uc-2"
+    try:
+        with galileo_obs.session_scope("550e8400-e29b-41d4-a716-446655440000", feature="chat"):
+            pass
+        assert captured["name"] == "Session-UC2"
+        assert captured["external_id"] == "550e8400-e29b-41d4-a716-446655440000"
+    finally:
+        FLAGS.active_scenario = ""
+
+
 def test_agent_control_bridge_is_registered_when_control_is_active(obs_live, monkeypatch):
     from app.obs import galileo_control
 

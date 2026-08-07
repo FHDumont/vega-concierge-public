@@ -126,16 +126,26 @@ def is_store_policy_question(text: str) -> bool:
 
 
 def should_route_product_qa(text: str, context_sku: str | None) -> bool:
-    if not context_sku or is_store_policy_question(text):
+    if is_store_policy_question(text):
         return False
     msg = text or ""
     if re.search(r"NS-\d{3}", msg, re.I):
         return True
+    if not context_sku:
+        return False
     if _CONTEXT_ITEM_RE.search(msg):
         return True
     if _PRODUCT_INQUIRY_RE.search(msg):
         return True
     return "?" in msg
+
+
+def is_catalog_price_question(text: str) -> bool:
+    """Price/cost question about a SKU in the message (UC-1 chat without ``?``)."""
+    low = (text or "").lower()
+    if not re.search(r"NS-\d{3}", text or "", re.I):
+        return False
+    return any(h in low for h in ("price", "cost", "how much", "how many"))
 
 
 def is_context_item_question(text: str, context_sku: str | None) -> bool:
@@ -156,13 +166,17 @@ def is_shopping_intent(text: str) -> bool:
     return bool(re.search(r"\bsomething\b.*\bfor\b", low))
 
 
-def is_destructive_action_intent(text: str) -> bool:
-    low = (text or "").lower()
-    if "delete" in low and re.search(r"\bNS-\d+\b", text or "", re.I):
-        return True
-    if not any(w in low for w in ("customer", "buyer", "shopper", "user", "email", "address")):
+from ..prompt_injection import (
+    is_destructive_action_intent,
+    is_injection_discount_request,
+)
+
+
+def is_prompt_injection_product_qa(text: str, context_sku: str | None) -> bool:
+    """UC-4 — discount/override prompts routed to product Q&A when override + price cues present."""
+    if not FLAGS.prompt_injection:
         return False
-    return any(w in low for w in ("list", "show", "export", "all", "other", "recent", "dump", "every"))
+    return is_injection_discount_request(text)
 
 
 def _is_gift_message_composition_request(text: str) -> bool:
@@ -186,8 +200,17 @@ def _heuristic_conflicts(text: str, context_sku: str | None) -> bool:
 
 
 def detect_chat_intent(text: str, context_sku: str | None, context_order_id: str | None = None) -> str:
-    if FLAGS.prompt_injection and is_destructive_action_intent(text):
+    if not FLAGS.prompt_injection and is_injection_discount_request(text):
+        return "product_qa"
+    if not FLAGS.prompt_injection and is_destructive_action_intent(text, context_sku):
+        low = (text or "").lower()
+        if re.search(r"NS-\d{3}", text or "", re.I):
+            return "product_qa"
+        return "destructive_action"
+    if FLAGS.prompt_injection and is_destructive_action_intent(text, context_sku):
         return "destructive"
+    if FLAGS.prompt_injection and is_prompt_injection_product_qa(text, context_sku):
+        return "product_qa"
     low = (text or "").lower()
     if _is_gift_message_composition_request(text):
         return "general"
@@ -199,6 +222,8 @@ def detect_chat_intent(text: str, context_sku: str | None, context_order_id: str
         return "stats"
     if not is_store_policy_question(text):
         if should_route_product_qa(text, context_sku):
+            return "product_qa"
+        if is_catalog_price_question(text):
             return "product_qa"
         if re.search(r"NS-\d{3}", text or "", re.I) and "?" in text:
             return "product_qa"
@@ -258,6 +283,13 @@ def _fallback_classifier(text: str, heuristic: str) -> IntentClassification:
             source="fallback",
             confidence=0.7,
             reason="product question without page context",
+        )
+    if is_catalog_price_question(text):
+        return IntentClassification(
+            intent="product_qa",
+            source="fallback",
+            confidence=0.75,
+            reason="catalog price question with SKU",
         )
     return IntentClassification(
         intent="unsupported",
@@ -335,6 +367,10 @@ def apply_intent_guards(
     context_order_id: str | None,
 ) -> str:
     if intent == "product_qa" and not _resolve_product_sku(text, context_sku):
+        if is_injection_discount_request(text):
+            return intent
+        if FLAGS.prompt_injection and is_prompt_injection_product_qa(text, context_sku):
+            return intent
         return "unsupported"
     if intent == "returns" and not context_order_id and not is_returns_action_intent(text, context_order_id):
         return "unsupported"

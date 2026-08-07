@@ -373,6 +373,7 @@ body {
 .ns-header-cta {
   display: inline-flex;
   align-items: center;
+  gap: 8px;
   padding: 6px 14px;
   border-radius: 999px;
   border: 1px solid var(--border);
@@ -389,6 +390,21 @@ body {
 .ns-header-cta.on {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
+}
+.ns-header-cta.live {
+  border-color: color-mix(in srgb, var(--sev-critical) 45%, var(--border));
+  background: color-mix(in srgb, var(--sev-critical) 8%, var(--surface-2));
+}
+.ns-header-cta-badge {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--sev-critical);
+  background: color-mix(in srgb, var(--sev-critical) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--sev-critical) 40%, transparent);
 }
 .ns-account {
   display: inline-flex;
@@ -506,6 +522,96 @@ a.ns-btn {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 14px;
+}
+.ns-pp-chat-prompts {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.ns-pp-chat-prompts-label {
+  margin: 0 0 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.ns-pp-chat-prompts .ns-concierge-chips {
+  margin-top: 8px;
+}
+.ns-pp-where-note {
+  color: var(--muted);
+  font-size: 0.92em;
+}
+.ns-pp-summary {
+  margin: 12px 0 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text);
+}
+.ns-pp-steps {
+  margin: 12px 0 0;
+  padding-left: 0;
+  list-style: none;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text);
+}
+.ns-pp-steps li + li {
+  margin-top: 8px;
+}
+.ns-pp-step-label {
+  font-weight: 600;
+  color: var(--muted);
+}
+.ns-pp-nav-action {
+  margin-top: 14px;
+}
+.ns-pp-nav-hint {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.ns-pp-console-check {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+  border: 1px solid var(--border);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.ns-pp-console-check-label {
+  margin: 0 0 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+.ns-pp-console-check p {
+  margin: 0;
+}
+.ns-pp-console-check .ns-pp-eval-defs {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.ns-pp-eval-def {
+  margin: 0;
+  padding: 0;
+}
+.ns-pp-eval-def + .ns-pp-eval-def {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed color-mix(in srgb, var(--border) 80%, transparent);
+}
+.ns-pp-eval-def-summary {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
 }
 .ns-concierge-picks {
   margin-top: 20px;
@@ -3358,6 +3464,54 @@ a.ns-back:hover {
 }
 .ns-bts-workshop .ns-pp-list {
   grid-template-columns: 1fr;
+}
+.ns-bts-workshop .ns-pp-card {
+  border: 1px solid color-mix(in srgb, var(--sev-normal) 45%, var(--border));
+  border-left: 5px solid var(--sev-normal);
+  background: var(--surface-2);
+}
+.ns-bts-workshop .ns-pp-card.on {
+  border: 1px solid color-mix(in srgb, var(--sev-critical) 55%, var(--border));
+  border-left: 5px solid var(--sev-critical);
+  background: color-mix(in srgb, var(--sev-critical) 8%, var(--surface));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--sev-critical) 22%, transparent);
+}
+.ns-pp-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-radius: 12px;
+  padding: 11px 18px;
+  font-weight: 700;
+  font-size: 14px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.ns-pp-action-btn:hover {
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  border-color: var(--accent);
+  color: var(--text);
+  text-decoration: none;
+}
+.ns-pp-action-btn:active {
+  transform: scale(0.99);
+}
+.ns-bts-workshop .ns-pp-chat-prompts .ns-chip {
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  color: var(--text);
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.ns-bts-workshop .ns-pp-chat-prompts .ns-chip:hover {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--text);
+  border-color: var(--accent);
 }
 .ns-pp-card {
   display: flex;

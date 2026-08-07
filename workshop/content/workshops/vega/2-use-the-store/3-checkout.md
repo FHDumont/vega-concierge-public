@@ -39,7 +39,8 @@ PAID  ──30s──▶  SHIPPED  ──90s──▶  DELIVERED
 ```
 
 {{< notice note "Workshop surfaces" >}}
-- **UC-2:** `inventory_outage` → checkout FAILED, `check_inventory` tool error in trace.
+- **UC-2 (preset):** `cost_spike` → demo gift question via chat / PDP / Simulate — trace `gift_recommend.workflow`, Agent Efficiency.
+- **Advanced:** `inventory_outage` → checkout FAILED, `check_inventory` tool error (Tool Errors — separate from preset UC-2).
 - **Advanced:** `fraud_false_positive`, `payment_outage`, `payment_latency` — each card has **Simulate**.
 {{< /notice >}}
 

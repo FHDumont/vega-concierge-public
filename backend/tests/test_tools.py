@@ -77,6 +77,21 @@ def test_public_product_qa_marks_the_hallucination_scenario_ungrounded(api_clien
     ).json()
     assert body["answer"]
     assert body["grounded"] is False
+    assert "249" not in body["answer"]
+
+
+def test_product_qa_layout_omits_catalog_price_when_ungrounded():
+    from app.chat_layout import build_product_qa_layout
+    from app.store.tools import CATALOG
+
+    product = next(p for p in CATALOG if p["sku"] == "NS-001")
+    invented = "Absolutely — it's on a special deal at just $9.90 today."
+    layout = build_product_qa_layout(product, invented, question="how much?", grounded=False)
+    assert layout
+    price_facts = [f for f in layout.get("facts") or [] if f.get("label") == "Price"]
+    assert len(price_facts) == 1
+    assert price_facts[0]["value"] == "$9.90"
+    assert "249" not in price_facts[0]["value"]
 
 
 def test_public_security_route_executes_the_uc4_delete_path(api_client, reset_problem_flags, pristine_catalog):

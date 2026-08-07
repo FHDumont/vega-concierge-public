@@ -55,6 +55,7 @@ class SpanSpy(BaseCallbackHandler):
         self.tool_inputs: list[object] = []
         self.tool_outputs: list[object] = []
         self.retriever_queries: list[str] = []
+        self.retriever_outputs: list[object] = []
 
     def on_llm_start(self, serialized, prompts, **kwargs):  # noqa: ANN001
         self.llm_names.append(event_label(serialized, **kwargs))
@@ -84,6 +85,9 @@ class SpanSpy(BaseCallbackHandler):
 
     def on_retriever_start(self, serialized, query, **kwargs):  # noqa: ANN001
         self.retriever_queries.append(query)
+
+    def on_retriever_end(self, documents, **kwargs):  # noqa: ANN001
+        self.retriever_outputs.append(documents)
 
     # --- consultas ---------------------------------------------------------
 

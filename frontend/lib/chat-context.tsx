@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { ChatMessage, ChatResult, sendChatMessage } from "@/lib/api";
+import { shouldCloseChatForStoreNavigation } from "@/lib/chat-store-navigation";
 
 const STORAGE_KEY = "vega.chat.thread";
 
@@ -104,6 +105,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           ...prev,
           { role: "assistant", content: result.reply || "Done.", result },
         ]);
+        if (shouldCloseChatForStoreNavigation(result)) {
+          setOpen(false);
+        }
       } catch {
         setTurns((prev) => [
           ...prev,

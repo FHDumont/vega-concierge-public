@@ -235,7 +235,10 @@ def _controlled_invoke(
         sink_token = _result_sink_var.set(sink)
         try:
             text = handler(current_prompt)
-            result, status = sink.get("result") or invoke(current_prompt)
+            if "result" in sink:
+                result, status = sink["result"]
+            else:
+                result, status = invoke(current_prompt)
             return text, result, status
         except Exception as exc:
             if type(exc).__name__ != "ControlSteerError":

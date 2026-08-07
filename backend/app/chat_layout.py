@@ -284,8 +284,14 @@ def _spec_bullets_from_qa(qa_row: dict | None) -> list[str]:
     return [p.strip().rstrip(".") for p in parts if p.strip() and ":" in p]
 
 
+def _price_from_answer(answer: str) -> str | None:
+    """First USD amount quoted in the model reply — used when grounded=false (UC-1)."""
+    match = re.search(r"\$\s*[\d,.]+", answer or "")
+    return match.group(0).replace(" ", "") if match else None
+
+
 def build_product_qa_layout(
-    product: dict, answer: str, *, question: str = "",
+    product: dict, answer: str, *, question: str = "", grounded: bool = True,
 ) -> dict[str, Any] | None:
     """Product Q&A — facts + spec bullets; sem duplicar lead truncado + seção Answer."""
     answer = (answer or "").strip()
@@ -295,18 +301,24 @@ def build_product_qa_layout(
     facts: list[dict[str, str]] = [{"label": "Product", "value": product["name"]}]
     low = answer.lower()
     if any(h in low for h in ("price", "cost", "$")):
-        facts.append({"label": "Price", "value": _usd(product["price"])})
-    if any(h in low for h in ("stock", "available", "availability")):
+        if grounded:
+            facts.append({"label": "Price", "value": _usd(product["price"])})
+        else:
+            quoted = _price_from_answer(answer)
+            if quoted:
+                facts.append({"label": "Price", "value": quoted})
+    if grounded and any(h in low for h in ("stock", "available", "availability")):
         facts.append({"label": "Availability", "value": _availability(product)})
 
     if is_product_overview_question(question):
         qa = next((row for row in rag.load_products_qa() if row["sku"] == product["sku"]), None)
         bullets = _spec_bullets_from_qa(qa)
-        overview_facts = [
-            {"label": "Product", "value": product["name"]},
-            {"label": "Price", "value": _usd(product["price"])},
-            {"label": "Availability", "value": _availability(product)},
-        ]
+        overview_facts = [{"label": "Product", "value": product["name"]}]
+        if grounded:
+            overview_facts.extend([
+                {"label": "Price", "value": _usd(product["price"])},
+                {"label": "Availability", "value": _availability(product)},
+            ])
         if bullets:
             return {"facts": overview_facts, "bullets": bullets[:6]}
         return {"facts": overview_facts}

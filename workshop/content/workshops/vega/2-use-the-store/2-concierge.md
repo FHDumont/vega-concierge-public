@@ -41,6 +41,6 @@ flowchart TD
 
 Session ID for Splunk Agent Observability: UUID in `localStorage` → header `X-Vega-Session` → `start_session(external_id=…)`.
 
-UC-2 **Simulate** sends a gift prompt through chat with `cost_spike` on, then runs checkout with `inventory_outage`.
+UC-2 **Simulate** sends the demo gift prompt through chat with preset **`cost_spike`** on — trace **`gift_recommend.workflow`** with redundant steps (same as PDP and floating chat). Advanced **Inventory outage** on checkout is a separate demo (Tool Errors).
 
 {{< checkpoint "The concierge recommended a real product with a reason, in a multi-turn chat thread" >}}

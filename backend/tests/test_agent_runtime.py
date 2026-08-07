@@ -75,7 +75,8 @@ def test_llm_boundary_requires_an_explicit_control_phase(empty_registry):
 
 def test_agent_control_consumes_the_local_agent_registration():
     assert galileo_control.register_steps() == [
-        {"type": "tool", "name": "delete_product"},
+        {"type": "llm", "name": "delete_product"},
+        {"type": "llm", "name": "list_recent_customers"},
         {"type": "tool", "name": "returns.finalize"},
         {"type": "llm", "name": "product_qa"},
         {"type": "llm", "name": "search"},

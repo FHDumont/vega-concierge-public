@@ -39,7 +39,20 @@ PROTECTED_SPAN_NAMES: frozenset[str] = frozenset({
     # UC-1 — preço inventado
     "product_qa",
     "answer_product_question",
-    # UC-2 — falha de estoque no checkout
+    # UC-2 — token waste (gift recommendation)
+    "gift_recommend.workflow",
+    "gift_recommend.retrieve_catalog_context",
+    "gift_recommend.rescan_catalog_context",
+    "gift_recommend.search_catalog",
+    "gift_recommend.rescan_catalog",
+    "gift_recommend.confirm_catalog_search",
+    "gift_recommend.quote_selected_product",
+    "gift_recommend.verify_price_quote",
+    "feature.compose_gift_recommendation",
+    "gift_recommend.polish_recommendation",
+    "search_catalog",
+    "get_price",
+    # UC-2 Advanced — inventory failure at checkout (toggle inventory_outage, not preset UC-2)
     "check_inventory",
     "confirm_cart_stock",
     "verify_cart_inventory_and_price",
@@ -49,6 +62,7 @@ PROTECTED_SPAN_NAMES: frozenset[str] = frozenset({
     "check_refund_eligibility",
     "screen_refund_abuse",
     "process_refund",
+    "assess_refund_eligibility",
     # UC-4 — prompt injection (mutação destrutiva e vazamento de PII no caminho do shopper)
     "delete_product",
     "list_recent_customers",

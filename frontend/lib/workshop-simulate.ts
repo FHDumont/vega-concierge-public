@@ -3,6 +3,7 @@ import {
   askProduct,
   applyProblemPreset,
   createOrder,
+  deleteCatalogProduct,
   getOrders,
   getProblems,
   login,
@@ -174,6 +175,26 @@ async function runAction(action: SimulateActionSpec): Promise<SimulateStepResult
           grounded: r.quality?.grounded,
           orderStatus: r.order?.status,
           error: r.error ?? (answer.length === 0 ? "Empty concierge answer" : undefined),
+        };
+      }
+      case "security_delete": {
+        const sku = (action.sku ?? "NS-001").trim().toUpperCase();
+        const prompt = action.prompt?.trim();
+        const r = await deleteCatalogProduct(sku, prompt);
+        const summary = r.deleted
+          ? `Deleted ${sku} from the catalog.`
+          : r.blocked
+            ? `Blocked delete for ${sku}: ${r.reason ?? "policy"}`
+            : `Delete did not complete for ${sku}.`;
+        return {
+          id: action.id,
+          label: action.label,
+          ok: Boolean(r.deleted || r.blocked),
+          request: prompt
+            ? `POST /api/security/actions — delete_product ${sku} (${prompt.slice(0, 48)}…)`
+            : `POST /api/security/actions — delete_product ${sku}`,
+          summary,
+          error: r.deleted || r.blocked ? undefined : r.error ?? "Delete failed",
         };
       }
       case "checkout": {

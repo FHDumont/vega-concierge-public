@@ -8,7 +8,10 @@ def register_local_agents() -> None:
     """Publish the current agents' stable runtime boundaries."""
     register_agent(AgentRegistration(
         name="catalog-administration",
-        control_steps=(AgentControlStep(type="tool", name="delete_product"),),
+        control_steps=(
+            AgentControlStep(type="llm", name="delete_product", phase="pre"),
+            AgentControlStep(type="llm", name="list_recent_customers", phase="pre"),
+        ),
     ))
     register_agent(AgentRegistration(
         name="returns",

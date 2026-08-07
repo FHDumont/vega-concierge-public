@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-# Inventário congelado: 62 rotas de `/api/*` + as 4 que o FastAPI publica sozinho.
+# Inventário congelado: 63 rotas de `/api/*` + as 4 que o FastAPI publica sozinho.
 # Ao ADICIONAR uma rota nova (aditivo, permitido), acrescente a linha aqui no mesmo commit.
 FROZEN_ROUTES: set[tuple[str, tuple[str, ...]]] = {
     ("/openapi.json", ("GET", "HEAD")),
@@ -26,6 +26,7 @@ FROZEN_ROUTES: set[tuple[str, tuple[str, ...]]] = {
     ("/api/galileo/config", ("GET",)),
     ("/api/run", ("POST",)),
     ("/api/chat", ("POST",)),
+    ("/api/recommend/gift", ("POST",)),
     ("/api/security/actions", ("POST",)),
     ("/api/product/qa", ("POST",)),
     ("/api/compare", ("POST",)),
@@ -113,9 +114,9 @@ def test_route_inventory_has_no_delta():
     assert not live - FROZEN_ROUTES, f"rotas novas não congeladas: {sorted(live - FROZEN_ROUTES)}"
 
 
-def test_api_surface_is_sixty_two_routes():
+def test_api_surface_is_sixty_three_routes():
     api_routes = {r for r in _live_routes() if r[0].startswith("/api/")}
-    assert len(api_routes) == 62, len(api_routes)
+    assert len(api_routes) == 63, len(api_routes)
 
 
 # --- endpoints exercidos offline ---------------------------------------------
@@ -152,7 +153,8 @@ def test_problems_round_trip_through_get_and_put(api_client, reset_problem_flags
 
 def test_uc_preset_sets_only_its_own_flags(api_client, reset_problem_flags):
     body = api_client.post("/api/problems/preset/uc-2").json()
-    assert body["inventory_outage"] is True
+    assert body["cost_spike"] is True
+    assert body["inventory_outage"] is False
     assert body["active_scenario"] == "uc-2"
     assert body["price_hallucination"] is False
 

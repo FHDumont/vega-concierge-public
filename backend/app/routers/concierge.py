@@ -2,11 +2,13 @@
 import logging
 from fastapi import APIRouter, Header
 from ..ai_agents import security
+from ..ai_agents.gift_recommend import recommend_gift
+from ..problems import FLAGS
 from ..runnable_config import ai_request_scope
 from ..ai_agents.chat_workflow import arun_chat_workflow
 from ..ai_agents.concierge_workflow import arun_workflow
-from ..schemas import ChatRequest, RunRequest, SecurityActionRequest
-from ._common import _optional_user_id
+from ..schemas import ChatRequest, GiftRecommendRequest, RunRequest, SecurityActionRequest
+from ._common import _optional_user_id, is_gift_recommend_demo_question
 
 log = logging.getLogger(__name__)
 
@@ -43,8 +45,35 @@ def security_action(req: SecurityActionRequest, authorization: str | None = Head
     user_id = _optional_user_id(authorization)
     with ai_request_scope(feature="security", session_id=x_vega_session, user_id=user_id) as config:
         if req.action == "delete_product":
-            return security.delete_catalog_product(req.sku, config=config)
+            return security.delete_catalog_product(req.sku, prompt=req.prompt, config=config)
         return {"customers": security.export_recent_customers(sku=req.sku, limit=5, config=config)}
+
+
+def _last_user_message(messages: list[dict]) -> str:
+    for item in reversed(messages):
+        if item.get("role") == "user":
+            return str(item.get("content") or "").strip()
+    return ""
+
+
+def _gift_to_chat_response(result: dict) -> dict:
+    return {
+        "answer": result.get("answer"),
+        "intent": "recommend",
+        "artifacts": {
+            "recommended": result.get("recommended"),
+            "quality": result.get("quality"),
+        },
+        "language": "en",
+        "llm_unavailable": False,
+        "trace": [],
+    }
+
+
+@router.post("/api/recommend/gift")
+def recommend_gift_endpoint(req: GiftRecommendRequest, x_vega_session: str | None = Header(default=None)):
+    with ai_request_scope(feature="gift_recommend", session_id=x_vega_session) as config:
+        return recommend_gift(req.request, config=config)
 
 
 @router.post("/api/chat")
@@ -54,9 +83,17 @@ async def chat(req: ChatRequest, authorization: str | None = Header(default=None
     error = None
     ctx = req.context.model_dump(exclude_none=True) if req.context else {}
     try:
-        with ai_request_scope(feature="chat", session_id=x_vega_session, user_id=user_id) as config:
-            messages = [m.model_dump() for m in req.messages]
-            final = await arun_chat_workflow(messages, context=ctx, config=config)
+        messages = [m.model_dump() for m in req.messages]
+        last_user = _last_user_message(messages)
+        delegate_gift = FLAGS.cost_spike and is_gift_recommend_demo_question(last_user)
+        # UC-2: trace root must be `gift_recommend`, not `chat`, so session-level Agent Efficiency
+        # reads redundant steps from the workflow I/O instead of a lean chat envelope.
+        feature = "gift_recommend" if delegate_gift else "chat"
+        with ai_request_scope(feature=feature, session_id=x_vega_session, user_id=user_id) as config:
+            if delegate_gift:
+                final = _gift_to_chat_response(recommend_gift(last_user, config=config))
+            else:
+                final = await arun_chat_workflow(messages, context=ctx, config=config)
     except Exception as e:
         log.exception("POST /api/chat failed")
         final = {"answer": "Something went wrong. Please try again.", "intent": "error",

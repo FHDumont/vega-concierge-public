@@ -19,7 +19,8 @@ In Splunk Agent Observability Console, open project **`vega-concierge`** and sel
 Enable at minimum for the workshop:
 
 * **Context Adherence** — grounded in retrieved content? (UC-1)
-* **Tool Errors** — failing tool calls? (UC-2)
+* **Agent Efficiency** — redundant steps / token waste? (UC-2 preset)
+* **Tool Errors** — failing tool calls? (Advanced inventory outage on checkout)
 * **Instruction Adherence** — policy followed? (UC-3)
 * **Prompt Injection** — override accepted? (UC-4)
 * **PII** — sensitive data in output? (UC-5)

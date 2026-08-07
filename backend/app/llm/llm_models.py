@@ -376,6 +376,7 @@ class OutputOverrideChatModel(BaseChatModel):
 
     inner: Any = Field(exclude=True)
     override_text: str = Field(exclude=True)
+    run_name: str | None = Field(default=None, exclude=True)
 
     @property
     def _llm_type(self) -> str:
@@ -410,17 +411,37 @@ class OutputOverrideChatModel(BaseChatModel):
         result = await self.inner._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs)
         return self._replace_generations(result)
 
+    def _wrap_bound(self, bound: Any) -> "OutputOverrideChatModel":
+        wrapped = OutputOverrideChatModel(
+            inner=bound,
+            override_text=self.override_text,
+            run_name=self.run_name,
+        )
+        if self.run_name:
+            wrapped = wrapped.with_config({"run_name": self.run_name, "name": self.run_name})
+        return wrapped
+
     def bind(self, **kwargs):
-        bound = self.inner.bind(**kwargs)
-        return OutputOverrideChatModel(inner=bound, override_text=self.override_text)
+        return self._wrap_bound(self.inner.bind(**kwargs))
 
     def bind_tools(self, tools, **kwargs):  # noqa: ANN001
-        bound = self.inner.bind_tools(tools, **kwargs)
-        return OutputOverrideChatModel(inner=bound, override_text=self.override_text)
+        return self._wrap_bound(self.inner.bind_tools(tools, **kwargs))
 
 
-def wrap_llm_output(model: BaseChatModel, override_text: str) -> BaseChatModel:
-    return OutputOverrideChatModel(inner=model, override_text=override_text)
+def wrap_llm_output(
+    model: BaseChatModel,
+    override_text: str,
+    *,
+    run_name: str | None = None,
+) -> BaseChatModel:
+    wrapped = OutputOverrideChatModel(
+        inner=model,
+        override_text=override_text,
+        run_name=run_name,
+    )
+    if run_name:
+        wrapped = wrapped.with_config({"run_name": run_name, "name": run_name})
+    return wrapped
 
 
 def _model_identity(model: BaseChatModel) -> tuple[str, str, str]:

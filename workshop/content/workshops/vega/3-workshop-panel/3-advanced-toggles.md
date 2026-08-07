@@ -14,7 +14,7 @@ When you need one failure without a UC preset, open **Admin → Workshop → Adv
 |---|---|---|---|
 | `price_hallucination` | alert | UC-1, UC-5 | Invented price/policy; PII in email (UC-5) |
 | `fraud_false_positive` | critical | — | Checkout FAILED, fraud BLOCK on valid card |
-| `inventory_outage` | critical | UC-2 | Checkout FAILED, stock OK in catalog |
+| `inventory_outage` | critical | Advanced | Checkout FAILED, stock OK in catalog (Tool Errors — not preset UC-2) |
 | `latency_spike` | warning | — | Slow catalog/concierge step |
 | `cost_spike` | notice | — | Extra chat rounds, more tokens |
 | `payment_outage` | critical | — | Payment always declines |

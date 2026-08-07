@@ -9,6 +9,7 @@ import { User } from "@/lib/api";
 import { CATEGORIES, Category } from "@/lib/shop";
 import { useAuth } from "@/lib/auth";
 import { useFlags } from "@/lib/flags";
+import { activeScenarioMenuLabel, useWorkshopProblems } from "@/lib/workshop-problems";
 import TierBadge from "./TierBadge";
 
 const NAV_CATEGORIES = CATEGORIES.filter((c) => c !== "All");
@@ -38,7 +39,9 @@ export default function Header({
   const useCasesActive = pathname.startsWith("/use-cases");
   const { user: authUser } = useAuth();
   const { flags } = useFlags();
+  const { problems } = useWorkshopProblems();
   const showUseCases = authUser?.role === "OWNER" || flags.behind_the_scenes;
+  const scenarioLabel = showUseCases ? activeScenarioMenuLabel(problems.active_scenario) : null;
 
   return (
     <header className="ns-header">
@@ -95,10 +98,16 @@ export default function Header({
           {showUseCases && (
             <Link
               href="/use-cases"
-              className={`ns-header-cta${useCasesActive ? " on" : ""}`}
+              className={`ns-header-cta${useCasesActive ? " on" : ""}${scenarioLabel ? " live" : ""}`}
               aria-current={useCasesActive ? "page" : undefined}
+              title={scenarioLabel ? `Workshop scenario active: ${scenarioLabel}` : "Workshop use cases"}
             >
               Use Cases
+              {scenarioLabel && (
+                <span className="ns-header-cta-badge" aria-label={`Scenario active: ${scenarioLabel}`}>
+                  {scenarioLabel}
+                </span>
+              )}
             </Link>
           )}
 

@@ -166,6 +166,61 @@ def test_notification_preview_forwards_callback_and_session_config(api_client, m
     assert captured[0]["metadata"]["order_id"] == order["id"]
 
 
+async def test_product_qa_policy_endpoint_emits_retriever_tool_and_llm_spans(api_client, request_trace):
+    """UC-1 policy question — RAG spans at HTTP boundary (search_policies + retriever chunks)."""
+    session_id = "span-product-qa-policy"
+    response = api_client.post(
+        "/api/product/qa",
+        headers={"X-Vega-Session": session_id},
+        json={"sku": "NS-001", "question": "how many days do I have to return this?"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["grounded"] is True
+    assert request_trace.sessions == [(session_id, "product_qa")]
+    assert has("product_qa.workflow", request_trace.spy.chain_names), request_trace.spy.chain_names
+    assert "search_policies" in request_trace.spy.tool_names, request_trace.spy.tool_names
+    assert request_trace.spy.retriever_queries, request_trace.spy.retriever_queries
+    assert request_trace.spy.retriever_outputs, request_trace.spy.retriever_outputs
+    docs = request_trace.spy.retriever_outputs[0]
+    assert isinstance(docs, list) and len(docs) >= 1
+    assert all(hasattr(doc, "page_content") for doc in docs)
+    assert has("feature.answer_product_question", request_trace.spy.chat_model_names), (
+        request_trace.spy.chat_model_names
+    )
+
+
+async def test_refund_endpoint_emits_search_policies_retriever_and_tool(api_client, request_trace):
+    """UC-3 refund — search_policies nested retriever at HTTP boundary."""
+    from app.store import orders
+    from app.store.tools import CATALOG
+
+    orders.init_db()
+    product = CATALOG[2]
+    item = {"sku": product["sku"], "name": product["name"], "qty": 1, "price": product["price"]}
+    order = orders.create_order(
+        [item],
+        {"name": "Trace", "email": "refund@vega.test", "address": "1 Trace Way"},
+        product["price"],
+        status="DELIVERED",
+    )
+    session_id = "span-refund-policy"
+    response = api_client.post(
+        f"/api/orders/{order['id']}/refund",
+        headers={"X-Vega-Session": session_id},
+    )
+
+    assert response.status_code == 200, response.text
+    assert request_trace.sessions == [(session_id, "returns")]
+    assert has("returns.workflow", request_trace.spy.chain_names), request_trace.spy.chain_names
+    assert "search_policies" in request_trace.spy.tool_names, request_trace.spy.tool_names
+    assert request_trace.spy.retriever_queries, request_trace.spy.retriever_queries
+    assert request_trace.spy.retriever_outputs, request_trace.spy.retriever_outputs
+    docs = request_trace.spy.retriever_outputs[0]
+    assert isinstance(docs, list) and len(docs) >= 1
+    assert all(hasattr(doc, "page_content") for doc in docs)
+
+
 async def test_chat_policy_endpoint_emits_workflow_retriever_and_llm_spans(api_client, request_trace):
     """Policy chat proves the full HTTP → graph → RAG → model callback path."""
     session_id = "span-chat-policy"
@@ -220,6 +275,27 @@ async def test_checkout_endpoint_emits_fulfillment_workflow_and_tools(api_client
     assert has(
         "fulfillment.decide_fraud_allow_or_block", request_trace.spy.chat_model_names,
     ), request_trace.spy.chat_model_names
+
+
+def test_checkout_inventory_outage_emits_fulfillment_workflow_and_check_inventory(
+    api_client, request_trace, reset_problem_flags,
+):
+    reset_problem_flags.inventory_outage = True
+    product = CATALOG[2]
+    response = api_client.post(
+        "/api/orders",
+        headers={"X-Vega-Session": "span-inventory-outage"},
+        json={
+            "items": [{"sku": product["sku"], "name": product["name"], "qty": 1, "price": product["price"]}],
+            "customer": {"name": "Trace", "email": "outage@vega.test", "address": "1 Trace Way"},
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json().get("status") == "FAILED"
+    assert request_trace.sessions == [("span-inventory-outage", "fulfillment")]
+    assert has("fulfillment.workflow", request_trace.spy.chain_names), request_trace.spy.chain_names
+    assert "check_inventory" in request_trace.spy.tool_names, request_trace.spy.tool_names
 
 
 @pytest.mark.parametrize(

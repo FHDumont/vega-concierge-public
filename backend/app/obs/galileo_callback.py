@@ -10,7 +10,6 @@ from .galileo_trace_compact import (
     compact_trace_payload,
     should_compact_chain_io,
     should_compact_workflow_io,
-    _compact_retriever_output,
     _compact_tool_output,
 )
 
@@ -356,10 +355,9 @@ if GalileoAsyncCallback is not None:
             parent_run_id: UUID | None = None,
             **kwargs: Any,
         ) -> Any:
-            try:
-                documents = _compact_retriever_output(documents)
-            except Exception as exc:  # noqa: BLE001
-                _logger.warning("trace compact skipped on retriever_end (%s)", exc)
+            # Pass document list through to the SDK unchanged — Chunk Relevance/Attribution
+            # need N individual chunks, not a compact preview dict. BTS/UI compaction lives in
+            # galileo_trace_compact at read/export time, not here (F-WORKSHOP-RAG-1, ADR-031).
             await super().on_retriever_end(
                 documents, run_id=run_id, parent_run_id=self._reparent(parent_run_id), **kwargs,
             )

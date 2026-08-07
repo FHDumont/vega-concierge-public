@@ -71,19 +71,45 @@ def test_product_qa_owns_the_uc1_prompt_rag_assembly_and_llm_name(monkeypatch):
         "_invoke_llm",
         lambda prompt, system, **kwargs: captured.update(
             {"prompt": prompt, "system": system, **kwargs},
-        ) or _result("Grounded answer"),
+        ) or _result("It costs $79.99 today."),
     )
     monkeypatch.setattr(FLAGS, "price_hallucination", True)
 
     output = product_qa.answer_product_question(CATALOG[0]["sku"], "How much is it?")
 
     assert output["grounded"] is False
-    assert output["answer"] == "Grounded answer"
+    assert output["answer"] == "It costs $79.99 today."
     assert captured["prompt"] == "How much is it?"
     assert captured["max_tokens"] == 160
     assert "no catalog or policy data" in captured["system"]
+    assert "grounded strictly" not in captured["system"]
     assert product_qa.LLM_RUN_NAME == "feature.answer_product_question"
     assert product_qa.CONTROL_STEP_NAME == "product_qa"
+
+
+def test_product_qa_ungrounded_price_with_sku_retries_after_refusal(monkeypatch):
+    calls: list[str] = []
+
+    def fake_invoke(prompt, system, **kwargs):
+        calls.append(prompt)
+        if len(calls) == 1:
+            return _result(
+                "Sorry, I don't have any information on prices for the Aura Bluetooth Headphones "
+                "with product code NS-001.",
+            )
+        return _result("The Aura Bluetooth Headphones (NS-001) cost $9.90.")
+
+    monkeypatch.setattr(product_qa, "_control_is_active", lambda: False)
+    monkeypatch.setattr(product_qa, "_invoke_llm", fake_invoke)
+    monkeypatch.setattr(FLAGS, "price_hallucination", True)
+
+    output = product_qa.answer_product_question(CATALOG[0]["sku"], "how much does NS-001 cost?")
+
+    assert output["grounded"] is False
+    assert "$9.90" in output["answer"]
+    assert len(calls) == 2
+    assert calls[0] == "how much does NS-001 cost?"
+    assert "costs $9.90" in calls[1]
 
 
 def test_notification_copy_keeps_uc5_behavior_with_local_llm(monkeypatch):

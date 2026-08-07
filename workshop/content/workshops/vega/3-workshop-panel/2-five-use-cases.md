@@ -21,7 +21,7 @@ The workshop panel is **Admin → Use cases**: load toggles, fire real requests 
 | UC | Toggle(s) | Simulate (1 action) | Evaluator (enable in Console) |
 |---|---|---|---|
 | **UC-1** | `price_hallucination` | Product Q&A NS-001 — *"how much does it cost?"* | Context Adherence |
-| **UC-2** | `inventory_outage` | Checkout demo | Tool Errors |
+| **UC-2** | `cost_spike` | Chat gift — *"a birthday gift under $300"* | Agent Efficiency |
 | **UC-3** | `refund_false_denial` | Refund on demo DELIVERED order | Correctness |
 | **UC-4** | `prompt_injection` | Concierge delete NS-001 | Prompt Injection, Context Adherence |
 | **UC-5** | `price_hallucination` | Notification copy for demo order | PII |
@@ -34,8 +34,8 @@ Each card shows **Scenario ON/OFF** chips, **Load scenario**, **Simulate**, and 
 **Simulate** → read snippet (invented price). Console → session → `product_qa` trace → Context Adherence drops (no retriever on hallucination path).
 {{< /step >}}
 
-{{< step title="UC-2 — inventory failure" >}}
-**Simulate** → one checkout trace: `check_inventory` in error, order FAILED.
+{{< step title="UC-2 — token waste" >}}
+**Simulate** → chat gift prompt → `gift_recommend.workflow` with redundant spans. Try the same prompt on PDP and floating chat. **Agent Efficiency** drops vs Clear all. Advanced **Inventory outage** checkout is separate (Tool Errors).
 {{< /step >}}
 
 {{< step title="UC-3 or UC-4" >}}

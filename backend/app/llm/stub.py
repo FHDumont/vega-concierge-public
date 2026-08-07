@@ -149,7 +149,6 @@ class VegaStubChatModel(BaseChatModel):
 
         from ..galileo_span import DELETE_PRODUCT_TOOL_NAME, LIST_RECENT_CUSTOMERS_TOOL_NAME
         from ..problems import FLAGS
-        from ..store.tools import get_price, search_catalog
 
         system, _ = _messages_to_parts(messages)
         request, budget = _parse_request_from_messages(messages)
@@ -246,7 +245,9 @@ class VegaStubChatModel(BaseChatModel):
                     candidates = parsed
                 break
         if not candidates:
-            candidates = search_catalog(request, budget)
+            candidates = _stub_invoke_tool(
+                "search_catalog", {"query": request, "budget": budget}, run_manager, **kwargs,
+            )
 
         if not price_done:
             selected = _stub_pick(candidates, constraints)
@@ -264,7 +265,12 @@ class VegaStubChatModel(BaseChatModel):
         if selected and quote:
             selected = {**selected, "quote": quote}
         elif selected:
-            selected = {**selected, "quote": get_price(selected["sku"])}
+            selected = {
+                **selected,
+                "quote": _stub_invoke_tool(
+                    "get_price", {"sku": selected["sku"]}, run_manager, **kwargs,
+                ),
+            }
 
         text = _stub_recommendation(selected)
         return self._react_final_response(system, request, text, **kwargs)
@@ -403,6 +409,25 @@ def _messages_to_parts(messages: list[BaseMessage]) -> tuple[str, str]:
     return "\n".join(system_parts), "\n".join(prompt_parts)
 
 
+def _stub_invoke_config(run_manager, **kwargs) -> dict:  # noqa: ANN001
+    """RunnableConfig for stub fallbacks — propagates callbacks when present."""
+    config = kwargs.get("config")
+    if isinstance(config, dict):
+        return dict(config)
+    if run_manager is not None:
+        handlers = getattr(run_manager, "handlers", None)
+        if handlers:
+            return {"callbacks": list(handlers)}
+    return {}
+
+
+def _stub_invoke_tool(name: str, args: dict, run_manager, **kwargs):  # noqa: ANN001
+    """StructuredTool.invoke for stub ReAct fallbacks — never call tools.py directly."""
+    from ..store.langchain_tools import TOOLS_BY_NAME
+
+    return TOOLS_BY_NAME[name].invoke(args, config=_stub_invoke_config(run_manager, **kwargs))
+
+
 def _parse_request_from_messages(messages: list[BaseMessage]) -> tuple[str, float]:
     request = ""
     for m in messages:
@@ -460,12 +485,12 @@ def _stub_plain_text(system: str, prompt: str, *, verbose: bool = False, max_tok
                 and days is not None
                 and days <= REFUND_WINDOW_DAYS
             ):
-                wrong_days = int(days + REFUND_WINDOW_DAYS + 15)
+                false_denial_window = 10
                 return json.dumps({
                     "eligible": False,
                     "reason": (
-                        f"Delivered {wrong_days} days ago — outside the "
-                        f"{REFUND_WINDOW_DAYS}-day window."
+                        f"Delivered {int(days)} days ago — outside the "
+                        f"{false_denial_window}-day return window."
                     ),
                 })
             return json.dumps({"eligible": True, "reason": "Stub eligibility assessment."})

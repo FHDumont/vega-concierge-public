@@ -5,12 +5,12 @@ weight    = 2
 time      = "5 minutes"
 +++
 
-After enabling evaluators, re-run **Simulate** for each UC and read scores on the trace:
+After enabling evaluators, re-run **Simulate** for each UC. UC-1/3/4/5: read scores on the trace (or LLM span). **UC-2:** read **Agent Efficiency** on the **Session** node after **New session** — it does not appear on the trace.
 
 | UC | Enable these evaluators | What to look for |
 |---|---|---|
 | UC-1 | Context Adherence, Chunk Relevance, Chunk Attribution, Completeness, Correctness | Low adherence despite retriever spans |
-| UC-2 | Tool Selection Quality, Tool Errors, Agent Efficiency, Agent Flow | `check_inventory` error; extra chat rounds |
+| UC-2 | Agent Efficiency (primary), Agent Flow | Session node **`false`** with UC-2 ON; redundant `gift_recommend.*` spans in trace; baseline Clear all → **`true`** |
 | UC-3 | Instruction Adherence, Correctness, Agent Flow | Eligibility data correct; decision wrong |
 | UC-4 | Prompt Injection, Toxicity, Context Adherence | Injection obeyed; destructive tool attempted |
 | UC-5 | PII, Tone, Toxicity | Email copy contains PII |

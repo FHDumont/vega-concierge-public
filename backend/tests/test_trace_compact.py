@@ -179,6 +179,33 @@ def test_compact_trace_payload_routes_notification_copy_workflow_without_pii():
     assert "customer_email" not in out
 
 
+def test_compact_trace_payload_routes_gift_recommend_workflow_with_redundant_signal():
+    from app.obs.galileo_trace_compact import compact_trace_payload
+
+    data = {
+        "request": "a birthday gift under $300",
+        "answer": "We recommend the Aura Bluetooth Headphones (NS-001) at $249.00.",
+        "recommended": {"sku": "NS-001", "name": "Aura Bluetooth Headphones", "price": 249.0},
+        "quality": {"grounded": True, "accuracy": 1.0},
+        "observability": {
+            "redundant_steps": [
+                "gift_recommend.rescan_catalog_context",
+                "gift_recommend.rescan_catalog",
+                "gift_recommend.confirm_catalog_search",
+                "gift_recommend.verify_price_quote",
+                "gift_recommend.polish_recommendation",
+            ],
+            "duplicate_tool_calls": {"search_catalog": 3, "get_price": 2},
+            "retriever_passes": 2,
+            "llm_passes": 2,
+        },
+    }
+    out = compact_trace_payload(data, name="gift_recommend.workflow")
+    assert out["request"] == "a birthday gift under $300"
+    assert out["duplicate_tool_calls"]["search_catalog"] == 3
+    assert "gift_recommend.confirm_catalog_search" in out["redundant_steps"]
+
+
 def test_fulfillment_compaction_is_unaffected_by_the_returns_routing():
     """Congela o comportamento atual do fulfillment — guarda contra a "correção" refutada
     (`_compact_fulfillment_state` lendo `updated_order`) ser reintroduzida."""

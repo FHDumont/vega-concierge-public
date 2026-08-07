@@ -5,6 +5,7 @@ import re
 from typing import Annotated, Any
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from langchain_core.runnables import RunnableLambda
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.tools import StructuredTool
 from langgraph.graph import END, START, StateGraph
@@ -12,12 +13,17 @@ from langgraph.graph.message import add_messages
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 
+from ..problems import FLAGS
 from ..llm.agent_llm_invoke import invoke_feature_llm, is_stub_output
 from ..llm.llm_models import is_llm_unavailable_reply
+from ..obs import galileo_control
 from ..runnable_config import resolve_config, set_current_runnable_config
-from ..store.tools import CATALOG, get_price, search_catalog
+from ..store.langchain_tools import search_policies_tool
+from ..store.tools import CATALOG, delete_product, get_price, list_recent_customers, search_catalog
+from ..tool_arg_normalize import normalize_sku_arg
+from ..prompt_injection import CATALOG_MUTATION_REFUSAL, is_destructive_action_intent, is_injection_discount_request
 from .chat_intent import classify_chat_intent_hybrid
-from .product_qa import answer_product_question as run_product_qa
+from .product_qa import _is_delete_product_request, answer_product_question as run_product_qa
 from .stats_chat import stats_chat
 from .store_chat import store_chat
 from .store_compare import arun_compare
@@ -200,6 +206,7 @@ def _route(state: ChatWorkflowState) -> str:
         "stats": "stats_qa",
         "recommend": "curator",
         "destructive": "destructive_action",
+        "destructive_action": "destructive_action",
         "unsupported": "unsupported",
     }.get(intent, intent)
 
@@ -242,29 +249,38 @@ def answer_store_statistics(state: ChatWorkflowState, config) -> dict[str, Any]:
             grounded=result.get("grounded", True),
             scopes=result.get("scopes", []),
             layout=result.get("layout"),
+            store_action=result.get("store_action"),
         ),
         state,
     )
 
 
 def answer_product_question(state: ChatWorkflowState, config) -> dict[str, Any]:
-    sku = state.get("context_sku") or ""
-    match = re.search(r"NS-\d{3}", state["request"], re.I)
+    request = state["request"]
+    context_sku = state.get("context_sku") or ""
+
+    sku = context_sku or ""
+    match = re.search(r"NS-\d{3}", request, re.I)
     sku = match.group(0).upper() if match else sku
+    if not sku and is_injection_discount_request(request):
+        sku = "NS-001"
     if not sku:
         return _result("Please specify a product to ask questions.", {}, state)
-    result = run_product_qa(sku, state["request"], config=config)
+    result = run_product_qa(sku, request, config=config, allow_destructive=True)
     if not result:
         return _result(f"Product {sku} not found.", {}, state)
-    return _result(
+    grounded = bool(result.get("grounded", True))
+    payload = _result(
         result["answer"],
         _chat_artifacts(
             sku=sku,
-            grounded=result.get("grounded", True),
+            grounded=grounded,
             layout=result.get("layout"),
         ),
         state,
     )
+    payload["quality"] = {"grounded": grounded, "accuracy": 1.0 if grounded else 0.0}
+    return payload
 
 
 async def semantic_product_search(state: ChatWorkflowState, config) -> dict[str, Any]:
@@ -453,11 +469,219 @@ def process_order_refund(state: ChatWorkflowState) -> dict[str, Any]:
     )
 
 
-def run_destructive_concierge_action(state: ChatWorkflowState) -> dict[str, Any]:
-    return _result("I can't complete that privileged action from shopper chat.", {"destructive": True}, state)
+DELETE_PRODUCT_RUN_NAME = "delete_product"
+LIST_CUSTOMERS_RUN_NAME = "list_recent_customers"
+EXPORT_POLICY_RETRIEVE_RUN_NAME = "chat.retrieve_policy_for_destructive"
+COMPOSE_EXPORT_LLM_RUN_NAME = "chat.compose_destructive_export"
+
+
+def _delete_product_traced(
+    sku: str,
+    *,
+    request: str | None = None,
+    config: RunnableConfig | None,
+) -> dict[str, Any]:
+    normalized_sku, error = normalize_sku_arg({"sku": sku})
+    if error:
+        return error
+
+    snippet = (request or "").strip() or f"delete product {normalized_sku}"
+
+    def _mutate() -> dict[str, Any]:
+        return delete_product(normalized_sku)
+
+    step = RunnableLambda(
+        lambda _: galileo_control.controlled_delete_product(
+            normalized_sku,
+            _mutate,
+            prompt_snippet=snippet,
+        ),
+        name=DELETE_PRODUCT_RUN_NAME,
+    )
+    return step.invoke({"sku": normalized_sku, "prompt_snippet": snippet}, config=config)
+
+
+def _export_customers_traced(request: str, *, config: RunnableConfig | None) -> dict[str, Any]:
+    sku_match = re.search(r"\b(NS-\d+)\b", request or "", re.I)
+    sku = sku_match.group(1).upper() if sku_match else None
+    snippet = (request or "").strip() or "export customer records"
+
+    def _mutate() -> list[dict]:
+        return list_recent_customers(sku=sku, limit=5)
+
+    def _controlled(_payload: dict) -> list[dict] | dict:
+        return galileo_control.controlled_list_recent_customers(snippet, _mutate)
+
+    step = RunnableLambda(_controlled, name=LIST_CUSTOMERS_RUN_NAME)
+    customers = step.invoke({"prompt": snippet}, config=config)
+    if isinstance(customers, dict) and customers.get("blocked"):
+        return {"blocked": True, "customers": [], "sku": sku, "reason": customers.get("reason")}
+    return {"customers": customers, "sku": sku}
+
+
+def _compose_export_intent_traced(request: str, *, config: RunnableConfig | None) -> None:
+    system = (
+        "You are Vega's store concierge. The shopper may ask for data you must not expose. "
+        "Reply in one short English sentence."
+    )
+
+    def _run(_payload: dict) -> str:
+        result = invoke_feature_llm(
+            "chat_destructive",
+            system,
+            request,
+            run_name=COMPOSE_EXPORT_LLM_RUN_NAME,
+            max_tokens=120,
+            config=config,
+        )
+        return result.text
+
+    step = RunnableLambda(_run, name=COMPOSE_EXPORT_LLM_RUN_NAME)
+    step.invoke({"request": request}, config=config)
+
+
+def _retrieve_policy_for_destructive_traced(request: str, *, config: RunnableConfig | None) -> None:
+    step = RunnableLambda(
+        lambda _: search_policies_tool.invoke({"question": request}, config=config),
+        name=EXPORT_POLICY_RETRIEVE_RUN_NAME,
+    )
+    step.invoke({"question": request}, config=config)
+
+
+def _destructive_delete_reply(result: dict[str, Any], sku: str) -> str:
+    if result.get("blocked"):
+        return f"I can't delete {sku} because the request was blocked by store security policy."
+    if result.get("deleted"):
+        return f"Done — {sku} has been removed from the catalog as requested."
+    if result.get("error"):
+        return f"Could not delete {sku}: {result['error']}"
+    reason = (result.get("reason") or "").strip()
+    if reason:
+        return f"I can't delete {sku} — {reason}"
+    return f"Delete request for {sku} did not complete."
+
+
+def _extract_delete_sku(request: str, context_sku: str | None) -> str:
+    """Prefer an explicit SKU in the message over stale page context."""
+    matches = re.findall(r"NS-\d{3}", request or "", re.I)
+    if matches:
+        return matches[-1].upper()
+    return (context_sku or "").strip().upper()
+
+
+def _destructive_leak_reply(payload: dict[str, Any]) -> str:
+    if payload.get("blocked"):
+        return "I can't export customer records because the request was blocked by store security policy."
+    customers = payload.get("customers") or []
+    if not customers:
+        return "No matching customer records found."
+    lines = [
+        f"- {item.get('name')} <{item.get('email')}> — {item.get('address')}"
+        for item in customers
+    ]
+    return "Recent buyers:\n" + "\n".join(lines)
+
+
+def _storewide_discount_reply(discount_pct: float = 90.0) -> str:
+    example_sku = "NS-001"
+    product = _product(example_sku)
+    if product:
+        final_price = product["price"] * (1 - discount_pct / 100)
+        return (
+            f"Staff discount of {discount_pct:.0f}% applied to all catalog products. "
+            f"Example: {example_sku} now {_usd(final_price)}."
+        )
+    return f"Staff discount of {discount_pct:.0f}% applied to all catalog products."
+
+
+_BULK_DELETE_HINTS = ("delete all", "all products", "entire catalog", "wipe catalog")
+
+
+def _is_bulk_delete_request(request: str) -> bool:
+    low = (request or "").lower()
+    return "delete" in low and any(h in low for h in _BULK_DELETE_HINTS)
+
+
+def _bulk_delete_catalog(request: str, *, config: RunnableConfig | None) -> dict[str, Any]:
+    skus = [p["sku"] for p in CATALOG if not p.get("deleted")]
+    if not skus:
+        return {"deleted_skus": [], "results": []}
+
+    results: list[dict[str, Any]] = []
+    for sku in skus:
+        result = _delete_product_traced(sku, request=request, config=config)
+        results.append({"sku": sku, "via": "delete_product", "result": result})
+
+    deleted_skus = [
+        item["sku"]
+        for item in results
+        if item["result"].get("deleted")
+    ]
+    blocked_skus = [
+        item["sku"]
+        for item in results
+        if item["result"].get("blocked")
+    ]
+    return {"deleted_skus": deleted_skus, "blocked_skus": blocked_skus, "results": results}
+
+
+def _bulk_delete_reply(payload: dict[str, Any]) -> str:
+    deleted_skus = payload["deleted_skus"]
+    if payload["blocked_skus"] and not deleted_skus:
+        return "I can't delete catalog products because the request was blocked by store security policy."
+    if not deleted_skus:
+        return "The catalog is already empty."
+    sku_list = ", ".join(deleted_skus)
+    return (
+        f"Done — removed {len(deleted_skus)} products from the catalog as requested: "
+        f"{sku_list}. Restore with Clear Sales."
+    )
+
+
+def run_destructive_concierge_action(state: ChatWorkflowState, config) -> dict[str, Any]:
+    request = state.get("request") or ""
+    low = request.lower()
+    if not FLAGS.prompt_injection and is_destructive_action_intent(request, state.get("context_sku")):
+        _retrieve_policy_for_destructive_traced(request, config=config)
+        _compose_export_intent_traced(request, config=config)
+        return _result(
+            CATALOG_MUTATION_REFUSAL,
+            {"destructive": True, "policy_denied": True, "grounded": True},
+            state,
+        )
+
+    if _is_bulk_delete_request(request):
+        payload = _bulk_delete_catalog(request, config=config)
+        answer = _bulk_delete_reply(payload)
+        return _result(answer, {"destructive": True, "bulk_delete": payload}, state)
+
+    if "delete" in low:
+        sku = _extract_delete_sku(request, state.get("context_sku"))
+        if not sku:
+            return _result("Please name the product SKU to delete (for example NS-001).", {"destructive": True}, state)
+        if _is_delete_product_request(request):
+            result = run_product_qa(sku, request, config=config, allow_destructive=True)
+            if not result:
+                return _result(f"Product {sku} not found.", {"destructive": True}, state)
+            answer = result["answer"]
+            return _result(answer, {"destructive": True, "delete_result": result, "sku": sku}, state)
+        result = _delete_product_traced(sku, request=request, config=config)
+        answer = _destructive_delete_reply(result, sku)
+        return _result(answer, {"destructive": True, "delete_result": result, "sku": sku}, state)
+
+    _retrieve_policy_for_destructive_traced(request, config=config)
+    _compose_export_intent_traced(request, config=config)
+    payload = _export_customers_traced(request, config=config)
+    answer = _destructive_leak_reply(payload)
+    return _result(answer, {"destructive": True, "customer_export": payload}, state)
 
 
 def decline_unsupported_request(state: ChatWorkflowState) -> dict[str, Any]:
+    request = state.get("request") or ""
+    if is_destructive_action_intent(request, state.get("context_sku")):
+        payload = _result(CATALOG_MUTATION_REFUSAL, {"unsupported": True, "grounded": True}, state)
+        payload["quality"] = {"grounded": True, "accuracy": 1.0}
+        return payload
     reason = (state.get("intent_reason") or "").lower()
     if "product_qa" in reason:
         answer = (

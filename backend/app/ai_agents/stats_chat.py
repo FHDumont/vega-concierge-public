@@ -271,12 +271,33 @@ def _stats_fallback(question: str, facts: dict, *, grounded: bool) -> str:
     return " ".join(parts) or "I can help with catalog prices, best sellers, or your order history."
 
 
+def _store_action_for_guest_stats(
+    user_id: str | None,
+    scopes: set[str],
+    facts: dict,
+    answer: str,
+) -> str | None:
+    if user_id is not None:
+        return None
+    if "account" in scopes and facts.get("account") is None:
+        return "sign_in"
+    if "sign in" in (answer or "").lower():
+        return "sign_in"
+    return None
+
+
 def stats_chat(question: str, user_id: str | None, *, config=None) -> dict:
     question = (question or "").strip() or "Store statistics"
     scopes = _stats_scope(question) or {"catalog", "sales", "account"}
     if scopes == {"account"} and user_id is None:
         msg = "Please sign in to see your purchase history and how much you've spent."
-        return {"answer": msg, "grounded": True, "scopes": sorted(scopes), "layout": None}
+        return {
+            "answer": msg,
+            "grounded": True,
+            "scopes": sorted(scopes),
+            "layout": None,
+            "store_action": "sign_in",
+        }
 
     context_block, facts = _build_stats_context(scopes, user_id)
     facts["_question"] = question
@@ -306,11 +327,13 @@ def stats_chat(question: str, user_id: str | None, *, config=None) -> dict:
         text = deterministic if is_stub_output(result.text) else result.text.strip()
         layout = build_stats_layout(facts, scopes)
         answer = shopper_reply_from_layout(layout, text)
+        answer = answer.strip()
         return {
-            "answer": answer.strip(),
+            "answer": answer,
             "grounded": grounded,
             "scopes": sorted(scopes),
             "layout": layout,
+            "store_action": _store_action_for_guest_stats(user_id, scopes, facts, answer),
         }
 
     if FLAGS.latency_spike:
@@ -337,9 +360,11 @@ def stats_chat(question: str, user_id: str | None, *, config=None) -> dict:
         text = result.text
     layout = build_stats_layout(facts, scopes)
     answer = shopper_reply_from_layout(layout, text.strip())
+    answer = answer.strip()
     return {
-        "answer": answer.strip(),
+        "answer": answer,
         "grounded": grounded,
         "scopes": sorted(scopes),
         "layout": layout,
+        "store_action": _store_action_for_guest_stats(user_id, scopes, facts, answer),
     }

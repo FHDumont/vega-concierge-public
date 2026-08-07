@@ -5,10 +5,12 @@ no-op; a loja segue idêntica à demo base. Rulesets ficam no Console, não em c
 """
 from __future__ import annotations
 
+import asyncio
 import contextvars
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any, Callable, TypeVar
 
 from .. import ai_agents as _registered_ai_agents  # noqa: F401 - publishes local runtime boundaries
 from . import galileo_obs
@@ -20,13 +22,19 @@ from ..settings import settings
 
 log = logging.getLogger(__name__)
 
+_T = TypeVar("_T")
+_control_executor: ThreadPoolExecutor | None = None
+
 _initialized = False
 _warned = False
 _decorated = False
 
 # Backward-compatible read-only views for legacy call sites. The agent package owns
 # the declarations; this adapter only consumes them.
-CONTROL_FEATURES_PRE = control_features("pre")
+# delete_product runs through controlled_delete_product(), not controlled_feature_invoke().
+_CONTROLLED_LLM_PRE = control_features("pre")
+_CONTROL_STANDALONE_PRE = frozenset({"delete_product", "list_recent_customers"})
+CONTROL_FEATURES_PRE = _CONTROLLED_LLM_PRE - _CONTROL_STANDALONE_PRE
 CONTROL_FEATURES_POST = control_features("post")
 CONTROLLED_FEATURES = CONTROL_FEATURES_PRE | CONTROL_FEATURES_POST
 
@@ -63,6 +71,25 @@ def is_enabled() -> bool:
 
 def is_active() -> bool:
     return _initialized
+
+
+def run_control_step(fn: Callable[..., _T], /, *args: Any, **kwargs: Any) -> _T:
+    """Run an ``@control``-decorated step without nesting ``asyncio.run`` inside a live loop.
+
+    FastAPI ``async def`` handlers and LangGraph ``ainvoke`` already run inside an event loop;
+    ``agent_control``'s sync ``@control`` wrapper calls ``asyncio.run(...)`` and raises
+    ``RuntimeError: asyncio.run() cannot be called from a running event loop``.  When a loop is
+    active, execute the decorated step on a worker thread (no loop there).
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return fn(*args, **kwargs)
+    global _control_executor
+    if _control_executor is None:
+        _control_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="galileo-control")
+    ctx = contextvars.copy_context()
+    return _control_executor.submit(lambda: ctx.run(fn, *args, **kwargs)).result()
 
 
 def register_steps() -> list[dict[str, str]]:
@@ -174,7 +201,7 @@ def _ensure_decorated_steps() -> None:
         return outcome
 
     @control(step_name="delete_product")
-    def _delete_product_controlled(_payload: dict) -> dict:
+    def _delete_product_controlled(prompt: str) -> dict:
         fn = _invoke_fn_var.get()
         if fn is None:
             raise RuntimeError("missing invoke fn for delete_product control")
@@ -183,10 +210,16 @@ def _ensure_decorated_steps() -> None:
             return outcome[0]
         return outcome
 
+    @control(step_name="list_recent_customers")
+    def _list_recent_customers_controlled(prompt: str) -> list[dict] | dict:
+        del prompt
+        fn = _invoke_fn_var.get()
+        if fn is None:
+            raise RuntimeError("missing invoke fn for list_recent_customers control")
+        return fn()
+
     _returns_finalize_controlled.name = "returns.finalize"
     _returns_finalize_controlled.tool_name = "returns.finalize"
-    _delete_product_controlled.name = "delete_product"
-    _delete_product_controlled.tool_name = "delete_product"
 
     globals().update({
         "_product_qa_controlled": _product_qa_controlled,
@@ -194,6 +227,7 @@ def _ensure_decorated_steps() -> None:
         "_notification_copy_controlled": _notification_copy_controlled,
         "_returns_finalize_controlled": _returns_finalize_controlled,
         "_delete_product_controlled": _delete_product_controlled,
+        "_list_recent_customers_controlled": _list_recent_customers_controlled,
     })
     _decorated = True
 
@@ -228,7 +262,7 @@ def controlled_feature_invoke(
         token = _invoke_fn_var.set(invoke_fn)
         sink_token = _result_sink_var.set(sink)
         try:
-            text = _pre_handler(feature)(prompt)
+            text = run_control_step(_pre_handler(feature), prompt)
             # `invoke_fn()` de novo aqui só se o step NÃO chegou a rodar a chain (nunca no
             # caminho normal) — é rede de segurança, não o caminho esperado.
             r, status = sink.get("llm") or invoke_fn()
@@ -250,7 +284,7 @@ def controlled_feature_invoke(
         token = _invoke_fn_var.set(_bound_invoke)
         sink_token = _result_sink_var.set(sink)
         try:
-            text = handler(current_prompt)
+            text = run_control_step(handler, current_prompt)
             pack = sink.get("llm")
             if pack is None:
                 pack = chain_invoke(current_prompt)
@@ -289,17 +323,41 @@ def controlled_delete_product(
     from agent_control import ControlViolationError
 
     _ensure_decorated_steps()
-    payload: dict[str, Any] = {"sku": sku}
-    if prompt_snippet:
-        payload["prompt_snippet"] = prompt_snippet
+    snippet = (prompt_snippet or "").strip() or f"delete product {sku}"
 
     token = _invoke_fn_var.set(compute_fn)
     try:
         try:
-            return _delete_product_controlled(payload)
+            result = run_control_step(_delete_product_controlled, snippet)
+            return result
         except ControlViolationError as err:
             reason = (getattr(err, "message", None) or str(err)).strip()
             return {"deleted": False, "blocked": True, "sku": sku, "reason": reason or "blocked"}
+    finally:
+        _invoke_fn_var.reset(token)
+
+
+def controlled_list_recent_customers(
+    prompt: str,
+    compute_fn: Callable[[], list[dict]],
+) -> list[dict] | dict:
+    """UC-4 — Block em ``list_recent_customers`` (pre — antes de vazar PII)."""
+    if not is_active():
+        return compute_fn()
+
+    from agent_control import ControlViolationError
+
+    _ensure_decorated_steps()
+    snippet = (prompt or "").strip() or "export customer records"
+
+    token = _invoke_fn_var.set(compute_fn)
+    try:
+        try:
+            result = run_control_step(_list_recent_customers_controlled, snippet)
+            return result
+        except ControlViolationError as err:
+            reason = (getattr(err, "message", None) or str(err)).strip()
+            return {"blocked": True, "customers": [], "reason": reason or "blocked"}
     finally:
         _invoke_fn_var.reset(token)
 
@@ -323,7 +381,7 @@ def controlled_finalize_refund(
     token = _invoke_fn_var.set(lambda: outcome)
     try:
         try:
-            return _returns_finalize_controlled(payload)
+            return run_control_step(_returns_finalize_controlled, payload)
         except ControlViolationError:
             return corrected_fn()
     finally:

@@ -10,7 +10,7 @@ Reference when reading traces from **Simulate** or manual prompts:
 | # | Failure | Trigger | Splunk Agent Observability feature | Protect |
 |---|---|---|---|---|
 | 1 | Invented policy/price | `price_hallucination` | `product_qa` | observe |
-| 2 | Wrong tool + token waste | `inventory_outage` + `cost_spike` | `chat`, `fulfillment.workflow` | observe |
+| 2 | Token waste on simple gift question | preset UC-2 `cost_spike` | `gift_recommend.workflow` (Simulate, chat, PDP) | observe |
 | 3 | Refund wrongly denied | `refund_false_denial` | `returns.workflow` | **Block** `returns.finalize` |
 | 4 | Injection (+ delete) | `prompt_injection` | `product_qa`, chat | **Block** `delete_product` |
 | 5 | PII in email | `price_hallucination` | `notification_copy` | **Steer** |

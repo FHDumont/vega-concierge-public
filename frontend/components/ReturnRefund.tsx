@@ -11,6 +11,7 @@ export default function ReturnRefund({ order, onRefunded }: { order: Order; onRe
   const [result, setResult] = useState<RefundResult | null>(null);
   const [running, setRunning] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   if (order.status === "REFUNDED") {
     return (
@@ -26,12 +27,25 @@ export default function ReturnRefund({ order, onRefunded }: { order: Order; onRe
     setRunning(true);
     setResult(null);
     setFailed(false);
+    setErrorMessage(null);
     try {
       const res = await requestRefund(order.id);
       setResult(res);
       if (res.refunded && onRefunded) onRefunded(res.order);
-    } catch {
+    } catch (err) {
       setFailed(true);
+      const status = typeof err === "object" && err !== null && "status" in err
+        ? Number((err as { status?: number }).status)
+        : undefined;
+      if (status === 401) {
+        setErrorMessage("Please sign in to request a refund on this order.");
+      } else if (status === 409) {
+        setErrorMessage("Only delivered orders can be refunded.");
+      } else if (status === 404) {
+        setErrorMessage("We couldn't find this order. It may belong to another account.");
+      } else {
+        setErrorMessage("We couldn't process that right now. Please try again.");
+      }
     } finally {
       setRunning(false);
     }
@@ -55,7 +69,7 @@ export default function ReturnRefund({ order, onRefunded }: { order: Order; onRe
       {running && <AiThinking label="Reviewing your return request" />}
 
       {!running && failed && (
-        <div className="ns-note" role="status">We couldn’t process that right now. Please try again.</div>
+        <div className="ns-note" role="status">{errorMessage ?? "We couldn't process that right now. Please try again."}</div>
       )}
 
       {!running && result && (

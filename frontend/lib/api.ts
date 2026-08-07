@@ -213,6 +213,31 @@ export async function runConcierge(request: string): Promise<RunResult> {
   return r.json();
 }
 
+export type SecurityDeleteResult = {
+  deleted?: boolean;
+  blocked?: boolean;
+  sku?: string;
+  reason?: string;
+  error?: string;
+};
+
+export async function deleteCatalogProduct(
+  sku: string,
+  prompt?: string,
+): Promise<SecurityDeleteResult> {
+  const r = await fetch(`${BASE}/api/security/actions`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...sessionHeaders() },
+    body: JSON.stringify({
+      action: "delete_product",
+      sku,
+      ...(prompt ? { prompt } : {}),
+    }),
+  });
+  if (!r.ok) throw new Error(`security action failed: ${r.status}`);
+  return r.json();
+}
+
 // --- Chat aberto (F-050-CHAT) ------------------------------------------------
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 export type ChatContext = { sku?: string; order_id?: string };
@@ -243,6 +268,18 @@ export async function getCatalog(): Promise<Product[]> {
 export async function getPolicies(): Promise<StorePolicy[]> {
   const data = await (await fetch(`${BASE}/api/policies`)).json();
   return data.policies ?? [];
+}
+
+export async function recommendGift(
+  request = "a birthday gift under $300",
+): Promise<{ answer: string; recommended: Record<string, unknown> | null; quality: Record<string, unknown> }> {
+  const r = await fetch(`${BASE}/api/recommend/gift`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...sessionHeaders() },
+    body: JSON.stringify({ request }),
+  });
+  if (!r.ok) throw new Error(`gift recommend failed: ${r.status}`);
+  return r.json();
 }
 
 // --- IA-Produto (F-022) -----------------------------------------------------
@@ -366,7 +403,11 @@ export async function requestRefund(id: string): Promise<RefundResult> {
   const r = await fetch(`${BASE}/api/orders/${id}/refund`, {
     method: "POST", headers: { ...authHeaders(), ...sessionHeaders() },
   });
-  if (!r.ok) throw new Error(`refund failed: ${r.status}`);
+  if (!r.ok) {
+    const err = new Error(`refund failed: ${r.status}`) as Error & { status?: number };
+    err.status = r.status;
+    throw err;
+  }
   return r.json();
 }
 

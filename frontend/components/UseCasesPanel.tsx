@@ -7,21 +7,20 @@ import {
   getShopperSessionId,
   configureShopperSession,
   resetShopperSession,
-  Problems,
   GalileoConfig,
 } from "@/lib/api";
 import GalileoStatusBanner from "@/components/GalileoStatusBanner";
 import WorkshopGuide from "@/components/WorkshopGuide";
+import { useWorkshopProblems } from "@/lib/workshop-problems";
 
 export default function UseCasesPanel() {
-  const [problems, setP] = useState<Problems>({});
+  const { problems, setProblems } = useWorkshopProblems();
   const [galileo, setGalileo] = useState<GalileoConfig | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [newSessionStarted, setNewSessionStarted] = useState(false);
 
   useEffect(() => {
-    getProblems().then(setP).catch(() => {});
     getGalileoConfig()
       .then((g) => {
         setGalileo(g);
@@ -31,15 +30,15 @@ export default function UseCasesPanel() {
     setSessionId(getShopperSessionId());
   }, []);
 
-  function applyFlags(flags: Problems) {
-    setP(flags);
+  function applyFlags(flags: Parameters<typeof setProblems>[0]) {
+    setProblems(flags);
   }
 
-  async function copySessionId() {
-    const id = getShopperSessionId();
-    if (!id) return;
+  async function copySessionId(id?: string | null) {
+    const session = id ?? getShopperSessionId();
+    if (!session) return;
     try {
-      await navigator.clipboard.writeText(id);
+      await navigator.clipboard.writeText(session);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -54,7 +53,11 @@ export default function UseCasesPanel() {
     setTimeout(() => setNewSessionStarted(false), 2000);
   }
 
-  const shared = { galileo, sessionId };
+  function resetSessionSilent() {
+    const id = resetShopperSession();
+    setSessionId(id);
+    void copySessionId(id);
+  }
 
   return (
     <div className="ns-adm-wrap ns-use-cases-page">
@@ -62,7 +65,8 @@ export default function UseCasesPanel() {
         <div>
           <h1>Use cases</h1>
           <p className="sub">
-            Load a workshop scenario, simulate the real request, then open Splunk Agent Observability Console for traces and evaluators.
+            Turn ON a workshop scenario, run it in the store using the button or chips on each card, then open Splunk
+            Agent Observability Console for traces and evaluators.
           </p>
         </div>
       </div>
@@ -70,13 +74,17 @@ export default function UseCasesPanel() {
       <GalileoStatusBanner
         config={galileo}
         sessionId={sessionId}
-        onCopySession={copySessionId}
+        onCopySession={() => copySessionId()}
         copied={copied}
         onNewSession={startNewSession}
         newSessionStarted={newSessionStarted}
       />
 
-      <WorkshopGuide problems={problems} onPresetApplied={applyFlags} {...shared} />
+      <WorkshopGuide
+        problems={problems}
+        onPresetApplied={applyFlags}
+        onSessionReset={resetSessionSilent}
+      />
     </div>
   );
 }

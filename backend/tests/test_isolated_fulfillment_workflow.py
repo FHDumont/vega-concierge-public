@@ -1,4 +1,4 @@
-"""UC-2 coverage for the standalone inventory workflow."""
+"""Fulfillment workflow coverage — inventory checkout path (Advanced toggle inventory_outage)."""
 from __future__ import annotations
 
 import ast

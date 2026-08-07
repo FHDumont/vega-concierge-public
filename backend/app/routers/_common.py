@@ -37,6 +37,18 @@ def _require_owner(authorization: str | None) -> str:
     return user_id
 
 
+def is_gift_recommend_demo_question(text: str) -> bool:
+    """Gift/recommend shopping questions belong in gift_recommend when cost_spike is ON."""
+    q = (text or "").lower().strip()
+    if not q:
+        return False
+    if any(m in q for m in ("recommend", "curate picks", "gift under", "birthday gift under", "birthday gift")):
+        return True
+    if "gift" in q and any(word in q for word in ("under", "below", "budget", "$")):
+        return True
+    return False
+
+
 def _me_payload(user_id: str) -> dict:
     """Usuário público + tier recomputado pelo gasto; materializa o tier na coluna."""
     user = users.get_user(user_id)
