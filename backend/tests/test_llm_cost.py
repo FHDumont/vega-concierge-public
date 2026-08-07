@@ -10,9 +10,10 @@ import threading
 
 import pytest
 
-from app import llm_cache
-from app.agents import feature_complete
-from app.llm import get_llm
+from app.llm import llm_cache
+from app.ai_agents.product_qa import answer_product_question
+from app.ai_agents.store_discovery import stable_skus
+from app.llm.llm import get_llm
 
 cache_on = pytest.mark.skipif(
     not llm_cache.cache_globally_enabled(),
@@ -67,16 +68,18 @@ def test_cache_key_includes_system_max_tokens_and_verbose(clean_cache):
 
 
 @cache_on
-def test_feature_complete_reports_cache_status(clean_cache):
-    _, _, first = feature_complete("product_qa", "Tell me about the headphones")
-    _, _, second = feature_complete("product_qa", "Tell me about the headphones")
-    assert [first, second] == ["miss", "hit"]
+def test_product_qa_stays_available_without_the_retired_feature_dispatcher(clean_cache):
+    answer = answer_product_question("NS-001", "Tell me about the headphones")
+    assert answer and answer["answer"]
+    assert answer["grounded"] is True
 
 
 @cache_on
 def test_updating_an_agent_prompt_invalidates_the_cache(clean_cache):
-    from app import agent_config
+    from app.hub import agent_config
 
+    agent_config.init_db()
+    agent_config.seed_defaults()
     clean_cache.complete_cached(get_llm(), "inv", "sys", "q")
     assert len(clean_cache._cache) == 1
     current = agent_config.get_agent("product_qa")
@@ -93,9 +96,9 @@ def test_disabled_cache_always_misses(clean_cache):
     assert all(s == "miss" for s in statuses), statuses
     assert len(clean_cache._cache) == 0
 
-    _, _, s_a = feature_complete("product_qa", "Tell me about the headphones")
-    _, _, s_b = feature_complete("product_qa", "Tell me about the headphones")
-    assert (s_a, s_b) == ("miss", "miss")
+    first = answer_product_question("NS-001", "Tell me about the headphones")
+    second = answer_product_question("NS-001", "Tell me about the headphones")
+    assert first and second and first["answer"] and second["answer"]
     assert len(clean_cache._cache) == 0
 
 
@@ -113,8 +116,6 @@ def test_max_tokens_caps_the_output(clean_cache):
 
 
 def test_stable_sku_list_is_order_independent():
-    from app.ai_features import _stable_sku_list
-
-    assert _stable_sku_list(["NS-002", "NS-001"]) == _stable_sku_list(["NS-001", "NS-002"]) == [
+    assert stable_skus(["NS-002", "NS-001"]) == stable_skus(["NS-001", "NS-002"]) == [
         "NS-001", "NS-002",
     ]

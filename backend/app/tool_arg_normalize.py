@@ -8,14 +8,17 @@ from typing import Any
 _SKU_PATTERN = re.compile(r"NS-\d{3}", re.I)
 
 
-def format_tool_error(error: Exception, *, tool: str = "unknown") -> str:
-    """Short JSON for ToolNode residual errors — no stack trace in span output."""
+def format_tool_error(error: Exception) -> str:
+    """Short JSON for ToolNode residual errors — no stack trace in span output.
+
+    Sem `"tool"` no payload: o nome já está no span e no `ToolMessage.name` — LangGraph chama o
+    handler só com a exceção (infere o tipo tratado pela anotação do 1º parâmetro), então um
+    `tool=` explícito nunca chegava a ser passado, e o campo sempre saía `"unknown"`."""
     message = str(error).strip()
     if len(message) > 200:
         message = message[:197] + "..."
     return json.dumps({
         "ok": False,
-        "tool": tool,
         "error": type(error).__name__,
         "hint": message or "check tool arguments",
     })
@@ -109,12 +112,65 @@ def normalize_get_price_args(raw: dict) -> tuple[dict | None, dict | None]:
     if not isinstance(sku, str) or not _SKU_PATTERN.fullmatch(sku):
         sku = _extract_sku(sku)
     if not sku:
-        return None, {"ok": False, "error": "invalid_sku", "hint": "pass sku: NS-001"}
+        return None, {
+            "ok": False,
+            "error": "invalid_sku",
+            "hint": 'call get_price once per SKU: {"sku": "NS-001"}',
+        }
 
     out: dict = {"sku": sku.upper()}
     if note:
         out["note"] = note
     return out, None
+
+
+def normalize_search_policies_args(raw: dict) -> tuple[str | None, dict | None]:
+    """Primeira string não-vazia entre `question`/`query`/`q`/`text`/`input`.
+
+    Sem nenhuma → erro estruturado, nunca uma pergunta default: um default dispararia um
+    retriever span (`rag.retrieve_policies`) com resultado sem sentido, e a UC-1 se apoia
+    nesse span pra existir de verdade.
+    """
+    for key in ("question", "query", "q", "text", "input"):
+        val = raw.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip(), None
+    return None, {
+        "ok": False,
+        "error": "missing_question",
+        "hint": 'pass question: "your policy question"',
+    }
+
+
+def normalize_policy_lookup_args(raw: dict) -> tuple[str | None, dict | None]:
+    """`policy_lookup` só usa `status` (`app/store/tools.py:214-221`) — `order_id`/`total` são
+    ignorados pelo cálculo, então são aceitos ausentes sem erro. `status` é o único campo
+    obrigatório e NÃO é inventável: um default `"DELIVERED"` seria o bug do #72 (stub sem
+    `HumanMessage` inventando pedido entregue) promovido a produção.
+    """
+    status = raw.get("status")
+    if isinstance(status, str) and status.strip():
+        return status.strip().upper(), None
+    return None, {
+        "ok": False,
+        "error": "missing_status",
+        "hint": 'pass status: "DELIVERED" (the order\'s actual lifecycle status)',
+    }
+
+
+def normalize_refund_calc_args(raw: dict) -> tuple[float | None, dict | None]:
+    """`refund_calc` só usa `total` (`app/store/tools.py:219-221`). Recuperável de string
+    (`"R$179,00"`, `"$179"`) no molde de `_coerce_budget`; nunca um default `0.0` — é
+    literalmente o modo de falha do #72 (`refund_amount: 0` chegando ao usuário).
+    """
+    total = _coerce_budget(raw.get("total"))
+    if total is None:
+        return None, {
+            "ok": False,
+            "error": "missing_total",
+            "hint": "pass total as a number, e.g. 179.00",
+        }
+    return total, None
 
 
 def normalize_search_catalog_args(raw: dict) -> tuple[dict | None, dict | None]:

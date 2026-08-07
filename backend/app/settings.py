@@ -50,21 +50,21 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # --- identidade do deploy (api.py, runnable_config.py, hub.py) -------------
+    # --- identidade do deploy (api.py, runnable_config.py, hub/hub.py) ---------
     deployment_environment: str = "local-dev"
     vega_version: str = "dev"
     vega_git_sha: str = Field(default="local", validation_alias=AliasChoices("VEGA_GIT_SHA"))
     vega_build_date: str = ""
 
-    # --- persistência (db.py, llm_config.py) ----------------------------------
+    # --- persistência (store/db.py, llm/llm_config.py) ------------------------
     orders_db: str = os.path.join(_BACKEND_ROOT, "vega.db")
     vega_persist_dir: str = ""
 
-    # --- ciclo de vida do pedido (orders.py) ----------------------------------
+    # --- ciclo de vida do pedido (store/orders.py) ----------------------------
     order_ship_after_s: int = 30
     order_deliver_after_s: int = 90
 
-    # --- usuários, tiers e auth (users.py) ------------------------------------
+    # --- usuários, tiers e auth (store/users.py) ------------------------------
     tier_gold_usd: float = 1000
     tier_platinum_usd: float = 5000
     auth_pbkdf2_iterations: int = 120000
@@ -72,12 +72,12 @@ class Settings(BaseSettings):
     owner_password: str = "owner1234"  # default de DEMO — DT-012
     owner_name: str = "Fernando (Owner)"
 
-    # --- regras de negócio (tools.py, ai_features.py) -------------------------
+    # --- regras de negócio (store/tools.py, features/*.py) --------------------
     refund_window_days: int = 30
     admin_insights_window_days: int = 7
     admin_restock_at: int = 3
 
-    # --- gateway de pagamento simulado (payments.py) --------------------------
+    # --- gateway de pagamento simulado (store/payments.py) --------------------
     payment_latency_ms: float = 400
     payment_fail_rate: float = 0.0
     payment_latency_spike_ms: float = 1500
@@ -93,11 +93,11 @@ class Settings(BaseSettings):
     llm_rate_window_s: float = 60     # ...por janela (s); <=0 desliga
     llm_activity_max: int = 200
 
-    # --- Ollama do host (llm_config.py, rag.py, api.py) -----------------------
+    # --- Ollama do host (llm/llm_config.py, features/rag.py, api.py) ----------
     ollama_base_url: str = "http://host.docker.internal:11434"
     ollama_chat_model: str = "llama3.2"
 
-    # --- RAG (rag.py) ---------------------------------------------------------
+    # --- RAG (features/rag.py) ------------------------------------------------
     rag_enabled: bool = False
     rag_database_url: str = ""
     rag_top_k: int = 3
@@ -107,7 +107,7 @@ class Settings(BaseSettings):
     # SEU default — é a única forma de preservar o comportamento antigo num campo só.
     rag_embedding_model: str = ""
 
-    # --- observabilidade / Agent Control (galileo_obs.py, galileo_control.py) --
+    # --- observabilidade / Agent Control (obs/galileo_*.py) --------------------
     galileo_api_key: str = ""
     galileo_project: str = "vega-concierge"
     galileo_log_stream: str = Field(
@@ -119,10 +119,10 @@ class Settings(BaseSettings):
     agent_control_api_key_header: str = "Galileo-API-Key"
     vega_session_idle_minutes: int = 5
 
-    # --- hub / enrollment (enroll.py) -----------------------------------------
+    # --- hub / enrollment (hub/enroll.py) -------------------------------------
     enroll_token: str = ""
 
-    # --- simulador em modo browser (sim_browser.py) ---------------------------
+    # --- simulador em modo browser (sim/sim_browser.py) -----------------------
     sim_browser_base_url: str = "http://localhost:3000"
 
     # --- tokens de provider injetados pelo ambiente do SO ---------------------

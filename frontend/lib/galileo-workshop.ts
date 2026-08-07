@@ -137,7 +137,7 @@ export const WORKSHOP_UCS: WorkshopUC[] = [
     signalGalileo: "OFF: notification uses first name only, PII clear. ON: notification_copy trace — PII flags SSN and payment card in LLM output.",
     galileoProtect: "Steer on notification_copy when Protect rulesets are active — output is corrected in the trace.",
     evaluators: ["PII"],
-    protectSteps: ["notification_copy", "gift_message"],
+    protectSteps: ["notification_copy"],
     storePath: "/account",
     hints: [
       "Simulate generates notification copy for a DELIVERED order on demo@vega.test — seeded with demo SSN/card.",

@@ -1,6 +1,6 @@
 """Simulador avançado de sessões concorrentes (F-018, ADR-014)."""
 from fastapi import APIRouter, HTTPException
-from .. import simulator
+from ..sim import simulator
 from ..schemas import SimPauseRequest, SimStartRequest
 
 # Sem `prefix`: cada rota carrega o path completo, igualzinho ao que estava em `api.py`.
@@ -17,7 +17,7 @@ async def simulator_start(req: SimStartRequest):
     cfg = simulator.SimConfig.from_dict(req.model_dump(exclude_none=True))
     if cfg.mode == "browser":  # F-039: Playwright/Chromium são deps opcionais (não na imagem base)
         # import tardio: Playwright é dependência opcional, fora da imagem base (F-039)
-        from .. import sim_browser
+        from ..sim import sim_browser
         ok, reason = sim_browser.available()
         if not ok:
             raise HTTPException(status_code=400, detail=reason)

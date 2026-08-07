@@ -1,10 +1,9 @@
 """Admin de NEGÓCIO (sem auth, régua dos controles de workshop) — vendas, produtos e seed."""
 from fastapi import APIRouter, Header
-from .. import admin
-from .. import ai_features
+from ..ai_agents import insights
 from ..runnable_config import ai_request_scope
-from .. import orders
-from ..tools import CATALOG, reset_stock, restore_catalog
+from ..store import admin, orders
+from ..store.tools import CATALOG, reset_stock, restore_catalog
 
 # Sem `prefix`: cada rota carrega o path completo, igualzinho ao que estava em `api.py`.
 router = APIRouter()
@@ -27,8 +26,8 @@ def admin_summary():
 # por participante).
 @router.get("/api/admin/insights")
 def admin_insights(x_vega_session: str | None = Header(default=None)):
-    with ai_request_scope(feature="admin_insights", session_id=x_vega_session):
-        return ai_features.admin_insights()
+    with ai_request_scope(feature="admin_insights", session_id=x_vega_session) as config:
+        return insights.admin_insights(config=config)
 
 
 @router.get("/api/admin/orders")

@@ -1,21 +1,19 @@
 "use client";
 // Compare 2 produtos (F-029) — ponto de entrada na página de produto. O cliente escolhe outro
-// produto e a IA orquestra a comparação: Compare Coordinator (agente) busca os 2 produtos via
-// tool real e o Comparator (agente) gera o veredito exibido. Mostra só o conteúdo. Estilizado
-// pelas variáveis de paleta. Indicador global AiThinking (F-028) enquanto a comparação roda.
+// produto e a IA orquestra a comparação. Mostra veredito estruturado (facts + bullets) como no chat.
 import { useEffect, useState } from "react";
-import { Product, compareProducts, getCatalog } from "@/lib/api";
+import { AnswerLayoutBlock, AnswerLayout, hasLayoutContent } from "@/components/AnswerLayout";
+import { CompareResult, Product, compareProducts, getCatalog } from "@/lib/api";
 import { formatMoney } from "@/lib/shop";
 import AiThinking from "./AiThinking";
 
 export default function CompareProducts({ sku, name }: { sku: string; name: string }) {
   const [others, setOthers] = useState<Product[]>([]);
   const [pick, setPick] = useState("");
-  const [verdict, setVerdict] = useState<{ text: string; other: Product } | null>(null);
+  const [result, setResult] = useState<CompareResult | null>(null);
   const [running, setRunning] = useState(false);
   const [failed, setFailed] = useState(false);
 
-  // Catálogo p/ o seletor (exclui o produto atual). Reusa GET /api/catalog (sem endpoint novo).
   useEffect(() => {
     let alive = true;
     getCatalog()
@@ -28,20 +26,20 @@ export default function CompareProducts({ sku, name }: { sku: string; name: stri
 
   async function run() {
     if (!pick || running) return;
-    const other = others.find((p) => p.sku === pick);
-    if (!other) return;
+    if (!others.some((p) => p.sku === pick)) return;
     setRunning(true);
-    setVerdict(null);
+    setResult(null);
     setFailed(false);
     try {
-      const res = await compareProducts(sku, pick);
-      setVerdict({ text: res.verdict, other });
+      setResult(await compareProducts(sku, pick));
     } catch {
       setFailed(true);
     } finally {
       setRunning(false);
     }
   }
+
+  const layout = result?.layout as AnswerLayout | undefined;
 
   return (
     <section className="ns-pai ns-compare" aria-label="Compare with another product">
@@ -69,16 +67,26 @@ export default function CompareProducts({ sku, name }: { sku: string; name: stri
         </button>
       </div>
 
-      {(running || verdict || failed) && (
+      {(running || result || failed) && (
         <div className="ns-pai-answer">
           {running && <AiThinking label={`Comparing the ${name}`} />}
-          {!running && verdict && (
-            <>
-              <p className="ns-compare-vs">
-                <b>{name}</b> vs <b>{verdict.other.name}</b>
-              </p>
-              <p>{verdict.text}</p>
-            </>
+          {!running && result && (
+            <div className="ns-chat-artifact ns-chat-compare">
+              <div className="ns-chat-compare-grid">
+                <div className="ns-chat-mini-card">
+                  <b>{result.product_a.name}</b>
+                  <span>{formatMoney(result.product_a.price)}</span>
+                </div>
+                <div className="ns-chat-mini-card">
+                  <b>{result.product_b.name}</b>
+                  <span>{formatMoney(result.product_b.price)}</span>
+                </div>
+              </div>
+              <AnswerLayoutBlock layout={layout} />
+              {!hasLayoutContent(layout) && result.verdict && (
+                <p className="ns-chat-verdict">{result.verdict}</p>
+              )}
+            </div>
           )}
           {!running && failed && (
             <div className="ns-note" role="status">

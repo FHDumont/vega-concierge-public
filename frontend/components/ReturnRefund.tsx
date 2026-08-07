@@ -5,17 +5,13 @@
 // roda. Estilizado por paletas.
 import { useState } from "react";
 import { Order, RefundResult, requestRefund } from "@/lib/api";
-import { useChat, useChatPageScope } from "@/lib/chat-context";
 import AiThinking from "./AiThinking";
 
 export default function ReturnRefund({ order, onRefunded }: { order: Order; onRefunded?: (o: Order) => void }) {
-  const { openChat } = useChat();
-  useChatPageScope({ orderId: order.id });
   const [result, setResult] = useState<RefundResult | null>(null);
   const [running, setRunning] = useState(false);
   const [failed, setFailed] = useState(false);
 
-  // Já reembolsado (status persistido) → estado final, sem botão.
   if (order.status === "REFUNDED") {
     return (
       <div className="ns-refund ns-refund-done" role="status">
@@ -50,18 +46,9 @@ export default function ReturnRefund({ order, onRefunded }: { order: Order; onRe
           <p className="ns-refund-sub">Our AI checks eligibility, policy and processes the refund.</p>
         </div>
         {!result && (
-          <>
-            <button type="button" className="ns-btn-ghost" onClick={run} disabled={running}>
-              {running ? "Working…" : "Request refund"}
-            </button>
-            <button
-              type="button"
-              className="ns-btn-ghost sm"
-              onClick={() => openChat({ orderId: order.id, seed: "I want a refund for this order" })}
-            >
-              Ask via chat
-            </button>
-          </>
+          <button type="button" className="ns-btn-ghost" onClick={run} disabled={running}>
+            {running ? "Working…" : "Request refund"}
+          </button>
         )}
       </div>
 

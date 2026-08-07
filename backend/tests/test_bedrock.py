@@ -10,11 +10,11 @@ import os
 import pytest
 
 # `test_provider` renomeado no import: com o nome original o pytest o coletaria como teste.
-from app.llm import build_adapter
-from app.llm_providers import list_type_presets
-from app.llm import test_provider as call_test_provider
-from app.llm_config import create_provider, delete_provider, init_db
-from app.llm_models import build_chat_model
+from app.llm.llm import build_adapter
+from app.llm.llm_providers import list_type_presets
+from app.llm.llm import test_provider as call_test_provider
+from app.llm.llm_config import create_provider, delete_provider, init_db
+from app.llm.llm_models import build_chat_model
 
 CFG = {
     "kind": "bedrock",

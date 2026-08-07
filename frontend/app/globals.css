@@ -1106,21 +1106,6 @@ a.ns-back:hover {
   white-space: nowrap;
 }
 
-/* IA-Checkout (F-024): gerador de mensagem de presente (Details step). */
-.ns-gift {
-  margin-top: 14px;
-  padding: 14px 16px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-}
-.ns-gift-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
 .ns-pai {
   margin: 0 0 48px;
   background: var(--surface);
@@ -1138,12 +1123,6 @@ a.ns-back:hover {
   font-size: 18px;
   font-weight: 800;
   margin: 0;
-}
-.ns-pai-summary {
-  margin: 14px 0 0;
-  color: var(--text);
-  font-size: 15px;
-  line-height: 1.6;
 }
 .ns-pai-ask {
   display: flex;
@@ -1206,6 +1185,14 @@ a.ns-back:hover {
   font-size: 14px;
 }
 .ns-compare-vs b {
+  color: var(--text);
+}
+
+.ns-answer-lead {
+  margin: 10px 0 0;
+  font-size: 15px;
+  line-height: 1.5;
+  font-weight: 500;
   color: var(--text);
 }
 
@@ -1301,67 +1288,6 @@ a.ns-back:hover {
 .ns-refund-steps .dt {
   color: var(--muted);
   font-size: 13px;
-}
-
-/* ---- IA-Busca (F-022): busca em linguagem natural na área de resultados ---- */
-.ns-smart {
-  margin: 6px 0 22px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  padding: 16px 18px;
-  box-shadow: var(--shadow);
-}
-.ns-smart-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.ns-smart-lead {
-  flex: 1;
-  min-width: 200px;
-  margin: 0;
-  color: var(--text);
-  font-size: 14px;
-}
-.ns-smart-result {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-}
-.ns-smart-interp {
-  margin: 0;
-  color: var(--text);
-  font-size: 15px;
-  font-weight: 600;
-}
-.ns-smart-dym {
-  margin: 8px 0 0;
-  color: var(--muted);
-  font-size: 14px;
-}
-
-/* ---- IA-Home (F-023): picks personalizados na home default ----------------- */
-.ns-picks {
-  margin: 6px 0 40px;
-}
-.ns-picks-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-.ns-picks-head h2 {
-  font-size: 20px;
-  font-weight: 800;
-  margin: 0;
-}
-.ns-picks-blurb {
-  margin: 4px 0 0;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1.5;
 }
 
 /* ---- IA-Carrinho (F-023): cross-sell dentro do carrinho slide-over --------- */
@@ -2747,16 +2673,6 @@ a.ns-back:hover {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 10px;
-}
-.ns-chat-gift blockquote {
-  margin: 0 0 10px;
-  padding: 12px 14px;
-  border-left: 3px solid var(--accent);
-  font-style: italic;
-  font-size: 14px;
-  line-height: 1.5;
-  background: var(--bg);
-  border-radius: 0 8px 8px 0;
 }
 .ns-chat-loading {
   padding: 8px 0;

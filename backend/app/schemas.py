@@ -28,26 +28,20 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessageIn]
     context: ChatContextIn | None = None
 
+class SecurityActionRequest(BaseModel):
+    action: Literal["delete_product", "export_recent_customers"]
+    sku: str | None = None
+
 class ProductQARequest(BaseModel):
     sku: str
     question: str = ""
-class ProductDescribeRequest(BaseModel):
-    sku: str
-class SemanticSearchRequest(BaseModel):
-    query: str
 class CompareRequest(BaseModel):
     # Compare 2 produtos (F-029): coordinator → comparator + tools (dados reais).
     sku_a: str
     sku_b: str
-class HomePicksRequest(BaseModel):
-    # IA-Home (F-023): recomendações personalizadas; `favorites` (skus) enviesa os picks (opcional).
-    favorites: list[str] = []
 class CartCrossSellRequest(BaseModel):
     # IA-Carrinho (F-023): cross-sell a partir dos SKUs no carrinho atual.
     skus: list[str] = []
-class GiftMessageRequest(BaseModel):
-    # IA-Checkout (F-024): breve input (ocasião/destinatário/tom) → mensagem de presente gerada.
-    brief: str = ""
 class OrderItemIn(BaseModel):
     sku: str
     name: str

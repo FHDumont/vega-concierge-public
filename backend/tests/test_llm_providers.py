@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from app import llm, llm_models, llm_providers
+from app.llm import llm, llm_models, llm_providers
 
 CFGS = [
     {"id": "LP-1", "name": "primeiro", "kind": "openai", "base_url": "https://a/v1",
@@ -110,7 +110,7 @@ def test_type_presets_are_a_defensive_copy():
 
 def test_admin_test_provider_button_works_offline(api_client):
     """O botão "test provider" do Admin: cria, testa e apaga, sem rede."""
-    from app import users
+    from app.store import users
 
     users.seed_owner_user()
     owner = users.get_user_by_email(users.OWNER_EMAIL)

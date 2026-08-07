@@ -38,7 +38,7 @@ Entry: `content/_index.md` → **`/workshops/vega/`**
 | **7. Signals** | `7-signals/` | Generate and explore Signals |
 | **8. Protect** | `8-protect/` | Agent Control Block/Steer |
 | **9. Wrap-up** | `9-wrap-up/` | Recap and next steps |
-| **Appendix** | `appendix/` (hidden) | LLM, agent editor, simulator, hub, o11y |
+| **Appendix** | `appendix/` (hidden) | LLM, agent editor, simulator, hub |
 
 Legacy flat URLs (`/workshops/vega/01-access/`, …) redirect via Hugo **aliases**.
 

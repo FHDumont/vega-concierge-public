@@ -45,8 +45,6 @@ In this hands-on workshop you'll use a **pre-deployed, pre-instrumented** Vega i
 3. **Load a UC and click Simulate** — real API requests fire with problem toggles on; read the inline result, then find the trace by session ID.
 4. **Optional: Agent Control** — Block/Steer rulesets in Console stop UC-3/4/5 while the storefront still returns 200.
 
-Splunk Observability Cloud is an **optional second layer** (`./scripts/dev.sh --o11y`) — auto-instrumentation via OTel Collector, orthogonal to the Splunk Agent Observability SDK callback.
-
 ## What you'll do
 
 | Part | Chapters | Outcome |
@@ -55,7 +53,7 @@ Splunk Observability Cloud is an **optional second layer** (`./scripts/dev.sh --
 | **Workshop panel** | 3 | Owner login, five UCs, Advanced toggles |
 | **Splunk Agent Observability arc** | 4–8 | Enable → trace → evaluators → Signals → Protect |
 | **Wrap-up** | 9 | Recap and next steps |
-| **Appendix (optional)** | Instructor | LLM cascade, agent editor, simulator, hub, o11y |
+| **Appendix (optional)** | Instructor | LLM cascade, agent editor, simulator, hub |
 
 {{< notice tip "Workshop VM layout" >}}
 On the EC2 lab: store **:3000**, API **:8000**, Ops Console **:9000**, this guide **:1313**. See [Access the store](/workshops/vega/1-get-connected/1-access-the-store/).

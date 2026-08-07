@@ -1,6 +1,6 @@
 # Vega Concierge — Workshop App
 
-Loja de e-commerce com assistente **multi-agente (LangGraph)** para workshops Splunk. Observabilidade (Splunk Agent Observability + o11y) é **opt-in** via variáveis de ambiente — a app roda standalone sem credenciais.
+Loja de e-commerce com assistente **multi-agente (LangGraph)** para workshops Splunk. Observabilidade (Splunk Agent Observability) é **opt-in** via variáveis de ambiente — a app roda standalone sem credenciais.
 
 **Guia do participante:** pasta [`workshop/`](workshop/) (Hugo, servido na VM em `:1313`) ou GitHub Pages deste repositório.
 
@@ -112,4 +112,3 @@ Multi-provider em cascata com fallback para stub offline — funciona **sem chav
 ## Observabilidade opt-in
 
 - **Splunk Agent Observability:** `GALILEO_API_KEY` no `.env` (vazia = app base, sem traces).
-- **Splunk o11y (OTel):** `./scripts/dev.sh --o11y` ou `./scripts/up.sh --o11y`.

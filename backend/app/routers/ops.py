@@ -1,8 +1,7 @@
 """Superfícies máquina-a-máquina — config pública de o11y, hub e enrollment."""
 from fastapi import APIRouter, Header, HTTPException, Request
-from .. import enroll
-from .. import galileo_obs
-from .. import hub
+from ..hub import enroll, hub
+from ..obs import galileo_obs
 from ..schemas import EnrollIn, EnrollPushIn
 from ._common import _token_from_header, _require_owner
 

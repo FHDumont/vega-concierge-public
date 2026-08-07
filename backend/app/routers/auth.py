@@ -1,9 +1,8 @@
 """Sessão de demo (bearer token) e a área da Conta do comprador."""
 from fastapi import APIRouter, Header, HTTPException
-from .. import ai_features
+from ..ai_agents import insights
 from ..runnable_config import ai_request_scope
-from .. import orders
-from .. import users
+from ..store import orders, users
 from ..schemas import LoginRequest, RegisterRequest, UpdateMeRequest
 from ._common import _token_from_header, _optional_user_id, _me_payload
 
@@ -69,5 +68,7 @@ def account_insights(authorization: str | None = Header(default=None),
         raise HTTPException(status_code=401, detail="not authenticated")
     user = _me_payload(user_id)  # tier/gasto recomputados (materialização lazy)
     user_orders = orders.list_orders_for_user(user_id)
-    with ai_request_scope(feature="account_insights", session_id=x_vega_session, user_id=user_id):
-        return ai_features.account_insights(user, user_orders)
+    with ai_request_scope(
+        feature="account_insights", session_id=x_vega_session, user_id=user_id,
+    ) as config:
+        return insights.account_insights(user, user_orders, config=config)

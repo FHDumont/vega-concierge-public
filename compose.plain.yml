@@ -10,27 +10,20 @@ services:
     image: ghcr.io/${IMAGE_OWNER:-fhdumont}/${BACKEND_IMAGE:-vega-backend}:${IMAGE_TAG:-latest}
     pull_policy: always
     restart: always
+    # Contrato único de config por VM (F-BACKEND-3, Etapa B): o `.env` da raiz é a fonte
+    # canônica (Ansible escreve tudo nele, tokens inclusive), injetada aqui via `env_file`.
+    # `environment:` abaixo é só o que precisa de valor DIFERENTE dentro do container
+    # (`environment:` vence `env_file`, então esses overrides ficam imunes ao que estiver no `.env`).
+    env_file:
+      - path: .env
+        required: false
     environment:
-      - DEPLOYMENT_ENVIRONMENT=${DEPLOYMENT_ENVIRONMENT:-user-local}
-      - OWNER_PASSWORD=${OWNER_PASSWORD:-}
-      - ENROLL_TOKEN=${ENROLL_TOKEN:-}
       - ORDERS_DB=/data/vega.db # SQLite em volume nomeado (DT-006): sobrevive a recriação
-      # Splunk Agent Observability (ADR-032): sem API key o SDK nunca é chamado e a app roda "base" (sem traces).
-      - GALILEO_API_KEY=${GALILEO_API_KEY:-}
-      - GALILEO_CONSOLE_URL=${GALILEO_CONSOLE_URL:-}
-      - GALILEO_PROJECT=${GALILEO_PROJECT:-vega-concierge}
-      - GALILEO_LOG_STREAM=${GALILEO_LOG_STREAM:-default}
-      # RAG (ADR-031): URL interna @postgres — host/setup_vectordb usa localhost no .env.
-      - RAG_ENABLED=${RAG_ENABLED:-1}
-      - RAG_DATABASE_URL=postgresql+psycopg://${RAG_DB_USER:-vega}:${RAG_DB_PASSWORD:-vega}@postgres:5432/${RAG_DB_NAME:-vega_rag}
-      - RAG_EMBEDDING_PROVIDER=${RAG_EMBEDDING_PROVIDER:-ollama}
-      - RAG_EMBEDDING_MODEL=${RAG_EMBEDDING_MODEL:-nomic-embed-text}
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434
-      - OLLAMA_CHAT_MODEL=${OLLAMA_CHAT_MODEL:-llama3.2}
-      - RAG_TOP_K=${RAG_TOP_K:-3}
-      - REFUND_WINDOW_DAYS=${REFUND_WINDOW_DAYS:-30}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - VEGA_PERSIST_DIR=/persist
+      # RAG (ADR-031): URL interna @postgres — host/setup_vectordb usa localhost no .env.
+      - RAG_DATABASE_URL=postgresql+psycopg://${RAG_DB_USER:-vega}:${RAG_DB_PASSWORD:-vega}@postgres:5432/${RAG_DB_NAME:-vega_rag}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - RAG_ENABLED=${RAG_ENABLED:-1}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports: ["8000:8000"]

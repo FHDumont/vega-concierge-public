@@ -14,20 +14,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import (
-    agent_config,
-    feature_flags,
-    galileo_control,
-    hub,
-    hub_settings,
-    llm_config,
-    orders,
-    rum,
-    users,
-)
+from .hub import agent_config, feature_flags, hub, hub_settings, rum
+from .llm import llm_config
+from .obs import galileo_control
 from .routers import ROUTERS
 from .settings import settings
-from .tools import seed_workshop_stock
+from .store import orders, users
+from .store.tools import seed_workshop_stock
 
 log = logging.getLogger(__name__)
 
@@ -44,8 +37,13 @@ def _bootstrap() -> None:
     users.seed_demo_user()   # usuário de teste de DEMO + histórico → tier GOLD (idempotente; F-010)
     users.seed_owner_user()  # usuário OWNER (config de LLM owner-only; idempotente; F-020)
     llm_config.init_db()     # tabela de provedores de LLM (F-020)
-    llm_config.restore_providers_backup()  # fresh-state preserva cascata LLM (F-REAL-ENV-1)
+    _restored = llm_config.restore_providers_backup()  # fresh-state preserva cascata LLM (F-REAL-ENV-1)
     llm_config.seed_ollama_default()  # Ollama Local se vazio (F-REAL-ENV-1)
+    _seeded = llm_config.seed_providers_from_env()  # OpenAI/Claude/Bedrock por token do SO (F-BACKEND-3)
+    log.info(
+        "llm providers: restaurados=%d, seed_env criados=%d, chaves atualizadas=%d",
+        _restored, _seeded["created"], _seeded["updated"],
+    )
     agent_config.init_db()      # tabela de config por agente (F-021)
     agent_config.seed_defaults()  # semeia os 6 agentes com os prompts atuais (idempotente; F-021)
     agent_config.migrate_f052_prompts()  # prompts pré-F-052 no SQLite → chatbot (F-052)

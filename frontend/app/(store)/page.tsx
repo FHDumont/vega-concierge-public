@@ -9,7 +9,6 @@ import { inCategory } from "@/lib/shop";
 import { useShop } from "@/lib/store";
 import ProductCard from "@/components/ProductCard";
 import Concierge from "@/components/Concierge";
-import SmartSearch from "@/components/SmartSearch";
 import StoreFooter from "@/components/StoreFooter";
 
 export default function Shop() {
@@ -79,19 +78,10 @@ export default function Shop() {
             </section>
 
             <Concierge
-              onAdd={shop.addToCart}
               initialRequest={askPrefill ?? undefined}
               autoRun={askPrefill !== null}
             />
           </>
-        )}
-
-        {shop.search.trim() !== "" && (
-          <SmartSearch
-            query={shop.search.trim()}
-            onAdd={shop.addToCart}
-            onApplySuggestion={shop.setSearch}
-          />
         )}
 
         {/* Saída clara da navegação por categoria/busca (F-028): breadcrumb Home › <filtro>

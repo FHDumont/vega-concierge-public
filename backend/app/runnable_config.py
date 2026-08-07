@@ -13,7 +13,7 @@ from typing import Iterator
 
 from langchain_core.runnables.config import RunnableConfig
 
-from . import galileo_obs
+from .obs import galileo_obs
 from .problems import FLAGS
 from .settings import settings
 
@@ -96,8 +96,10 @@ def ai_request_scope(
 
     Junta os três passos que todo endpoint de IA precisa (abrir a sessão da jornada, montar o
     config com os callbacks, publicá-lo pro caminho síncrono das features) num CM só. O config
-    é criado DENTRO da sessão, senão o callback nasce fora do contexto e o trace fica órfão."""
-    with galileo_obs.session_scope(session_id) as resolved_session:
+    é criado DENTRO da sessão, senão o callback nasce fora do contexto e o trace fica órfão —
+    e, desde a D.3, também fora do trace vivo: é o `session_scope` que decide se o callback
+    nasce em modo batch ou pendurado no trace do request."""
+    with galileo_obs.session_scope(session_id, feature=feature) as resolved_session:
         extra = dict(metadata or {})
         if user_id is not None:
             extra["user_id"] = user_id

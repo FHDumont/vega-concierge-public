@@ -35,7 +35,7 @@ case "${OLLAMA_BASE_URL:-}" in
   *127.0.0.1*|*localhost*)
     echo "validate-prod-env: OLLAMA_BASE_URL=${OLLAMA_BASE_URL} é URL de dev (host)." >&2
     echo "  Para ./scripts/up.sh use: OLLAMA_BASE_URL=http://host.docker.internal:11434" >&2
-    echo "  (compose.plain.yml fixa host.docker.internal no container; corrija o .env p/ consistência.)" >&2
+    echo "  (compose.plain.yml agora interpola OLLAMA_BASE_URL do .env — sem correção, o container aponta p/ si mesmo.)" >&2
     exit 1
     ;;
 esac

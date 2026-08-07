@@ -230,7 +230,7 @@ export async function sendChatMessage(
 ): Promise<ChatResult> {
   const r = await fetch(`${BASE}/api/chat`, {
     method: "POST",
-    headers: { "content-type": "application/json", ...sessionHeaders() },
+    headers: { "content-type": "application/json", ...authHeaders(), ...sessionHeaders() },
     body: JSON.stringify({ messages, context: context || undefined }),
   });
   return r.json();
@@ -246,9 +246,7 @@ export async function getPolicies(): Promise<StorePolicy[]> {
 }
 
 // --- IA-Produto (F-022) -----------------------------------------------------
-// Features de IA da página de detalhe: Q&A fundamentado nos dados do produto e descrição
-// gerada (cacheada por produto no backend). A resposta traz só o conteúdo. Honram os toggles
-// de problema.
+// Q&A fundamentado nos dados do produto na PDP. Honra os toggles de problema.
 export async function askProduct(sku: string, question: string): Promise<{ answer: string; grounded: boolean }> {
   const r = await fetch(`${BASE}/api/product/qa`, {
     method: "POST", headers: { "content-type": "application/json", ...sessionHeaders() },
@@ -257,32 +255,24 @@ export async function askProduct(sku: string, question: string): Promise<{ answe
   if (!r.ok) throw new Error(`qa failed: ${r.status}`);
   return r.json();
 }
-export async function describeProduct(sku: string): Promise<{ description: string }> {
-  const r = await fetch(`${BASE}/api/product/describe`, {
-    method: "POST", headers: { "content-type": "application/json", ...sessionHeaders() },
-    body: JSON.stringify({ sku }),
-  });
-  if (!r.ok) throw new Error(`describe failed: ${r.status}`);
-  return r.json();
-}
 
-// --- IA-Busca (F-022) -------------------------------------------------------
-// Busca em linguagem natural/semântica → produtos do catálogo + interpretação + "você quis
-// dizer". Sem embeddings (mapeamento via LLM no backend). Honra os toggles de problema.
-export type SemanticSearch = { products: Product[]; interpretation: string; suggestion: string | null };
-export async function semanticSearch(query: string): Promise<SemanticSearch> {
-  const r = await fetch(`${BASE}/api/search/semantic`, {
-    method: "POST", headers: { "content-type": "application/json", ...sessionHeaders() },
-    body: JSON.stringify({ query }),
-  });
-  if (!r.ok) throw new Error(`search failed: ${r.status}`);
-  return r.json();
-}
 // --- Compare 2 produtos (F-029) ---------------------------------------------
 // Orquestração simples: Compare Coordinator (agente) busca os 2 produtos via tool real e delega
 // ao Comparator (agente) o veredito exibido. Só o conteúdo. Honra os toggles + cache (par igual
 // 2× = cache hit).
-export type CompareResult = { product_a: Product; product_b: Product; verdict: string };
+export type CompareLayout = {
+  lead?: string;
+  sections?: { title: string; body: string }[];
+  facts?: { label: string; value: string }[];
+  bullets?: string[];
+};
+
+export type CompareResult = {
+  product_a: Product;
+  product_b: Product;
+  verdict: string;
+  layout?: CompareLayout | null;
+};
 export async function compareProducts(skuA: string, skuB: string): Promise<CompareResult> {
   const r = await fetch(`${BASE}/api/compare`, {
     method: "POST", headers: { "content-type": "application/json", ...sessionHeaders() },
@@ -292,22 +282,9 @@ export async function compareProducts(skuA: string, skuB: string): Promise<Compa
   return r.json();
 }
 
-// --- IA-Home (F-023) --------------------------------------------------------
-// Picks personalizados na home: produtos recomendados + blurb gerado. `favorites` (skus) enviesa
-// os picks. Só conteúdo. Honra os toggles; fallback gracioso offline.
-export type HomePicks = { products: Product[]; blurb: string };
-export async function homePicks(favorites: string[] = []): Promise<HomePicks> {
-  const r = await fetch(`${BASE}/api/home/picks`, {
-    method: "POST", headers: { "content-type": "application/json", ...sessionHeaders() },
-    body: JSON.stringify({ favorites }),
-  });
-  if (!r.ok) throw new Error(`picks failed: ${r.status}`);
-  return r.json();
-}
-
 // --- IA-Carrinho (F-023) ----------------------------------------------------
 // Cross-sell/bundle ("complete your purchase") a partir dos SKUs no carrinho.
-// Honra os toggles; fallback gracioso offline. Mesmo shape de HomePicks (produtos + blurb).
+// Honra os toggles; fallback gracioso offline.
 export type CartCrossSell = { products: Product[]; blurb: string };
 export async function cartCrossSell(skus: string[]): Promise<CartCrossSell> {
   const r = await fetch(`${BASE}/api/cart/crosssell`, {
@@ -339,18 +316,6 @@ export async function getOrder(id: string): Promise<Order> {
   if (!r.ok) throw new Error(`order not found: ${r.status}`);
   return r.json();
 }
-// --- IA-Pedido (F-024) ------------------------------------------------------
-// Resumo de status do pedido em linguagem natural (confirmação + detalhe do histórico).
-// Só o conteúdo. Backend resolve a ordem (grounding real) + honra os toggles; offline →
-// fallback gracioso. Envia o bearer (mesma autorização do getOrder, F-019).
-export async function orderSummary(id: string): Promise<{ summary: string; grounded: boolean }> {
-  const r = await fetch(`${BASE}/api/orders/${id}/summary`, {
-    method: "POST", headers: { ...authHeaders(), ...sessionHeaders() },
-  });
-  if (!r.ok) throw new Error(`summary failed: ${r.status}`);
-  return r.json();
-}
-
 // --- IA-Notificação (F-031) -------------------------------------------------
 // Copy gerada de e-mail p/ o evento atual do pedido (confirmação/enviado), reaproveitando a
 // notificação simulada (F-005). Só o conteúdo. Backend resolve a ordem (grounding real) + honra
@@ -406,17 +371,7 @@ export async function requestRefund(id: string): Promise<RefundResult> {
 }
 
 // --- IA-Checkout (F-024) ----------------------------------------------------
-// Mensagem de presente (de um breve input) + explicação amigável de bloqueio de fraude.
-// Só o conteúdo. Honram os toggles; offline → fallback gracioso.
-export async function giftMessage(brief: string): Promise<{ message: string }> {
-  const r = await fetch(`${BASE}/api/checkout/gift-message`, {
-    method: "POST", headers: { "content-type": "application/json", ...sessionHeaders() },
-    body: JSON.stringify({ brief }),
-  });
-  if (!r.ok) throw new Error(`gift failed: ${r.status}`);
-  return r.json();
-}
-// `fraud` indica se um bloqueio de fraude (toggle fraud_false_positive) é a causa provável —
+// Explicação amigável de bloqueio de fraude quando o pedido é barrado.
 // a UI só mostra a explicação amigável quando true. Envia o bearer (autorização do getOrder).
 export async function fraudExplain(id: string): Promise<{ explanation: string; fraud: boolean }> {
   const r = await fetch(`${BASE}/api/orders/${id}/fraud-explain`, {

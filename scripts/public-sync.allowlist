@@ -8,8 +8,6 @@ workshop/
 scripts/
 docker-compose.yml
 compose.plain.yml
-compose.o11y.yml
-otel-collector-config.yaml
 .env.example
 .gitignore
 docs/reference/workshop-env-contract.md

@@ -10,13 +10,13 @@ import pytest
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
-from app.langchain_tools import CONCIERGE_TOOLS
-from app.llm_models import (
+from app.store.langchain_tools import CONCIERGE_TOOLS
+from app.llm.llm_models import (
     VegaBedrockChatModel,
     VegaChatAnthropic,
-    VegaStubChatModel,
     build_chat_model,
 )
+from app.llm.stub import VegaStubChatModel
 
 
 class _Decision(BaseModel):

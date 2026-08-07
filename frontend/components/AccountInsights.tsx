@@ -1,41 +1,46 @@
 "use client";
-// IA-Conta (F-031): insights do histórico de compras + explicação dos benefícios do tier +
-// sugestão de recompra, a partir dos dados REAIS do usuário (pedidos/tier). Aparece na página
-// da Conta. Mostra só o conteúdo gerado. Backend resolve user/pedidos (grounding real) e honra
-// os toggles; offline → fallback gracioso. Indicador AiThinking (F-028). Estilizado pelas
-// variáveis de paleta.
-import { useEffect, useState } from "react";
+// IA-Conta (F-031): insights do histórico de compras — opt-in via botão (F-WORKSHOP-SURFACE-1).
+import { useState } from "react";
 import { AccountInsights as Insights, accountInsights } from "@/lib/api";
-import AiThinking from "@/components/AiThinking";
+import AiThinking from "./AiThinking";
 
 export default function AccountInsights() {
   const [data, setData] = useState<Insights | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [requested, setRequested] = useState(false);
 
-  useEffect(() => {
-    let alive = true;
+  async function load() {
+    setRequested(true);
     setLoading(true);
     setFailed(false);
-    accountInsights()
-      .then((d) => alive && setData(d))
-      .catch(() => alive && setFailed(true))
-      .finally(() => alive && setLoading(false));
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  if (failed) return null; // silencioso: a conta já mostra perfil/tier/histórico
+    try {
+      setData(await accountInsights());
+    } catch {
+      setFailed(true);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <section className="ns-panelcard">
       <h2 className="ns-card-title">
         <span className="ns-spark sm" aria-hidden>✦</span> Your Vega insights
       </h2>
-      {loading ? (
-        <AiThinking label="Reviewing your history…" />
-      ) : data ? (
+      <p className="ns-muted" style={{ margin: "0 0 14px", fontSize: 14 }}>
+        AI reads your purchase history and tier to suggest benefits and repurchase ideas — optional, on demand.
+      </p>
+      {!requested && (
+        <button type="button" className="ns-btn-ghost" onClick={load}>
+          Show my insights
+        </button>
+      )}
+      {requested && loading && <AiThinking label="Reviewing your history…" />}
+      {requested && failed && (
+        <div className="ns-note" role="status">We couldn’t load insights right now. Please try again.</div>
+      )}
+      {requested && !loading && data && (
         <div className="ns-acct-ai">
           <p>{data.summary}</p>
           <div className="ns-acct-ai-row">
@@ -47,7 +52,7 @@ export default function AccountInsights() {
             <p>{data.repurchase}</p>
           </div>
         </div>
-      ) : null}
+      )}
     </section>
   );
 }

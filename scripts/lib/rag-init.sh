@@ -111,6 +111,6 @@ else
   source .venv/bin/activate
   pip install -q -r requirements.txt -r requirements-rag.txt
   python3 setup_vectordb.py
-  backend="$(python3 -c 'from app import rag; print(rag.backend_name())')"
+  backend="$(python3 -c 'from app.ai_agents import rag; print(rag.backend_name())')"
   echo "→ rag-init: done (retriever backend=${backend})"
 fi

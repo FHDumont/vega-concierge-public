@@ -14,51 +14,68 @@ _resolve_sqlite_host_path() {
   printf '%s' "$db"
 }
 
-_run_llm_backup_python() {
-  local db_path="${1:-$(_resolve_sqlite_host_path)}"
-  mkdir -p "$PERSIST_DIR"
-  export VEGA_PERSIST_DIR="$PERSIST_DIR"
-  export ORDERS_DB="$db_path"
+_resolve_llm_backup_python() {
   local py="$ROOT/backend/.venv/bin/python"
   if [[ ! -x "$py" ]]; then
     py="python3"
   fi
+  printf '%s' "$py"
+}
+
+_run_llm_backup_python() {
+  local db_path="$1" py="$2"
+  mkdir -p "$PERSIST_DIR"
+  export VEGA_PERSIST_DIR="$PERSIST_DIR"
+  export ORDERS_DB="$db_path"
   (
     cd "$ROOT/backend"
-    "$py" -c "from app import llm_config; n=llm_config.export_providers_backup(); print(n)"
+    "$py" -c "from app.llm import llm_config; n=llm_config.export_providers_backup(); print(n)"
   )
 }
 
 # Backup que falha NUNCA sobrescreve o JSON: a chave de API do Admin só existe ali. Sem banco
 # (primeira subida, ou host depois de usar o volume do compose) o backup anterior é preservado.
+# Sem o `2>/dev/null` de antes: um erro de import (ex.: pacote faltando no .venv) tem de aparecer
+# no WARN — foi assim que o incidente da madrugada degradou silencioso (backup "falhou" sem pista).
 backup_llm_providers_host() {
-  local db n
+  local db n err py
   db="$(_resolve_sqlite_host_path)"
   mkdir -p "$PERSIST_DIR"
   if [[ ! -f "$db" ]]; then
     echo "→ fresh-state: llm_providers backup pulado (sem SQLite no host — backup atual preservado)"
     return 0
   fi
-  if ! n="$(_run_llm_backup_python "$db" 2>/dev/null)" || [[ ! "$n" =~ ^[0-9]+$ ]]; then
+  py="$(_resolve_llm_backup_python)"
+  echo "→ fresh-state: usando python '$py' p/ backup de llm_providers"
+  err="$(mktemp)"
+  if ! n="$(_run_llm_backup_python "$db" "$py" 2>"$err")" || [[ ! "$n" =~ ^[0-9]+$ ]]; then
     echo "→ fresh-state: WARN backup de llm_providers falhou — backup atual preservado" >&2
+    sed 's/^/  stderr: /' "$err" >&2
+    rm -f "$err"
     return 0
   fi
+  rm -f "$err"
   echo "→ fresh-state: llm_providers backup ($n row(s) → $PERSIST_DIR/llm_providers.json)"
 }
 
 backup_llm_providers_compose() {
   mkdir -p "$PERSIST_DIR"
-  local out
+  local out err
+  echo "→ fresh-state: usando python 'python3' (container backend) p/ backup de llm_providers"
+  err="$(mktemp)"
   out="$(docker compose "$@" run --rm --no-deps \
     -v "$PERSIST_DIR:/persist" \
     -e VEGA_PERSIST_DIR=/persist \
     -e ORDERS_DB=/data/vega.db \
-    backend python3 -c "from app import llm_config; print(llm_config.export_providers_backup())" \
-    2>/dev/null | tail -1 || true)"
+    backend python3 -c "from app.llm import llm_config; print(llm_config.export_providers_backup())" \
+    2>"$err" | tail -1 || true)"
   if [[ ! "$out" =~ ^[0-9]+$ ]]; then
     echo "→ fresh-state: WARN backup de llm_providers falhou — backup atual preservado" >&2
+    sed 's/^/  stderr: /' "$err" >&2
+    rm -f "$err"
     return 0
   fi
+  rm -f "$err"
   echo "→ fresh-state: llm_providers backup ($out row(s) → $PERSIST_DIR/llm_providers.json)"
 }
 

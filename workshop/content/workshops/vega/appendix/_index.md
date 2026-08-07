@@ -12,4 +12,3 @@ These pages support **instructors and advanced owners**. They are outside the 90
 - [Visual agent editor](agent-editor/)
 - [Simulator & Inspector](simulator/)
 - [Hub, peers & feature flags](hub-flags/)
-- [Splunk Observability Cloud (`--o11y`)](observability/)

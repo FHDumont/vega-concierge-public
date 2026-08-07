@@ -2,25 +2,12 @@
 // Thread de chat com renderização de artefatos por intent (F-050-CHAT).
 import { useEffect, useRef } from "react";
 import AiThinking from "@/components/AiThinking";
+import { AnswerLayoutBlock, AnswerLayout, hasLayoutContent } from "@/components/AnswerLayout";
 import { ChatMessage, ChatResult, Product } from "@/lib/api";
 import { formatMoney } from "@/lib/shop";
 import ProductCard from "./ProductCard";
 
 type Turn = ChatMessage & { result?: ChatResult };
-
-type AnswerLayout = {
-  lead?: string;
-  sections?: { title: string; body: string }[];
-  facts?: { label: string; value: string }[];
-  bullets?: string[];
-};
-
-function hasLayoutContent(layout?: AnswerLayout | null): boolean {
-  if (!layout) return false;
-  return Boolean(
-    layout.sections?.length || layout.facts?.length || layout.bullets?.length,
-  );
-}
 
 // Resposta de LLM indisponível não deve renderizar card de produto/comparação: o backend
 // marca `llm_unavailable`; o teste de `[stub` cobre resposta offline sem falha de provider.
@@ -47,45 +34,6 @@ function RecommendArtifact({
         highlight
         onAdd={onAdd}
       />
-    </div>
-  );
-}
-
-function AnswerLayoutBlock({ layout }: { layout?: AnswerLayout | null }) {
-  if (!hasLayoutContent(layout)) return null;
-  const { sections, facts, bullets } = layout!;
-  return (
-    <div className="ns-chat-artifact ns-chat-answer-layout">
-      {facts && facts.length > 0 && (
-        <dl className="ns-chat-facts">
-          {facts.map((f) => (
-            <div key={f.label} className="ns-chat-fact">
-              <dt>{f.label}</dt>
-              <dd>{f.value}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
-      {sections && sections.length > 0 && (
-        <ul className="ns-chat-sections">
-          {sections.map((s) => (
-            <li key={s.title}>
-              <span className="ic" aria-hidden>•</span>
-              <span className="bd">
-                <span className="lb">{s.title}</span>
-                <span className="dt">{s.body}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {bullets && bullets.length > 0 && (
-        <ul className="ns-chat-bullets">
-          {bullets.map((b) => (
-            <li key={b}>{b}</li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 }
@@ -136,23 +84,6 @@ function SearchArtifact({
           />
         ))}
       </div>
-    </div>
-  );
-}
-
-function GiftArtifact({ artifacts }: { artifacts: Record<string, unknown> }) {
-  const msg = artifacts.gift_message as string | undefined;
-  if (!msg) return null;
-  return (
-    <div className="ns-chat-artifact ns-chat-gift">
-      <blockquote>{msg}</blockquote>
-      <button
-        type="button"
-        className="ns-go sm"
-        onClick={() => navigator.clipboard?.writeText(msg)}
-      >
-        Copy message
-      </button>
     </div>
   );
 }
@@ -215,7 +146,6 @@ function ArtifactBlock({
   if (intent === "search") {
     return <SearchArtifact artifacts={artifacts} onAdd={onAdd} />;
   }
-  if (intent === "gift") return <GiftArtifact artifacts={artifacts} />;
   if (intent === "product_qa") return <ProductQaChip artifacts={artifacts} />;
   if (intent === "returns") return <ReturnsArtifact artifacts={artifacts} />;
   if (intent === "destructive") {

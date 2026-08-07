@@ -1,10 +1,10 @@
 """Pedidos: criação, histórico, detalhe e as features de IA presas a um pedido."""
 from fastapi import APIRouter, Header, HTTPException
-from .. import ai_features
+from ..ai_agents.fraud_explanation import explain_fraud_hold
+from ..ai_agents.notification_copy import compose_notification_text
+from ..ai_agents.refund import arun_refund
 from ..runnable_config import ai_request_scope
-from ..graphs.returns import arun_refund
-from .. import checkout
-from .. import orders
+from ..store import checkout, orders
 from ..schemas import CreateOrderRequest
 from ._common import _optional_user_id
 
@@ -48,25 +48,6 @@ def get_order(order_id: str, authorization: str | None = Header(default=None)):
     return order
 
 
-# --- IA-Pedido (F-024) ------------------------------------------------------
-# Resumo de status em linguagem natural (confirmação + detalhe do histórico). Passa pelo controle
-# de custo (F-022). Contexto enxuto = dados da própria ordem. Honra os toggles. Resolve a ordem no
-# backend (grounding real) com a MESMA régua de autorização do GET /api/orders/{id} (F-019).
-
-@router.post("/api/orders/{order_id}/summary")
-def order_summary(order_id: str, authorization: str | None = Header(default=None),
-                  x_vega_session: str | None = Header(default=None)):
-    order = orders.get_order(order_id)
-    if order is None:
-        raise HTTPException(status_code=404, detail="order not found")
-    user_id = _optional_user_id(authorization)
-    if user_id is not None and orders.order_owner(order_id) != user_id:
-        raise HTTPException(status_code=404, detail="order not found")
-    with ai_request_scope(feature="order_status", session_id=x_vega_session, user_id=user_id,
-                          metadata={"order_id": order_id}):
-        return ai_features.order_status_summary(order)
-
-
 # --- IA-Notificação (F-031) -------------------------------------------------
 # Copy gerada de e-mail p/ o evento atual do pedido (confirmação/enviado) — reaproveita a
 # notificação simulada (F-005). Exibida como "notification preview" na confirmação do checkout
@@ -83,8 +64,8 @@ def order_notification(order_id: str, authorization: str | None = Header(default
     if user_id is not None and orders.order_owner(order_id) != user_id:
         raise HTTPException(status_code=404, detail="order not found")
     with ai_request_scope(feature="notification_copy", session_id=x_vega_session, user_id=user_id,
-                          metadata={"order_id": order_id}):
-        return ai_features.notification_copy(order)
+                          metadata={"order_id": order_id}) as config:
+        return compose_notification_text(order, config=config)
 
 
 @router.post("/api/orders/{order_id}/refund")
@@ -116,5 +97,5 @@ def order_fraud_explain(order_id: str, authorization: str | None = Header(defaul
     if user_id is not None and orders.order_owner(order_id) != user_id:
         raise HTTPException(status_code=404, detail="order not found")
     with ai_request_scope(feature="fraud_explain", session_id=x_vega_session, user_id=user_id,
-                          metadata={"order_id": order_id}):
-        return ai_features.fraud_explain(order)
+                          metadata={"order_id": order_id}) as config:
+        return explain_fraud_hold(order, config=config)

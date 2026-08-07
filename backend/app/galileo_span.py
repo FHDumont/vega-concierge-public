@@ -17,6 +17,7 @@ BUSINESS_STEPS: dict[str, str] = {
     "respond": "compose_product_recommendation",
     "store_chat": "answer_store_policy",
     "stats_chat": "answer_store_statistics",
+    "chat_intent_classifier": "classify_shopper_intent",
     "compare_coordinator": "fetch_prices_for_comparison",
     "comparator": "write_comparison_verdict",
     "fulfillment_coordinator": "verify_cart_inventory_and_price",
@@ -26,15 +27,12 @@ BUSINESS_STEPS: dict[str, str] = {
     "abuse_check": "screen_refund_abuse",
     "search": "semantic_product_search",
     "product_qa": "answer_product_question",
-    "gift_message": "write_gift_message",
-    "product_desc": "write_product_description",
-    "home_picks": "pick_homepage_products",
     "cart_crosssell": "suggest_cart_additions",
-    "order_status": "explain_order_status",
     "fraud_explain": "explain_fraud_hold",
     "admin_insights": "summarize_admin_metrics",
     "account_insights": "summarize_account_history",
     "notification_copy": "compose_notification_text",
+    "chat_respond": "compose_product_recommendation",
 }
 
 # Fallback workflow quando call site não passa `run_name` explícito (F-GALILEO-13).
@@ -43,6 +41,7 @@ AGENT_DEFAULT_WORKFLOW: dict[str, str] = {
     "concierge": "concierge",
     "curator": "concierge",
     "respond": "concierge",
+    "chat_respond": "chat",
     "compare_coordinator": "compare",
     "fulfillment_coordinator": "fulfillment",
     "fraude": "fulfillment",
@@ -115,10 +114,10 @@ CHAT_GRAPH_NODES: dict[str, str] = {
     "respond": "chat.compose_product_recommendation",
     "compare": "chat.compare_two_products",
     "search": "chat.semantic_product_search",
-    "gift": "chat.write_gift_message",
     "product_qa": "chat.answer_product_question",
     "returns": "chat.process_order_refund",
     "destructive_action": "chat.run_destructive_concierge_action",
+    "unsupported": "chat.decline_unsupported_request",
     "finalize": "chat.assemble_shopper_reply",
 }
 
@@ -137,10 +136,10 @@ CHAT_ROUTE_TO_NODE: dict[str, str] = {
     "respond": CHAT_GRAPH_NODES["respond"],
     "compare": CHAT_GRAPH_NODES["compare"],
     "search": CHAT_GRAPH_NODES["search"],
-    "gift": CHAT_GRAPH_NODES["gift"],
     "product_qa": CHAT_GRAPH_NODES["product_qa"],
     "returns": CHAT_GRAPH_NODES["returns"],
     "destructive_action": CHAT_GRAPH_NODES["destructive_action"],
+    "unsupported": CHAT_GRAPH_NODES["unsupported"],
     "complete": CHAT_GRAPH_NODES["finalize"],
 }
 

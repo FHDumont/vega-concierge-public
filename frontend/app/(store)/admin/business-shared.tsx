@@ -359,10 +359,12 @@ function Kpi({ label, value, hint }: { label: string; value: string; hint?: stri
 
 function InsightsCard() {
   const [data, setData] = useState<AdminInsights | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [requested, setRequested] = useState(false);
 
   const load = useCallback(async () => {
+    setRequested(true);
     setLoading(true);
     setFailed(false);
     try {
@@ -374,20 +376,29 @@ function InsightsCard() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
-  if (failed) return null;
-
   return (
     <div className="ns-adm-card ns-adm-insights">
       <div className="ns-adm-cardhead">
         <h2><span className="ns-spark sm" aria-hidden>✦</span> AI insights</h2>
-        <button type="button" className="ns-adm-btn" disabled={loading} onClick={load}>
-          {loading ? "Thinking…" : "↻ Regenerate"}
-        </button>
+        {requested && (
+          <button type="button" className="ns-adm-btn" disabled={loading} onClick={load}>
+            {loading ? "Thinking…" : "↻ Regenerate"}
+          </button>
+        )}
       </div>
-      {loading && !data ? (
-        <AiThinking label="Analyzing recent sales" />
-      ) : data ? (
+      <p className="ns-adm-sub" style={{ margin: "0 0 14px" }}>
+        AI summarizes recent sales, flags anomalies, and suggests restock — optional, on demand.
+      </p>
+      {!requested && (
+        <button type="button" className="ns-adm-btn" onClick={load}>
+          Generate insights
+        </button>
+      )}
+      {requested && loading && !data && <AiThinking label="Analyzing recent sales" />}
+      {requested && failed && (
+        <p className="ns-adm-empty">We couldn’t load insights right now. Please try again.</p>
+      )}
+      {data && (
         <>
           <p className="lead">{data.summary}</p>
           <p className="ns-adm-sub" style={{ marginTop: 4 }}>Last {data.period_days} days</p>
@@ -411,7 +422,7 @@ function InsightsCard() {
             </div>
           )}
         </>
-      ) : null}
+      )}
     </div>
   );
 }

@@ -12,7 +12,7 @@ Manual (host dev):
 """
 import sys
 
-from app import rag
+from app.ai_agents import rag
 
 
 def load(collection: str, documents: list) -> None:

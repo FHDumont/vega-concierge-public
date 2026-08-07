@@ -3,7 +3,6 @@
 #
 #   ./scripts/up.sh              # wizard + pull + up -d + Postgres/pgvector RAG (default)
 #   ./scripts/up.sh --no-rag       # sem Postgres — keyword retriever only
-#   ./scripts/up.sh --o11y         # + OTel Collector + auto-instrumentação Splunk
 #   ./scripts/up.sh --build        # local compose with build (docker-compose.yml)
 #   ./scripts/up.sh down           # stop production stack
 #   ./scripts/up.sh logs           # follow logs (production)
@@ -58,9 +57,6 @@ prod_up_detached() {
   wait_for_health
   print_image_digests
   echo "→ Store http://<VM-IP>:3000  ·  API http://<VM-IP>:8000  ·  Ops Console http://<VM-IP>:9000"
-  if [ "$O11Y" -eq 1 ]; then
-    echo "  o11y: traces via OTel Collector → Splunk (realm=${SPLUNK_O11Y_REALM:-us1})"
-  fi
   if [ "$RAG" -eq 1 ]; then
     echo "  rag: pgvector (default) — use --no-rag p/ keyword-only"
   fi
@@ -69,7 +65,6 @@ prod_up_detached() {
 
 BUILD=0
 FORCE_SETUP=0
-O11Y=0
 RAG=1
 CMD="up"
 
@@ -77,10 +72,6 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --build)
       BUILD=1
-      shift
-      ;;
-    --o11y)
-      O11Y=1
       shift
       ;;
     --no-rag)
@@ -103,7 +94,6 @@ usage: up.sh [options] [up|down|logs|update]
 
 Options:
   --build         Local Docker with build (docker-compose.yml, foreground up)
-  --o11y          OTel Collector + opentelemetry-instrument no backend (compose.o11y.yml)
   --no-rag        Skip Postgres/pgvector (keyword retriever only)
   --force-setup   Re-run the setup wizard before starting (compose/--build only)
 
@@ -114,8 +104,7 @@ Examples:
   ./scripts/up.sh                 # production: pull + up -d + rag index
   ./scripts/up.sh update          # production: pull + up -d + health + digests
   ./scripts/up.sh --no-rag        # production without Postgres
-  ./scripts/up.sh --o11y          # production + Splunk o11y via OTel Collector
-  ./scripts/up.sh --build --o11y  # local build + o11y
+  ./scripts/up.sh --build         # local build
   ./scripts/up.sh down            # stop production stack
   ./scripts/up.sh logs            # follow production logs
 EOF
@@ -145,11 +134,6 @@ else
   COMPOSE_ARGS=(-f compose.plain.yml)
   export COMPOSE_FILE="$ROOT/compose.plain.yml"
   "$ROOT/scripts/lib/validate-prod-env.sh"
-fi
-
-if [ "$O11Y" -eq 1 ]; then
-  COMPOSE_ARGS+=(-f compose.o11y.yml)
-  COMPOSE_ARGS+=(--profile o11y)
 fi
 
 if [ "$RAG" -eq 1 ]; then

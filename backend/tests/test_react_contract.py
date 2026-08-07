@@ -4,70 +4,21 @@ Garante que os nomes de tool e os SKUs do carrinho chegam ao message history dos
 """
 from __future__ import annotations
 
-from unittest.mock import patch
-
 import pytest
-from langchain_core.messages import AIMessage, ToolMessage
 
-from app.graphs.concierge import build_concierge_graph
-from app.graphs.fulfillment import build_fulfillment_graph, run_fulfillment_graph
-from app.llm_models import make_stub_chat_model
+from app.ai_agents.concierge_workflow import arun_workflow
+from app.ai_agents.fulfillment_workflow import run_fulfillment_workflow
+from app.ai_agents.refund import arun_refund
+from app.ai_agents.store_compare import compare_products
 from app.runnable_config import build_runnable_config, make_thread_id
-from app.tools import CATALOG
+from app.store import orders
+from app.store.tools import CATALOG
 
-# `app.graphs.react` NÃO resolve modelo por conta própria (usa `invoke_bind_tools_cascade` de
-# `llm_models`), então patchar os pontos abaixo já força o stub em todo o caminho.
-_PATCH_TARGETS = (
-    "app.graphs.concierge.get_chat_model",
-    "app.graphs.concierge.resolve_chat_models",
-    "app.llm_models.get_chat_model",
-    "app.llm_models.resolve_chat_models",
-    "app.agents.get_chat_model",
-    "app.agents.resolve_chat_models",
-)
-
-
-@pytest.fixture
-def stubbed_models():
-    stub = make_stub_chat_model()
-    patches = [
-        patch(target, (lambda _name="": stub) if target.endswith("get_chat_model")
-              else (lambda _name="": [stub]))
-        for target in _PATCH_TARGETS
-    ]
-    for p in patches:
-        p.start()
-    try:
-        yield stub
-    finally:
-        for p in reversed(patches):
-            p.stop()
-
-
-def _tool_names(messages) -> list[str]:
-    names: list[str] = []
-    for m in messages or []:
-        if isinstance(m, AIMessage) and m.tool_calls:
-            for tc in m.tool_calls:
-                names.append(tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", "?"))
-        if isinstance(m, ToolMessage) and getattr(m, "name", None):
-            names.append(f"tool:{m.name}")
-    return names
-
-
-def _called(name: str, names: list[str]) -> bool:
-    return name in names or f"tool:{name}" in names
-
-
-def test_concierge_runs_search_then_price_and_grounds_the_selection(stubbed_models):
+async def test_concierge_runs_search_then_price_and_grounds_the_selection():
     cfg = build_runnable_config(thread_id=make_thread_id(), feature="concierge")
-    result = build_concierge_graph().invoke(
-        {"request": "a birthday gift under $300", "messages": [], "trace": []}, config=cfg,
-    )
-    names = _tool_names(result.get("messages"))
-    assert _called("search_catalog", names), names
-    assert _called("get_price", names), names
+    result = await arun_workflow("a birthday gift under $300", config=cfg)
     assert result.get("selected")
+    assert result["selected"]["quote"]["price"] == result["selected"]["price"]
     assert (result.get("quality") or {}).get("grounded") is True
 
 
@@ -76,27 +27,56 @@ def _cart_item() -> tuple[str, list[dict], float]:
     return product["sku"], [{"sku": product["sku"], "qty": 1, "price": product["price"]}], product["price"]
 
 
-def test_fulfillment_uses_the_cart_sku_not_the_tool_sku(stubbed_models):
+def test_fulfillment_uses_the_cart_sku_not_the_tool_sku():
     sku, items, total = _cart_item()
-    result = run_fulfillment_graph(items, total)
+    result = run_fulfillment_workflow(items, total)
     assert result["allow"] is True, result
     assert result["inventory"].get("sku") == sku, result["inventory"]
     assert result["quote"].get("sku") == sku, result["quote"]
     assert result["quote"].get("price") is not None, result["quote"]
 
 
-def test_fraud_false_positive_blocks_a_legitimate_cart(stubbed_models, reset_problem_flags):
+def test_fraud_false_positive_blocks_a_legitimate_cart(reset_problem_flags):
     _, items, total = _cart_item()
     reset_problem_flags.fraud_false_positive = True
-    assert run_fulfillment_graph(items, total)["allow"] is False
+    assert run_fulfillment_workflow(items, total)["allow"] is False
 
 
-def test_fulfillment_message_history_records_its_tools(stubbed_models):
+def test_fulfillment_returns_inventory_and_price_tool_results():
     _, items, total = _cart_item()
-    raw = build_fulfillment_graph().invoke(
-        {"items": items, "total": total, "messages": [], "trace": []},
-        config=build_runnable_config(thread_id=make_thread_id(), feature="fulfillment"),
-    )
-    names = _tool_names(raw.get("messages"))
-    assert _called("check_inventory", names), names
-    assert _called("get_price", names), names
+    raw = run_fulfillment_workflow(items, total)
+    assert raw["inventory"]["sku"] == items[0]["sku"]
+    assert raw["quote"]["sku"] == items[0]["sku"]
+
+
+def test_fulfillment_uses_one_inventory_and_price_result_per_cart_sku():
+    """Regressão do #72: sem o humano seedado, o stub caía no fallback NS-001, o
+    `resolve_quote_node` descartava e refazia as tools — 1 turno + 1 span desperdiçados.
+    Com o SKU real no histórico desde o 1º turno, o carrinho fecha em exatamente 1
+    `check_inventory` + 1 `get_price`, ambos com o SKU do carrinho, e 2 turnos do coordinator."""
+    sku, items, total = _cart_item()
+    raw = run_fulfillment_workflow(items, total)
+    assert raw["inventory"].get("sku") == sku, raw["inventory"]
+    assert raw["quote"].get("sku") == sku, raw["quote"]
+
+def test_compare_uses_a_price_for_each_non_default_sku():
+    """Análogo pro compare: SKUs não-default fecham em 2 `get_price` (1 por SKU) e 3 turnos
+    do coordinator, sem precisar da injeção de `_inject_get_price_call`."""
+    a, b = CATALOG[3], CATALOG[4]
+    raw = compare_products(a["sku"], b["sku"])
+    assert raw
+    assert raw["product_a"]["sku"] == a["sku"]
+    assert raw["product_b"]["sku"] == b["sku"]
+    assert raw["verdict"]
+
+
+async def test_refund_amount_matches_order_total_for_delivered_order():
+    orders.init_db()
+    product = CATALOG[2]
+    item = {"sku": product["sku"], "name": product["name"], "qty": 1, "price": product["price"]}
+    customer = {"name": "Contract Test", "email": "contract@vega.sim", "address": "1 Test St"}
+    order = orders.create_order([item], customer, product["price"], status="DELIVERED")
+
+    result = await arun_refund(order)
+
+    assert result["refund_amount"] == order["total"], result

@@ -7,14 +7,12 @@
 // enviado (sem gateway real). Estado de cliente vem do ShopProvider; sessão do AuthProvider.
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Customer, Order, createOrder, giftMessage, fraudExplain } from "@/lib/api";
+import { Customer, Order, createOrder, fraudExplain } from "@/lib/api";
 import { emojiOf, formatMoney, gradientOf } from "@/lib/shop";
 import { useShop } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import StatusPill from "@/components/StatusPill";
-import OrderStatusSummary from "@/components/OrderStatusSummary";
 import NotificationPreview from "@/components/NotificationPreview";
-import AiThinking from "@/components/AiThinking";
 import AuthForms from "@/components/AuthForms";
 
 type Stage = "details" | "payment" | "placing" | "confirmed" | "failed";
@@ -98,87 +96,6 @@ function Field({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
       />
-    </div>
-  );
-}
-
-const GIFT_PRESETS = [
-  "Birthday for my sister, warm and playful",
-  "Thank-you gift for a colleague, professional",
-  "Housewarming, casual and friendly",
-];
-
-// IA-Checkout (F-024): gerador de mensagem de presente a partir de um breve input. Opcional —
-// só uma conveniência no checkout (não é persistida na ordem; o shape de Order não muda).
-function GiftMessageField() {
-  const [open, setOpen] = useState(false);
-  const [brief, setBrief] = useState("");
-  const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function generate() {
-    if (busy) return;
-    setBusy(true);
-    try {
-      setMessage((await giftMessage(brief)).message);
-    } catch {
-      /* silencioso: presente é opcional */
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (!open) {
-    return (
-      <button type="button" className="ns-link" style={{ marginTop: 14 }} onClick={() => setOpen(true)}>
-        🎁 Add a gift message
-      </button>
-    );
-  }
-  return (
-    <div className="ns-gift">
-      <div className="ns-gift-head">
-        <span className="ns-spark sm" aria-hidden>✦</span>
-        <label className="ns-label" style={{ margin: 0 }}>Gift message</label>
-      </div>
-      <textarea
-        className="ns-input"
-        value={brief}
-        onChange={(e) => setBrief(e.target.value)}
-        placeholder="e.g. birthday for my sister, warm and playful"
-        aria-label="Gift message brief"
-        style={{ minHeight: 96, resize: "vertical" }}
-      />
-      <div className="ns-pai-chips" style={{ marginTop: 10 }}>
-        {GIFT_PRESETS.map((preset) => (
-          <button
-            key={preset}
-            type="button"
-            className="ns-chip"
-            onClick={() => setBrief(preset)}
-            disabled={busy}
-          >
-            {preset}
-          </button>
-        ))}
-      </div>
-      <button type="button" className="ns-btn-ghost" style={{ marginTop: 10 }} onClick={generate} disabled={busy}>
-        {busy ? "Writing…" : message ? "Regenerate" : "Generate message"}
-      </button>
-      {busy && (
-        <div style={{ marginTop: 10 }}>
-          <AiThinking label="Writing your gift message" />
-        </div>
-      )}
-      {!busy && message && (
-        <textarea
-          className="ns-input"
-          style={{ marginTop: 10, minHeight: 140, resize: "vertical" }}
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          aria-label="Generated gift message"
-        />
-      )}
     </div>
   );
 }
@@ -351,9 +268,6 @@ export default function CheckoutPage() {
             <span className="ns-muted" style={{ fontSize: 13 }}>Status</span>
             <StatusPill status={order.status} />
           </div>
-          {/* IA-Pedido (F-024): resumo de status em linguagem natural. */}
-          <OrderStatusSummary orderId={order.id} />
-          {/* IA-Notificação (F-031): prévia da copy de e-mail de confirmação. */}
           <NotificationPreview orderId={order.id} />
           {order.items.map((it) => (
             <div className="ns-sumrow" key={it.sku}>
@@ -444,9 +358,6 @@ export default function CheckoutPage() {
                     )}
                   </>
                 )}
-
-                {/* IA-Checkout (F-024): gerador opcional de mensagem de presente */}
-                <GiftMessageField />
 
                 <div className="ns-btn-row" style={{ marginTop: 18 }}>
                   <Link href="/" className="ns-btn-ghost block">Back to store</Link>

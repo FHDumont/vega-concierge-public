@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-# Inventário congelado: 66 rotas de `/api/*` + as 4 que o FastAPI publica sozinho.
+# Inventário congelado: 62 rotas de `/api/*` + as 4 que o FastAPI publica sozinho.
 # Ao ADICIONAR uma rota nova (aditivo, permitido), acrescente a linha aqui no mesmo commit.
 FROZEN_ROUTES: set[tuple[str, tuple[str, ...]]] = {
     ("/openapi.json", ("GET", "HEAD")),
@@ -26,11 +26,9 @@ FROZEN_ROUTES: set[tuple[str, tuple[str, ...]]] = {
     ("/api/galileo/config", ("GET",)),
     ("/api/run", ("POST",)),
     ("/api/chat", ("POST",)),
+    ("/api/security/actions", ("POST",)),
     ("/api/product/qa", ("POST",)),
-    ("/api/product/describe", ("POST",)),
-    ("/api/search/semantic", ("POST",)),
     ("/api/compare", ("POST",)),
-    ("/api/home/picks", ("POST",)),
     ("/api/cart/crosssell", ("POST",)),
     ("/api/auth/register", ("POST",)),
     ("/api/auth/login", ("POST",)),
@@ -40,11 +38,9 @@ FROZEN_ROUTES: set[tuple[str, tuple[str, ...]]] = {
     ("/api/orders", ("GET",)),
     ("/api/orders", ("POST",)),
     ("/api/orders/{order_id}", ("GET",)),
-    ("/api/orders/{order_id}/summary", ("POST",)),
     ("/api/orders/{order_id}/notification", ("POST",)),
     ("/api/orders/{order_id}/refund", ("POST",)),
     ("/api/orders/{order_id}/fraud-explain", ("POST",)),
-    ("/api/checkout/gift-message", ("POST",)),
     ("/api/account/insights", ("GET",)),
     ("/api/admin/summary", ("GET",)),
     ("/api/admin/insights", ("GET",)),
@@ -117,9 +113,9 @@ def test_route_inventory_has_no_delta():
     assert not live - FROZEN_ROUTES, f"rotas novas não congeladas: {sorted(live - FROZEN_ROUTES)}"
 
 
-def test_api_surface_is_sixty_six_routes():
+def test_api_surface_is_sixty_two_routes():
     api_routes = {r for r in _live_routes() if r[0].startswith("/api/")}
-    assert len(api_routes) == 66, len(api_routes)
+    assert len(api_routes) == 62, len(api_routes)
 
 
 # --- endpoints exercidos offline ---------------------------------------------
@@ -184,6 +180,41 @@ def test_chat_returns_the_chat_contract(api_client):
     assert body["reply"]
 
 
+def test_chat_account_spend_uses_session_auth(api_client):
+    from datetime import datetime, timedelta, timezone
+
+    from app.store import orders, users
+
+    orders.init_db()
+    users.init_db()
+    users.seed_demo_user()
+    user = users.get_user_by_email(users.DEMO_EMAIL)
+    assert user, "demo user unavailable"
+    user_id = user["id"]
+    if not any(
+        o["status"] in ("PAID", "SHIPPED", "DELIVERED")
+        for o in orders.list_orders_for_user(user_id)
+    ):
+        customer = {"name": users.DEMO_NAME, "email": users.DEMO_EMAIL, "address": "221B Demo Street"}
+        for days_ago, items in users._DEMO_ORDERS:
+            total = sum(i["qty"] * i["price"] for i in items)
+            created = (datetime.now(timezone.utc) - timedelta(days=days_ago)).isoformat()
+            orders.create_order(items, customer, total, status="PAID", user_id=user_id, created_at=created)
+    spend = orders.spend_for_user(user_id)
+    token = users.create_session(user_id)
+    body = api_client.post(
+        "/api/chat",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"messages": [{"role": "user", "content": "Quanto já gastei?"}]},
+    ).json()
+    assert body["error"] is None, body["error"]
+    assert body["intent"] == "stats"
+    layout = body.get("artifacts", {}).get("layout") or {}
+    fact_values = " ".join(str(f.get("value", "")) for f in layout.get("facts") or [])
+    haystack = f"{body['reply']} {fact_values}"
+    assert f"{spend:,.2f}" in haystack
+
+
 def test_flags_are_public(api_client):
     flags = api_client.get("/api/flags").json()
     assert set(flags) >= {"behind_the_scenes", "admin", "simulator", "inspector"}
@@ -199,7 +230,7 @@ def test_rum_config_is_public(api_client):
 def owner_headers() -> dict[str, str]:
     """Sessão de OWNER criada direto no módulo — a senha do owner varia por deploy
     (`OWNER_PASSWORD`), então logar pela API tornaria o teste dependente do ambiente."""
-    from app import users
+    from app.store import users
 
     users.seed_owner_user()
     owner = users.get_user_by_email(users.OWNER_EMAIL)

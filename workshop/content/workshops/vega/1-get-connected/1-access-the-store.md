@@ -36,7 +36,6 @@ From the repo root:
 ```bash {file="run.sh"}
 ./scripts/dev.sh              # RAG + Postgres on by default
 ./scripts/dev.sh --no-rag     # keyword-only retrieval, no Postgres
-./scripts/dev.sh --o11y       # optional Splunk o11y stack
 ```
 
 Starts backend (`:8000`) and frontend (`:3000`). Open **http://localhost:3000**.
@@ -50,7 +49,7 @@ cp .env.example .env
 ./scripts/up.sh --build       # or pull-only on a tagged AMI
 ```
 
-Frontend `:3000`, backend `:8000`. Add `--o11y` for the OTel Collector profile.
+Frontend `:3000`, backend `:8000`.
 {{< /tab >}}
 
 {{< /tabs >}}
@@ -72,7 +71,7 @@ What to notice:
 
 - **`rag.enabled`** — `true` when pgvector is live (default); `false` with `--no-rag`.
 - **`ollama.reachable`** — host daemon for chat + embeddings on the workshop path.
-- No in-app instrumentation wizard — backend tracing is **Splunk Agent Observability SDK** (opt-in key) plus optional **process o11y** (`--o11y`).
+- No in-app instrumentation wizard — backend tracing is the **Splunk Agent Observability SDK** (opt-in key).
 {{< /step >}}
 
 {{< /exercise >}}

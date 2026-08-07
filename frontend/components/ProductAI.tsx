@@ -1,16 +1,57 @@
 "use client";
 // IA-Produto (F-022): assistente na página de detalhe — Q&A fundamentado nos dados do produto.
-// Mostra só o conteúdo. Estilizado pelas variáveis de paleta.
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { askProduct } from "@/lib/api";
-import { useChat, useChatPageScope } from "@/lib/chat-context";
 import AiThinking from "./AiThinking";
 
-const SUGGESTIONS = ["What's it best for?", "How's the battery life?", "Is it good for travel?"];
+const CHIP_POOL: Record<string, string[]> = {
+  audio: [
+    "How's the battery life?",
+    "Is it good for travel?",
+    "How's the sound quality?",
+    "Does it have noise cancellation?",
+  ],
+  wearable: [
+    "What health metrics does it track?",
+    "Is it water resistant?",
+    "How long does the battery last?",
+    "Is it comfortable to wear all day?",
+  ],
+  casa: [
+    "What's included in the box?",
+    "Is it beginner-friendly?",
+    "Would this make a good gift?",
+    "What room is it best for?",
+  ],
+  presente: [
+    "Would this make a good gift?",
+    "What's it best for?",
+    "Is it easy to use?",
+  ],
+};
 
-export default function ProductAI({ sku, name }: { sku: string; name: string }) {
-  const { openChat } = useChat();
-  useChatPageScope({ sku });
+const DEFAULT_CHIPS = ["What's it best for?", "What are the key specs?", "Is it in stock?"];
+
+const TAG_PRIORITY = ["audio", "wearable", "casa", "presente"];
+
+function chipsForTags(tags: string[]): string[] {
+  const picked: string[] = [];
+  for (const tag of TAG_PRIORITY) {
+    if (!tags.includes(tag)) continue;
+    for (const chip of CHIP_POOL[tag] ?? []) {
+      if (!picked.includes(chip)) picked.push(chip);
+      if (picked.length >= 3) return picked;
+    }
+  }
+  for (const chip of DEFAULT_CHIPS) {
+    if (!picked.includes(chip)) picked.push(chip);
+    if (picked.length >= 3) break;
+  }
+  return picked.slice(0, 3);
+}
+
+export default function ProductAI({ sku, name, tags = [] }: { sku: string; name: string; tags?: string[] }) {
+  const suggestions = useMemo(() => chipsForTags(tags), [tags]);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
@@ -50,17 +91,10 @@ export default function ProductAI({ sku, name }: { sku: string; name: string }) 
         <button type="button" className="ns-go" onClick={() => ask()} disabled={asking}>
           {asking ? "Asking…" : "Ask"}
         </button>
-        <button
-          type="button"
-          className="ns-btn-ghost sm"
-          onClick={() => openChat({ sku, seed: question || `Tell me about ${name}` })}
-        >
-          Open in chat
-        </button>
       </div>
 
       <div className="ns-pai-chips">
-        {SUGGESTIONS.map((s) => (
+        {suggestions.map((s) => (
           <button key={s} type="button" className="ns-chip" onClick={() => ask(s)} disabled={asking}>
             {s}
           </button>

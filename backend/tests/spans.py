@@ -22,6 +22,21 @@ def event_label(serialized: dict | None, **kwargs) -> str:
     return str(run_id or "")
 
 
+def serialized_model_id(serialized: dict | None) -> str:
+    """LangChain model id from callback serialization — must not be ``*_local`` fake adapters."""
+    if not serialized:
+        return ""
+    kwargs = serialized.get("kwargs") or {}
+    for key in ("model", "model_name"):
+        val = kwargs.get(key)
+        if val:
+            return str(val)
+    run_id = serialized.get("id")
+    if isinstance(run_id, list) and run_id:
+        return str(run_id[-1])
+    return str(run_id or "")
+
+
 class SpanSpy(BaseCallbackHandler):
     """Captura rótulos visíveis de LLM spans, chains (incl. nós LangGraph), tools e retrievers.
 
@@ -30,6 +45,8 @@ class SpanSpy(BaseCallbackHandler):
 
     def __init__(self) -> None:
         self.llm_names: list[str] = []
+        self.chat_model_names: list[str] = []
+        self.chat_model_ids: list[str] = []
         self.chain_names: list[str] = []
         self.chain_metadata: list[dict] = []
         self.tool_names: list[str] = []
@@ -41,6 +58,13 @@ class SpanSpy(BaseCallbackHandler):
 
     def on_llm_start(self, serialized, prompts, **kwargs):  # noqa: ANN001
         self.llm_names.append(event_label(serialized, **kwargs))
+
+    def on_chat_model_start(self, serialized, messages, **kwargs):  # noqa: ANN001
+        """Chat models use a distinct LangChain callback, but are still LLM spans to callers."""
+        name = event_label(serialized, **kwargs)
+        self.llm_names.append(name)
+        self.chat_model_names.append(name)
+        self.chat_model_ids.append(serialized_model_id(serialized))
 
     def on_chain_start(self, serialized, inputs, **kwargs):  # noqa: ANN001
         self.chain_names.append(event_label(serialized, **kwargs))

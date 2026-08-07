@@ -1,365 +1,253 @@
-"""Nomes legíveis de span (F-GALILEO-4/9/10/11/13, F-TRACE-UX-1) — ex `run_span_names_demo.py`.
-
-Offline: sem `GALILEO_API_KEY` não há rede. Valida os rótulos LangChain que o
-`GalileoAsyncCallback` consumiria, via callback espião local.
-"""
+"""Production trace-name contracts for the standalone AI workflows."""
 from __future__ import annotations
 
 import pytest
 
-from app import agents, llm_cache, orders
-from app.galileo_span import (
-    AGGREGATE_STORE_STATISTICS,
-    BUSINESS_STEPS,
-    CHARGE_PAYMENT_TOOL_NAME,
-    CHAT_GRAPH_NODES,
-    CHAT_ROUTE_DECISION,
-    CONFIRM_CART_STOCK_TOOL_NAME,
-    FRAUD_DECISION_TOOL_NAME,
-    PROCESS_REFUND_TOOL_NAME,
-    REFUND_ABUSE_TOOL_NAME,
-    REFUND_ELIGIBILITY_TOOL_NAME,
-    RESPONSE_CACHE_TOOL_NAME,
-    SEND_ORDER_NOTIFICATION_TOOL_NAME,
-    agent_llm_run_name,
-    default_llm_run_name,
-    llm_run_name,
-    response_cache_invoke_run_name,
-    response_cache_replay_run_name,
-)
-from app.graphs.chat import build_chat_graph
-from app.graphs.compare import build_compare_graph
-from app.graphs.fulfillment import build_fulfillment_graph
-from app.graphs.returns import build_returns_graph
-from app.runnable_config import (
-    bind_runnable_config,
-    build_runnable_config,
-    derive_feature_config,
-    make_thread_id,
-)
-from app.tools import CATALOG
-from tests.spans import SpanSpy, has, is_title_case_llm_name
+from app.ai_agents.chat_workflow import arun_chat_workflow
+from app.ai_agents.concierge_workflow import arun_workflow
+from app.ai_agents.fulfillment_workflow import build_fulfillment_workflow
+from app.ai_agents.notification_copy import compose_notification_text
+from app.ai_agents.product_qa import answer_product_question
+from app.ai_agents.refund import arun_refund
+from app.ai_agents.store_discovery import cart_crosssell, semantic_search
+from app.ai_agents.store_compare import compare_products
+from app.runnable_config import build_runnable_config, make_thread_id
+from app.store import orders
+from app.store.tools import CATALOG
+from app.settings import settings
+from tests.spans import SpanSpy, has
 
 
-def _spy_config(feature: str) -> tuple[SpanSpy, dict]:
+def _config(feature: str) -> tuple[SpanSpy, dict]:
     spy = SpanSpy()
-    cfg = build_runnable_config(thread_id=make_thread_id(), feature=feature)
-    return spy, {**cfg, "callbacks": [spy]}
+    config = build_runnable_config(thread_id=make_thread_id(), feature=feature)
+    return spy, {**config, "callbacks": [spy]}
 
 
-# --- derive_feature_config ----------------------------------------------------
+async def test_concierge_emits_its_public_workflow_span():
+    spy, config = _config("concierge")
+    result = await arun_workflow("a birthday gift under $300", config=config)
+    assert result["quality"]["grounded"] is True
+    assert has("concierge.workflow", spy.chain_names), spy.chain_names
+    assert has("concierge.compose_product_recommendation", spy.chain_names), spy.chain_names
+    assert {"search_catalog", "get_price"} <= set(spy.tool_names), spy.tool_names
+    assert has("feature.compose_product_recommendation", spy.llm_names), spy.llm_names
+    assert has("feature.compose_product_recommendation", spy.chat_model_names), spy.chat_model_names
 
-def test_derive_feature_config_sets_the_specialist_and_keeps_the_parent_context():
-    parent = build_runnable_config(
-        thread_id=make_thread_id(), feature="chat", metadata={"user_id": "demo-user"},
+
+async def test_chat_emits_public_route_and_answer_spans():
+    spy, config = _config("chat")
+    result = await arun_chat_workflow(
+        [{"role": "user", "content": "What are the policies of Vega?"}], config=config,
     )
-    child = derive_feature_config(parent, "store_chat")
-    meta = child.get("metadata") or {}
-
-    assert meta.get("feature") == "store_chat"
-    assert meta.get("parent_feature") == "chat"
-    assert meta.get("user_id") == "demo-user"
-    assert (child.get("configurable") or {}).get("thread_id") == (
-        parent.get("configurable") or {}
-    ).get("thread_id")
-
-
-# --- compare ------------------------------------------------------------------
-
-@pytest.fixture(scope="module")
-def compare_spy() -> SpanSpy:
-    spy, cfg = _spy_config("compare")
-    a, b = CATALOG[0], CATALOG[1]
-    build_compare_graph().invoke(
-        {"sku_a": a["sku"], "sku_b": b["sku"], "product_a": a, "product_b": b,
-         "messages": [], "trace": []},
-        config=cfg,
-    )
-    return spy
+    assert result["intent"] == "general"
+    assert has("chat.route_shopper_request", spy.chain_names), spy.chain_names
+    assert has("chat.answer_store_policy", spy.chain_names), spy.chain_names
+    assert has("chat.assemble_shopper_reply", spy.chain_names), spy.chain_names
+    assert "search_policies" in spy.tool_names, spy.tool_names
+    assert spy.retriever_queries, spy.retriever_queries
+    assert has("feature.answer_store_policy", spy.llm_names), spy.llm_names
+    assert has("feature.answer_store_policy", spy.chat_model_names), spy.chat_model_names
 
 
-@pytest.mark.parametrize("node", [
-    "compare.fetch_prices_for_comparison",
-    "compare.run_get_price_tools",
-    "compare.write_comparison_verdict",
-])
-def test_compare_graph_uses_business_node_names(compare_spy, node):
-    assert has(node, compare_spy.chain_names), compare_spy.chain_names
-
-
-def test_compare_graph_names_its_llm_spans(compare_spy):
-    assert has(agent_llm_run_name("compare", "compare_coordinator"), compare_spy.llm_names)
-    assert has(default_llm_run_name("comparator"), compare_spy.llm_names)
-
-
-def test_compare_graph_has_no_legacy_title_case_llm_names(compare_spy):
-    assert not any(is_title_case_llm_name(n) for n in compare_spy.llm_names), compare_spy.llm_names
-
-
-# --- feature chains -----------------------------------------------------------
-
-def test_feature_chain_carries_the_business_run_name():
-    spy = SpanSpy()
-    agents.feature_complete(
-        "search", "wireless headphones under $200", config={"callbacks": [spy]},
-    )
-    assert has(f"feature.{BUSINESS_STEPS['search']}", spy.chain_names), spy.chain_names
-    assert has(default_llm_run_name("search"), spy.llm_names), spy.llm_names
-    assert not any(is_title_case_llm_name(n) for n in spy.llm_names), spy.llm_names
-
-
-def test_direct_search_endpoint_keeps_metadata_feature(clean_cache):
-    spy, cfg = _spy_config("search")
-    agents.feature_complete("search", "wireless headphones under $200", config=cfg)
-    meta = spy.metadata_for(f"feature.{BUSINESS_STEPS['search']}")
-    assert (meta or {}).get("feature") == "search", meta
-
-
-def test_direct_product_qa_endpoint_keeps_metadata_feature():
-    from app import ai_features
-
-    spy, cfg = _spy_config("product_qa")
-    ai_features.product_qa("NS-001", "what is the price?", config=cfg)
-    meta = spy.metadata_for(f"feature.{BUSINESS_STEPS['product_qa']}")
-    assert (meta or {}).get("feature") == "product_qa", (meta, spy.chain_names)
-
-
-def test_leaf_agent_gets_the_business_llm_name():
-    spy = SpanSpy()
-    agents._run_agent_llm(
-        "eligibility",
-        'Reply ONLY with JSON {"eligible": true, "reason": "ok"}.',
-        config={"callbacks": [spy]},
-        workflow="returns",
-    )
-    assert has(agent_llm_run_name("returns", "eligibility"), spy.llm_names), spy.llm_names
-
-
-# --- chat graph ---------------------------------------------------------------
-
-@pytest.fixture(scope="module")
-def chat_policy_spy() -> SpanSpy:
-    spy, cfg = _spy_config("chat")
-    build_chat_graph().invoke(
-        {"request": "how many days do I have to return an order?", "messages": [], "trace": []},
-        config=cfg,
-    )
-    return spy
-
-
-@pytest.mark.parametrize("node_key", ["route", "general_qa", "finalize"])
-def test_chat_graph_uses_business_node_names(chat_policy_spy, node_key):
-    assert has(CHAT_GRAPH_NODES[node_key], chat_policy_spy.chain_names), chat_policy_spy.chain_names
-
-
-def test_chat_graph_has_no_generic_span_names(chat_policy_spy):
-    names = chat_policy_spy.chain_names
-    assert not has("coordinator", names), names
-    assert not has("route_from_chat", names), names
-    assert not any("Runnable" in (n or "") for n in names), names
-
-
-def test_chat_graph_nests_the_store_feature_under_its_own_metadata(chat_policy_spy):
-    store_run = llm_run_name("feature", BUSINESS_STEPS["store_chat"])
-    assert has(store_run, chat_policy_spy.chain_names), chat_policy_spy.chain_names
-    meta = chat_policy_spy.metadata_for(store_run) or {}
-    assert meta.get("feature") == "store_chat", meta
-
-
-@pytest.fixture(scope="module")
-def chat_stats_spy() -> SpanSpy:
-    spy, cfg = _spy_config("chat")
-    build_chat_graph().invoke(
-        {"request": "What is the most expensive product?", "messages": [], "trace": []},
-        config=cfg,
-    )
-    return spy
-
-
-@pytest.mark.parametrize("span", [CHAT_ROUTE_DECISION, AGGREGATE_STORE_STATISTICS])
-def test_stats_chat_emits_its_decision_spans(chat_stats_spy, span):
-    assert has(span, chat_stats_spy.chain_names), chat_stats_spy.chain_names
-
-
-def test_stats_chat_finalizes_and_skips_the_catalog_search_tool(chat_stats_spy):
-    assert has(CHAT_GRAPH_NODES["finalize"], chat_stats_spy.chain_names), chat_stats_spy.chain_names
-    assert not has("search_catalog", chat_stats_spy.tool_names), chat_stats_spy.tool_names
-
-
-# --- cache: miss/hit/desligado ------------------------------------------------
-
-def test_disabled_cache_emits_no_check_response_cache_span(clean_cache, monkeypatch):
-    # Desde a F-BACKEND-1 a config é resolvida uma vez no import (`app.settings`), então quem
-    # desliga o cache em teste é o campo, não a variável de ambiente.
-    from app.settings import settings
-
-    monkeypatch.setattr(settings, "llm_cache_enabled", False)
-    clean_cache.reset_state()
-    spy, cfg = _spy_config("home_picks")
-    with bind_runnable_config(cfg):
-        agents.feature_complete("home_picks", "Recommend 4 products for a wireless lover.", config=cfg)
-
-    assert not has(RESPONSE_CACHE_TOOL_NAME, spy.tool_names), spy.tool_names
-    values = [m.get("response_cache") for m in spy.chain_metadata if m.get("response_cache")]
-    assert "disabled" in values, values
-
-
-def test_cache_miss_then_hit_are_symmetric_in_the_trace(clean_cache):
-    spy, cfg = _spy_config("home_picks")
-    home_run = llm_run_name("feature", BUSINESS_STEPS["home_picks"])
-    prompt = "Recommend 4 products for a wireless lover."
-
-    with bind_runnable_config(cfg):
-        agents.feature_complete("home_picks", prompt, config=cfg)
-
-    assert has(RESPONSE_CACHE_TOOL_NAME, spy.tool_names), spy.tool_names
-    assert not has(f"{home_run}.check_response_cache", spy.chain_names), spy.chain_names
-    assert has(home_run, spy.chain_names), spy.chain_names
-    assert has(response_cache_invoke_run_name(home_run), spy.chain_names), spy.chain_names
-    assert spy.llm_names, "cache miss tem que chamar o LLM"
-    assert "miss" in str(spy.tool_outputs[0]).lower(), spy.tool_outputs
-    assert prompt in str(spy.tool_inputs[0]), spy.tool_inputs
-
-    llm_calls_before_hit = len(spy.llm_names)
-    with bind_runnable_config(cfg):
-        agents.feature_complete("home_picks", prompt, config=cfg)
-
-    assert has(response_cache_replay_run_name(home_run), spy.chain_names), spy.chain_names
-    assert len(spy.llm_names) == llm_calls_before_hit, "cache hit não pode chamar o LLM"
-    assert prompt in str(spy.tool_inputs[-1]), spy.tool_inputs
-    assert not has("RunnableLambda", spy.chain_names), spy.chain_names
-    assert not has("RunnableSequence", spy.chain_names), spy.chain_names
-    assert not has("home_picks.cache_hit", spy.chain_names), spy.chain_names
-    assert not any(out == "hit" for out in spy.chain_outputs), spy.chain_outputs[-5:]
-
-
-# --- fulfillment --------------------------------------------------------------
-
-CUSTOMER = {"name": "Span Demo", "email": "span@vega.sim", "address": "1 Test St"}
-
-
-def _sku_item() -> dict:
-    p = CATALOG[0]
-    return {"sku": p["sku"], "name": p["name"], "qty": 1, "price": p["price"]}
-
-
-@pytest.fixture(scope="module")
-def fulfillment_spy() -> SpanSpy:
-    """Trace do checkout que vai até o fim (quote → fraude → estoque → cobrança → notificação).
-
-    Mesma razão do `returns_spy`: o loop ReAct sob stub às vezes encerra antes de percorrer o
-    caminho completo. Repetimos até uma execução completa — é dela que os nomes de span falam.
-    """
+async def test_chat_stats_emits_catalog_tool_and_aggregate_span():
     orders.init_db()
-    item = _sku_item()
-    for _ in range(10):
-        spy, cfg = _spy_config("fulfillment")
-        order = orders.create_order([item], CUSTOMER, item["price"], status="PENDING")
-        build_fulfillment_graph().invoke(
-            {"items": [item], "total": item["price"], "order": order, "messages": [], "trace": []},
-            config=cfg,
-        )
-        if has(SEND_ORDER_NOTIFICATION_TOOL_NAME, spy.tool_names):
-            return spy
-    pytest.fail("10 execuções do fulfillment graph e nenhuma chegou até a notificação")
+    spy, config = _config("chat")
+    result = await arun_chat_workflow(
+        [{"role": "user", "content": "What is the most expensive product?"}], config=config,
+    )
+    assert result["intent"] == "stats"
+    assert has("chat.answer_store_statistics", spy.chain_names), spy.chain_names
+    assert "get_catalog_stats" in spy.tool_names, spy.tool_names
+    assert has("aggregate_store_statistics", spy.chain_names), spy.chain_names
+    assert has("feature.answer_store_statistics", spy.llm_names), spy.llm_names
+    assert has("feature.answer_store_statistics", spy.chat_model_names), spy.chat_model_names
 
 
-def test_fulfillment_coordinator_llm_span_is_named(fulfillment_spy):
-    # Quantas voltas o loop ReAct dá é decisão do modelo (sob stub, sorteio) — o contrato aqui é
-    # o NOME do span, não a contagem.
-    name = agent_llm_run_name("fulfillment", "fulfillment_coordinator")
-    assert has(name, fulfillment_spy.llm_names), fulfillment_spy.llm_names
+async def test_chat_account_stats_emits_account_tool_llm_and_aggregate_span():
+    from datetime import datetime, timedelta, timezone
 
+    from app.store import users
 
-@pytest.mark.parametrize("tool_name", [
-    FRAUD_DECISION_TOOL_NAME,
-    CONFIRM_CART_STOCK_TOOL_NAME,
-    CHARGE_PAYMENT_TOOL_NAME,
-    SEND_ORDER_NOTIFICATION_TOOL_NAME,
-])
-def test_fulfillment_emits_its_l6_tool_spans(fulfillment_spy, tool_name):
-    assert has(tool_name, fulfillment_spy.tool_names), fulfillment_spy.tool_names
-
-
-@pytest.mark.parametrize("needle", ["llm_decision", "stock_ok", "paid", "sent"])
-def test_fulfillment_tool_outputs_expose_the_business_result(fulfillment_spy, needle):
-    assert any(needle in str(out).lower() for out in fulfillment_spy.tool_outputs), needle
-
-
-@pytest.mark.parametrize("node", [
-    "fulfillment.resolve_checkout_quote",
-    "fulfillment.decide_fraud_allow_or_block",
-    "fulfillment.confirm_cart_stock",
-    "fulfillment.charge_payment",
-    "fulfillment.persist_order_status",
-])
-def test_fulfillment_graph_uses_business_node_names(fulfillment_spy, node):
-    assert has(node, fulfillment_spy.chain_names), fulfillment_spy.chain_names
-
-
-def test_fulfillment_hides_langgraph_routing_internals(fulfillment_spy):
-    leaked = [n for n in fulfillment_spy.chain_names if "_route_after_" in n or n == "tools_condition"]
-    assert not leaked, leaked
-
-
-# --- returns ------------------------------------------------------------------
-
-@pytest.fixture(scope="module")
-def returns_spy() -> SpanSpy:
-    """Trace do caminho APROVADO (o único que passa por `process_refund`).
-
-    `resolve_policy_and_calc_node` adota o resultado de `policy_lookup` que estiver no message
-    history, e sob stub o agente ReAct às vezes chama a tool com um status inventado — aí vem
-    `refundable=False` e o grafo desvia de `process_refund` (~5% das execuções). É um buraco real
-    de robustez do fluxo (o dado autoritativo é o pedido, não o argumento do agente), mas está
-    fora do escopo desta fase: aqui só repetimos até cair no caminho aprovado, que é o que estes
-    testes de nome de span cobrem. Ver DEBITO-TECNICO.
-    """
     orders.init_db()
-    item = _sku_item()
-    for _ in range(10):
-        spy, cfg = _spy_config("returns")
-        order = orders.create_order([item], CUSTOMER, item["price"], status="DELIVERED")
-        result = build_returns_graph().invoke(
-            {"order": order, "messages": [], "trace": []}, config=cfg,
-        )
-        if (result.get("policy") or {}).get("refundable"):
-            return spy
-    pytest.fail("10 execuções do returns graph e nenhuma chegou ao caminho aprovado")
+    users.init_db()
+    users.seed_demo_user()
+    user = users.get_user_by_email(users.DEMO_EMAIL)
+    assert user, "demo user unavailable"
+    user_id = user["id"]
+    if not any(
+        o["status"] in ("PAID", "SHIPPED", "DELIVERED")
+        for o in orders.list_orders_for_user(user_id)
+    ):
+        customer = {"name": users.DEMO_NAME, "email": users.DEMO_EMAIL, "address": "221B Demo Street"}
+        for days_ago, items in users._DEMO_ORDERS:
+            total = sum(i["qty"] * i["price"] for i in items)
+            created = (datetime.now(timezone.utc) - timedelta(days=days_ago)).isoformat()
+            orders.create_order(items, customer, total, status="PAID", user_id=user_id, created_at=created)
+
+    spy, base = _config("chat")
+    config = {**base, "metadata": {**(base.get("metadata") or {}), "user_id": user_id}}
+    result = await arun_chat_workflow(
+        [{"role": "user", "content": "Quanto já gastei?"}], config=config,
+    )
+    assert result["intent"] == "stats"
+    assert has("chat.answer_store_statistics", spy.chain_names), spy.chain_names
+    assert "get_account_stats" in spy.tool_names, spy.tool_names
+    assert has("aggregate_store_statistics", spy.chain_names), spy.chain_names
+    assert has("feature.answer_store_statistics", spy.llm_names), spy.llm_names
+    assert has("feature.answer_store_statistics", spy.chat_model_names), spy.chat_model_names
 
 
-@pytest.mark.parametrize("tool_name", [
-    REFUND_ELIGIBILITY_TOOL_NAME,
-    REFUND_ABUSE_TOOL_NAME,
-    PROCESS_REFUND_TOOL_NAME,
-])
-def test_returns_emits_its_tool_spans(returns_spy, tool_name):
-    assert has(tool_name, returns_spy.tool_names), returns_spy.tool_names
+async def test_chat_recommend_uses_feature_llm_name_and_consistent_product():
+    orders.init_db()
+    spy, config = _config("chat")
+    result = await arun_chat_workflow(
+        [{"role": "user", "content": "Birthday gift under $300"}], config=config,
+    )
+    assert result["intent"] == "recommend"
+    assert has("feature.compose_product_recommendation", spy.llm_names), spy.llm_names
+    recommended = (result.get("artifacts") or {}).get("recommended") or {}
+    assert recommended.get("sku") and recommended.get("name") and recommended.get("price")
+    answer = result.get("answer") or ""
+    if not answer.startswith("The AI"):
+        assert recommended["name"] in answer
 
 
-def test_returns_process_refund_output_carries_status_and_refund(returns_spy):
-    assert any(
-        "status" in str(out).lower() and "refunded" in str(out).lower()
-        for out in returns_spy.tool_outputs
-    ), returns_spy.tool_outputs
+def test_product_qa_emits_the_retriever_spans_that_ground_the_answer():
+    spy, config = _config("product_qa")
+    result = answer_product_question("NS-001", "How many days do I have to return this?", config=config)
+    assert result and result["grounded"] is True
+    assert len(spy.retriever_queries) >= 2, spy.retriever_queries
+    assert has("product_qa.workflow", spy.chain_names), spy.chain_names
+    assert has("product_qa.gather_product_context", spy.chain_names), spy.chain_names
+    assert has("product_qa.retrieve_policy_context", spy.chain_names), spy.chain_names
+    assert has("product_qa.retrieve_catalog_context", spy.chain_names), spy.chain_names
+    assert "search_policies" in spy.tool_names, spy.tool_names
+    assert has("feature.answer_product_question", spy.chat_model_names), spy.chat_model_names
 
 
-def test_returns_eligibility_output_separates_llm_from_effective(returns_spy):
-    assert any(
-        "llm_eligible" in str(out).lower() and "source" in str(out).lower()
-        for out in returns_spy.tool_outputs
-    ), returns_spy.tool_outputs
+def test_product_qa_redirects_off_topic_questions_without_retrievers():
+    spy, config = _config("product_qa")
+    result = answer_product_question("NS-001", "How do returns work?", config=config)
+    assert result and "concierge chat" in result["answer"]
+    assert not spy.retriever_queries, spy.retriever_queries
 
 
-@pytest.mark.parametrize("node", [
-    "returns.check_refund_eligibility",
-    "returns.screen_refund_abuse",
-    "returns.process_refund",
-])
-def test_returns_graph_uses_business_node_names(returns_spy, node):
-    assert has(node, returns_spy.chain_names), returns_spy.chain_names
+def test_standalone_store_apis_emit_their_named_llm_spans():
+    order = {
+        "id": "ORD-SPAN",
+        "status": "PAID",
+        "items": [{"sku": CATALOG[0]["sku"], "qty": 1}],
+        "total": CATALOG[0]["price"],
+        "customer": {"name": "Span User"},
+    }
+    cases = (
+        (semantic_search, ("audio",), "feature.semantic_product_search"),
+        (cart_crosssell, ([CATALOG[0]["sku"]],), "feature.suggest_cart_additions"),
+        (compose_notification_text, (order,), "feature.compose_notification_text"),
+    )
+    for api, args, expected_span in cases:
+        spy, config = _config(expected_span)
+        api(*args, config=config)
+        assert has(expected_span, spy.chat_model_names), spy.chat_model_names
 
 
-def test_returns_hides_langgraph_routing_internals(returns_spy):
-    leaked = [n for n in returns_spy.chain_names if "_route_after_" in n or n == "tools_condition"]
-    assert not leaked, leaked
+def test_compare_emits_its_stable_business_steps():
+    spy, config = _config("compare")
+    result = compare_products("NS-001", "NS-002", config=config)
+    assert result and result["verdict"]
+    assert has("compare.workflow", spy.chain_names), spy.chain_names
+    assert has("compare.gather_product_context", spy.chain_names), spy.chain_names
+    assert has("compare.retrieve_catalog_context", spy.chain_names), spy.chain_names
+    assert has("compare.fetch_prices_for_comparison", spy.chain_names), spy.chain_names
+    assert has("compare.compose_shopper_verdict", spy.chain_names), spy.chain_names
+    assert has("feature.write_comparison_verdict", spy.chat_model_names), spy.chat_model_names
+    assert spy.chat_model_names.count("feature.write_comparison_verdict") == 1, spy.chat_model_names
+    assert len(spy.retriever_queries) >= 2, spy.retriever_queries
+    assert spy.tool_names.count("get_price") >= 2, spy.tool_names
+
+
+async def test_fulfillment_emits_the_checkout_tool_and_business_spans():
+    orders.init_db()
+    product = CATALOG[0]
+    item = {"sku": product["sku"], "name": product["name"], "qty": 1, "price": product["price"]}
+    order = orders.create_order([item], {"name": "Span", "email": "span@vega.test"}, product["price"], "PENDING")
+    spy, config = _config("fulfillment")
+    result = await build_fulfillment_workflow().ainvoke(
+        {"items": [item], "total": product["price"], "order": order, "inventory": [], "item_index": 0},
+        config=config,
+    )
+    assert result["checkout_success"] is True
+    assert has("fulfillment.workflow", spy.chain_names), spy.chain_names
+    assert has("fulfillment.decide_fraud_allow_or_block", spy.chain_names), spy.chain_names
+    assert has(
+        "fulfillment.decide_fraud_allow_or_block", spy.chat_model_names,
+    ), spy.chat_model_names
+    assert {
+        "check_inventory",
+        "get_price",
+        "decide_fraud_allow_or_block",
+        "confirm_cart_stock",
+        "charge_payment",
+        "send_order_notification",
+    } <= set(spy.tool_names), spy.tool_names
+
+
+async def test_refund_emits_its_public_root_span():
+    orders.init_db()
+    product = CATALOG[0]
+    item = {"sku": product["sku"], "name": product["name"], "qty": 1, "price": product["price"]}
+    order = orders.create_order([item], {"name": "Span", "email": "span@vega.test"}, product["price"], "DELIVERED")
+    spy, config = _config("returns")
+    result = await arun_refund(order, config=config)
+    assert result["refunded"] is True
+    assert has("returns.workflow", spy.chain_names), spy.chain_names
+    assert has("returns.run_refund_policy_tools", spy.chain_names), spy.chain_names
+    assert has("returns.check_refund_eligibility", spy.chain_names), spy.chain_names
+    assert has("returns.screen_refund_abuse", spy.chain_names), spy.chain_names
+    assert has("returns.process_refund", spy.chain_names), spy.chain_names
+    assert has("returns.decide_and_process_refund", spy.chain_names), spy.chain_names
+    assert {
+        "policy_lookup",
+        "refund_calc",
+        "check_refund_eligibility",
+        "screen_refund_abuse",
+        "process_refund",
+    } <= set(spy.tool_names), spy.tool_names
+
+
+def test_notification_copy_emits_workflow_and_gather_step():
+    order = {
+        "id": "ORD-NOTIFY",
+        "status": "PAID",
+        "items": [{"sku": CATALOG[0]["sku"], "qty": 1}],
+        "total": CATALOG[0]["price"],
+        "customer": {"name": "Notify User", "email": "notify@vega.test"},
+    }
+    spy, config = _config("notification_copy")
+    result = compose_notification_text(order, config=config)
+    assert result["subject"] and result["body"]
+    assert has("notification_copy.workflow", spy.chain_names), spy.chain_names
+    assert has("notification_copy.gather_order_context", spy.chain_names), spy.chain_names
+    assert has("notification_copy.compose_email", spy.chain_names), spy.chain_names
+    assert has("feature.compose_notification_text", spy.chat_model_names), spy.chat_model_names
+
+
+@pytest.mark.parametrize(
+    ("api", "args", "expected_span", "agent"),
+    [
+        (compose_notification_text, ({"id": "ORD-M", "status": "PAID", "items": [], "total": 0},), "feature.compose_notification_text", "notification_copy"),
+        (answer_product_question, ("NS-001", "How many days to return?"), "feature.answer_product_question", "product_qa"),
+    ],
+)
+def test_llm_spans_expose_real_model_ids_not_local_adapters(api, args, expected_span, agent):
+    """Galileo must show provider model names (e.g. gpt-4o-mini), not ``*_local`` adapter ids."""
+    spy, config = _config(expected_span)
+    api(*args, config=config)
+    assert has(expected_span, spy.chat_model_names), spy.chat_model_names
+    assert spy.chat_model_ids, spy.chat_model_ids
+    for model_id in spy.chat_model_ids:
+        assert not model_id.endswith("_local"), model_id
+    assert settings.llm_stub_model in spy.chat_model_ids or any(
+        mid and not mid.endswith("_local") for mid in spy.chat_model_ids
+    ), spy.chat_model_ids

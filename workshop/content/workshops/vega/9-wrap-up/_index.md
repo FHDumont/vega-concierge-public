@@ -29,8 +29,6 @@ Splunk Agent Observability closes the AI trust gap that traditional infrastructu
 * **End-to-end visibility** — span trees and trace graphs for complex agent workflows.
 * **Runtime guardrails** — Block and Steer before bad answers reach customers.
 
-Optional **Splunk Observability Cloud** (`--o11y`) adds process-level APM alongside Splunk Agent Observability — see [Appendix: o11y](/workshops/vega/appendix/observability/).
-
 ## Where to go next
 
 * Add **custom evaluators** tuned to Vega policies and catalog facts.

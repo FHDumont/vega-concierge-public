@@ -4,8 +4,7 @@ Auth de demo (F-008, ADR-011): sessão por bearer token em `Authorization` (sem 
 é "*"). Token→user vive em memória (DT-010).
 """
 from fastapi import HTTPException
-from .. import orders
-from .. import users
+from ..store import orders, users
 
 
 # --- Auth de demo (F-008, ADR-011) ------------------------------------------

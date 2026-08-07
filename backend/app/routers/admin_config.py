@@ -1,15 +1,7 @@
 """Config OWNER-only — cascata de LLM, agentes, fonte local/hub, flags, RUM e Inspector."""
 from fastapi import APIRouter, Header, HTTPException
-from .. import agent_config
-from .. import feature_flags
-from .. import hub
-from .. import hub_settings
-from .. import llm
-from .. import llm_providers
-from .. import llm_activity
-from .. import llm_config
-from .. import rum
-from .. import topology
+from ..hub import agent_config, feature_flags, hub, hub_settings, rum, topology
+from ..llm import llm, llm_providers, llm_activity, llm_config
 from ..schemas import AgentTestIn, AgentUpdate, FlagsIn, HubSourceIn, InspectorToggle, ProviderIn, ProviderUpdate, ReorderIn, RumIn, TestProviderIn
 from ._common import _require_owner
 
@@ -80,7 +72,7 @@ def config_test(provider_id: str, body: TestProviderIn, authorization: str | Non
 
 
 # --- Config por agente (OWNER-only — F-021; + features de loja F-022) --------
-# Os 6 agentes do Concierge + as features de IA da Loja (product_qa/product_desc/search),
+# Os 6 agentes do Concierge + as features de IA da Loja (product_qa/search/cart_crosssell),
 # cada um com connection/model/role/system_prompt. Sem segredo (vai cru ao front), mas gated
 # a OWNER p/ consistência do namespace de config.
 

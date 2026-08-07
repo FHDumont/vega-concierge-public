@@ -47,7 +47,7 @@ theme   = "hugo-theme-splunk-workshop"
   # ---- Identity ----
   brandName    = "splunk>"
   brandTagline = "workshops"
-  description  = "Hands-on: shop the store, run five Splunk Agent Observability use cases, optional Splunk o11y — traces, evaluators, Protect."
+  description  = "Hands-on: shop the store, run five Splunk Agent Observability use cases — traces, evaluators, Protect."
   copyright    = "&copy; {year} Splunk — workshop material. Vega Concierge is a teaching demo."
   logoLight    = "images/splunk-logo-black.png"
   logoDark     = "images/splunk-logo-white.png"

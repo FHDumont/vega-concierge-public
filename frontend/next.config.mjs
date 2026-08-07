@@ -4,8 +4,8 @@
 // F-041 (ADR-024 › separado): o navegador fala DIRETO com a API (subdomínio próprio, base injetado
 // em runtime — ver lib/api.ts + app/layout.tsx). Sem rewrite/proxy aqui de propósito: `rewrites()`
 // é avaliado no `next build` (destino vai p/ o routes-manifest) → não dá p/ configurar em runtime.
-// Dev: `npm run dev` usa webpack (--webpack) — Turbopack (default no Next 16) entra em panic HMR
-// ("Next.js package not found") quando o `.next` fica corrompido (ex.: build com dev ativo).
+// Dev e build usam webpack (--webpack) — Turbopack (default no Next 16) entra em panic HMR
+// ("Next.js package not found") e corrompe .next quando misturado com webpack dev.
 const nextConfig = {
   reactStrictMode: true,
   async redirects() {

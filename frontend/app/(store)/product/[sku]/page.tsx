@@ -112,7 +112,7 @@ export default function ProductDetail({ params }: { params: Promise<{ sku: strin
           </div>
         </div>
 
-        <ProductAI sku={product.sku} name={product.name} />
+        <ProductAI sku={product.sku} name={product.name} tags={product.tags} />
         <CompareProducts sku={product.sku} name={product.name} />
       </Shell>
       <StoreFooter />

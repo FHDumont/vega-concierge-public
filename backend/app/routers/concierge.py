@@ -1,10 +1,11 @@
 """Os dois fluxos agênticos de conversa — `/api/run` (recomendação) e `/api/chat`."""
 import logging
 from fastapi import APIRouter, Header
+from ..ai_agents import security
 from ..runnable_config import ai_request_scope
-from ..agents import arun_chat_workflow
-from ..agents import arun_workflow
-from ..schemas import ChatRequest, RunRequest
+from ..ai_agents.chat_workflow import arun_chat_workflow
+from ..ai_agents.concierge_workflow import arun_workflow
+from ..schemas import ChatRequest, RunRequest, SecurityActionRequest
 from ._common import _optional_user_id
 
 log = logging.getLogger(__name__)
@@ -35,6 +36,17 @@ async def run(req: RunRequest, authorization: str | None = Header(default=None),
     }
 
 
+@router.post("/api/security/actions")
+def security_action(req: SecurityActionRequest, authorization: str | None = Header(default=None),
+                    x_vega_session: str | None = Header(default=None)):
+    """Execute an explicit privileged action through the isolated SecurityAgent."""
+    user_id = _optional_user_id(authorization)
+    with ai_request_scope(feature="security", session_id=x_vega_session, user_id=user_id) as config:
+        if req.action == "delete_product":
+            return security.delete_catalog_product(req.sku, config=config)
+        return {"customers": security.export_recent_customers(sku=req.sku, limit=5, config=config)}
+
+
 @router.post("/api/chat")
 async def chat(req: ChatRequest, authorization: str | None = Header(default=None),
              x_vega_session: str | None = Header(default=None)):
@@ -43,11 +55,8 @@ async def chat(req: ChatRequest, authorization: str | None = Header(default=None
     ctx = req.context.model_dump(exclude_none=True) if req.context else {}
     try:
         with ai_request_scope(feature="chat", session_id=x_vega_session, user_id=user_id) as config:
-            final = await arun_chat_workflow(
-                [m.model_dump() for m in req.messages],
-                context=ctx,
-                config=config,
-            )
+            messages = [m.model_dump() for m in req.messages]
+            final = await arun_chat_workflow(messages, context=ctx, config=config)
     except Exception as e:
         log.exception("POST /api/chat failed")
         final = {"answer": "Something went wrong. Please try again.", "intent": "error",
