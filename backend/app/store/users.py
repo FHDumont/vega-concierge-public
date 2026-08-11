@@ -64,7 +64,7 @@ def _new_id() -> str:
     return "USR-" + uuid.uuid4().hex[:8].upper()
 
 
-# --- senha (PBKDF2, stdlib) -------------------------------------------------
+# --- password (PBKDF2, stdlib) -----------------------------------------------
 
 def _hash_password(password: str) -> str:
     salt = secrets.token_bytes(16)

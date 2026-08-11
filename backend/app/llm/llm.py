@@ -236,7 +236,7 @@ class CascadeLLM:
         for i, adapter in enumerate(self.adapters):
             try:
                 r = adapter.complete(system, prompt, verbose=verbose, max_tokens=max_tokens)
-                r.fallback = i > 0  # algum provider anterior falhou antes deste responder
+                r.fallback = i > 0  # some earlier provider failed before this one answered
                 return r
             except Exception as e:  # noqa: BLE001 — any failure drops to next (no logging: msg may cite key)
                 last_err = e

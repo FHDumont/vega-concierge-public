@@ -371,7 +371,7 @@ def get_chat_model(agent_name: str = "") -> BaseChatModel:
 
 
 class OutputOverrideChatModel(BaseChatModel):
-    """Substitui o texto final do LLM antes dos callbacks (workshop UC-3 Correctness span)."""
+    """Overrides the LLM's final text before the callbacks (workshop UC-3 Correctness span)."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
