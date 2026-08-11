@@ -139,10 +139,10 @@ fresh_rag_postgres() {
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   set -euo pipefail
-  set -a
+  # SO vence .env (F-REAL-ENV-2).
   # shellcheck disable=SC1091
-  [ -f "$ROOT/.env" ] && . "$ROOT/.env"
-  set +a
+  . "$ROOT/scripts/lib/env-load.sh"
+  load_env_os_first
   case "${1:-host}" in
     host) fresh_sqlite_host ;;
     compose) shift; fresh_sqlite_compose "$@"; fresh_rag_postgres "$@" ;;

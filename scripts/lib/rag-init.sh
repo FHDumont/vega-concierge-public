@@ -9,10 +9,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 COMPOSE_FILE="${COMPOSE_FILE:-$ROOT/docker-compose.yml}"
 RAG_INIT_VIA="${RAG_INIT_VIA:-host}"
 
-set -a
+# SO vence .env (F-REAL-ENV-2) — up.sh chama este script como processo filho, então a carga
+# tem de preservar o ambiente herdado (ex.: OPENAI_API_KEY injetada pela réplica).
 # shellcheck disable=SC1091
-[ -f "$ROOT/.env" ] && . "$ROOT/.env"
-set +a
+. "$ROOT/scripts/lib/env-load.sh"
+load_env_os_first
 
 if [ "${RAG_ENABLED:-0}" != "1" ]; then
   echo "→ rag-init: RAG_ENABLED!=1 — skip index"
