@@ -13,7 +13,7 @@ The workshop panel is **Admin → Use cases**: load toggles, fire real requests 
 ## Before you start
 
 1. Set `GALILEO_API_KEY` (+ project/log stream) and restart — see [Enable Splunk Agent Observability](/workshops/vega/1-get-connected/2-enable-galileo-when-ready/).
-2. Enable evaluators in Console → Log stream (detailed in [Evaluators](/workshops/vega/6-evaluators/)).
+2. Evaluators come pre-enabled on the Log stream the app creates; verify in Console → Log stream (detailed in [Evaluators](/workshops/vega/6-evaluators/)).
 3. Use cases works for participants when flag `behind_the_scenes` is on; owner always sees Advanced.
 
 ## The five use cases (canonical table)

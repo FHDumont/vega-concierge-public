@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .hub import agent_config, feature_flags, hub, hub_settings, rum
 from .llm import llm_config
-from .obs import galileo_control
+from .obs import galileo_control, galileo_obs
 from .rate_limit import ApiRateLimitMiddleware
 from .routers import ROUTERS
 from .settings import settings
@@ -51,6 +51,7 @@ def _bootstrap() -> None:
     feature_flags.init_db()     # feature flags table for menu/surfaces (F-033)
     rum.init_db()               # Splunk RUM config table (snippet + toggle — F-040-RUM)
     hub.apply_source()          # installs active ConfigSource per settings (F-026)
+    galileo_obs.ensure_stream_metrics()  # stream born with workshop evaluators (F-GALILEO-EVAL-1)
     galileo_control.init_once()  # Agent Control / Protect (F-GALILEO-2, ADR-033)
 
 

@@ -26,7 +26,7 @@ In this hands-on workshop you'll use a **pre-deployed, pre-instrumented** Vega i
 - **Operate the workshop panel** — load five UC presets, fire **Simulate**, copy session IDs
 - **Enable Splunk Agent Observability** — one env key; verify traces without rewriting agent code
 - **Trace and investigate** — span trees, trace graph, root cause across multi-step workflows
-- **Enable evaluators** — out-of-the-box metrics that flag hallucinations, tool errors, PII
+- **Work with evaluators** — out-of-the-box metrics that flag hallucinations, tool errors, PII
 - **Surface issues with Signals** — recurring failure patterns you didn't think to measure
 - **Apply Protect** — Block and Steer guardrails for UC-3, UC-4, and UC-5
 {{< /objectives >}}
@@ -41,7 +41,7 @@ In this hands-on workshop you'll use a **pre-deployed, pre-instrumented** Vega i
 ## The teaching arc
 
 1. **Without `GALILEO_API_KEY`** — the store behaves normally; zero Splunk Agent Observability network calls. This is the "before".
-2. **Set the key and restart** — every AI touchpoint logs sessions/traces. Enable evaluators on the Log stream.
+2. **Set the key and restart** — every AI touchpoint logs sessions/traces; the app creates the Log stream with the core evaluators already enabled.
 3. **Load a UC and click Simulate** — real API requests fire with problem toggles on; read the inline result, then find the trace by session ID.
 4. **Optional: Agent Control** — Block/Steer rulesets in Console stop UC-3/4/5 while the storefront still returns 200.
 

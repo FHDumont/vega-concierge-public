@@ -8,8 +8,9 @@ Without `GALILEO_API_KEY` — or without `galileo` package installed — everyth
 identical to prior behavior: it's workshop "base" demo. SDK import is lazy and guarded
 precisely so `requirements.txt` doesn't become prerequisite to running store.
 
-**Evaluators are configured in Console** (in Log stream), not here. No Splunk Agent Observability metric names
-appear in Vega code.
+**Evaluators**: on boot, `ensure_stream_metrics()` creates the log stream (when it doesn't exist
+yet) with the workshop's core evaluator set pre-enabled — an existing stream is never touched, so
+changes made in Console stick. Everything else about evaluators stays in Console.
 
 Readable span labels (LLM `name=`, ReAct nodes, `run_name` in chains) live in `galileo_span.py`;
 this module delivers callback, session context, and — since F-BACKEND-3 (D.3) — **live trace**
@@ -41,6 +42,17 @@ _live_trace_var: contextvars.ContextVar[bool] = contextvars.ContextVar(
 
 # Trace name when caller doesn't give feature (run_demo, simulator, internal paths).
 _DEFAULT_TRACE_NAME = "vega.request"
+
+# Core evaluator set from workshop module 6 (`GalileoMetrics` member names — resolved lazily in
+# `ensure_stream_metrics` so `galileo` stays an optional import). LLM versions, same names as the UI.
+WORKSHOP_METRICS: tuple[str, ...] = (
+    "context_adherence",     # UC-1 — grounded in retrieved content?
+    "agent_efficiency",      # UC-2 preset — redundant steps / token waste?
+    "tool_error_rate",       # failing tool calls (inventory outage on checkout)
+    "instruction_adherence", # UC-3 — policy followed?
+    "prompt_injection",      # UC-4 — override accepted?
+    "output_pii",            # UC-5 — sensitive data in output?
+)
 
 
 def is_enabled() -> bool:
@@ -106,6 +118,37 @@ def public_config() -> dict:
         "agent_control_url": agent_control_url(),
         "session_idle_minutes": session_idle_minutes(),
     }
+
+
+def ensure_stream_metrics() -> None:
+    """Creates the log stream with the workshop evaluators pre-enabled — boot-time, best effort.
+
+    Each workshop VM boots with its own `GALILEO_LOG_STREAM`; without this, the stream is
+    lazily created by the SDK on the first trace with NO evaluators, and every attendee has to
+    enable them by hand in Console. Only a stream created *here* gets `WORKSHOP_METRICS`; an
+    existing stream is left alone so Console changes survive restarts. Any failure just logs —
+    Galileo being unreachable can't block the store's boot."""
+    if not is_enabled():
+        return
+    try:
+        from galileo.log_streams import create_log_stream, get_log_stream
+        from galileo.projects import create_project, get_project
+        from galileo.schema.metrics import GalileoMetrics
+
+        if get_project(name=project()) is None:
+            create_project(project())
+        if get_log_stream(name=log_stream(), project_name=project()) is not None:
+            return
+        stream = create_log_stream(name=log_stream(), project_name=project())
+        # All of WORKSHOP_METRICS are server-side scorers, so the returned list of
+        # client-side (local) metric configs is empty — nothing to process here.
+        stream.enable_metrics([GalileoMetrics[name] for name in WORKSHOP_METRICS])
+        log.info(
+            "galileo: log stream %r created in project %r with %d evaluators enabled",
+            log_stream(), project(), len(WORKSHOP_METRICS),
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("galileo: ensure_stream_metrics skipped (%s: %s)", type(exc).__name__, exc)
 
 
 def _warn_once(exc: Exception) -> None:

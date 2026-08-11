@@ -1,22 +1,24 @@
 +++
-title     = "Enable evaluators on the log stream"
-linkTitle = "1. Enable evaluators"
+title     = "Verify evaluators on the log stream"
+linkTitle = "1. Verify evaluators"
 weight    = 1
 time      = "5 minutes"
 +++
 
 Evaluators are configured on the **log stream**, so every new trace is scored automatically.
 
-{{< exercise title="Enable out-of-the-box evaluators" >}}
+Your app already did the heavy lifting: when the backend created your log stream on first boot, it enabled the workshop's core evaluators via the Galileo SDK. In this exercise you **verify** that configuration (and see where you'd manage it by hand).
+
+{{< exercise title="Verify the out-of-the-box evaluators" >}}
 
 {{< step title="Open log stream settings" >}}
-In Splunk Agent Observability Console, open project **`vega-concierge`** and select log stream **`default`**. Click **Configure Evaluators**.
+In Splunk Agent Observability Console, open project **`vega-concierge`** and select your log stream. Click **Configure Evaluators**.
 
 ![Configure evaluators](../images/sao-enable-evaluators.png?width=750px)
 {{< /step >}}
 
-{{< step title="Enable core evaluators" >}}
-Enable at minimum for the workshop:
+{{< step title="Verify the core evaluators" >}}
+These six should already be enabled (the backend enables them when it creates the stream):
 
 * **Context Adherence** — grounded in retrieved content? (UC-1)
 * **Agent Efficiency** — redundant steps / token waste? (UC-2 preset)
@@ -27,7 +29,7 @@ Enable at minimum for the workshop:
 
 ![Enable evaluators](../images/sao-enable-two-evaluators.png?width=750px)
 
-Save and **Apply**. Optionally compute on **Last 1 day** for traces you already captured.
+Missing one? Enable it here, then Save and **Apply**. Optionally compute on **Last 1 day** for traces you already captured.
 
 ![Compute metrics](../images/sao-compute-metrics.png?width=350px)
 {{< /step >}}
