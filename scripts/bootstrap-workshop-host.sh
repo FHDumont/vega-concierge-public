@@ -104,6 +104,11 @@ if systemctl is-active ttyd.service &>/dev/null; then
   systemctl disable --now ttyd.service
 fi
 
+# Docker via snap é confinado (não lê /opt — compose/env_file/bind-mounts falham): troca por docker-ce.
+if command -v docker &>/dev/null && readlink -f "$(command -v docker)" | grep -q '^/snap/'; then
+  log "docker via snap detectado — removendo (confinado, não lê ${REPO_DIR})…"
+  snap remove --purge docker
+fi
 if ! command -v docker &>/dev/null; then
   log "Docker…"
   curl -fsSL https://get.docker.com | sh

@@ -34,8 +34,8 @@ check() { # nome esperado obtido
   fi
 }
 
-run_case() { # exporta overrides no subshell e imprime resultados
-  bash -c '
+run_case() { # baseline limpo (a VM real já tem overrides em /etc/environment via PAM) + overrides do caso
+  env -u DEPLOYMENT_ENVIRONMENT -u GALILEO_LOG_STREAM -u CONTROL_PASSWORD -u OWNER_PASSWORD "$@" bash -c '
     set -euo pipefail
     ROOT="'"$ROOT"'"
     . "$ROOT/scripts/lib/env-load.sh"
@@ -55,18 +55,18 @@ grep -q '^DEPLOYMENT_ENVIRONMENT=user-arquivo$' "$ROOT/.env.runtime" && echo "ok
 grep -q '^OWNER_PASSWORD=' "$ROOT/.env.runtime" && { echo "FAIL OWNER_PASSWORD não deveria existir no runtime" >&2; fail=1; } || echo "ok   chave ausente segue ausente (OWNER_PASSWORD)"
 
 # Caso 2 — SO injeta valores divergentes (simula réplica Ansible): SO vence.
-out="$(export DEPLOYMENT_ENVIRONMENT="user-so" GALILEO_LOG_STREAM='so com espaço e "aspas"'; run_case)"
+out="$(run_case DEPLOYMENT_ENVIRONMENT="user-so" GALILEO_LOG_STREAM='so com espaço e "aspas"')"
 check "override SO: DEPLOYMENT vem do SO" "user-so" "$(sed -n 1p <<<"$out")"
 check "override SO: valor com espaço/aspas intacto" 'so com espaço e "aspas"' "$(sed -n 2p <<<"$out")"
 check "sem override na chave: continua do .env" 'senha do arquivo com espaço e $cifrao' "$(sed -n 3p <<<"$out")"
 grep -q '^DEPLOYMENT_ENVIRONMENT=user-so$' "$ROOT/.env.runtime" && echo "ok   runtime carrega o override do SO" || { echo "FAIL runtime sem override do SO" >&2; fail=1; }
 
 # Caso 3 — chave só no SO, presente no .env.example como comentada: entra no runtime.
-( export OWNER_PASSWORD="segredo-so"; run_case >/dev/null )
+run_case OWNER_PASSWORD="segredo-so" >/dev/null
 grep -q '^OWNER_PASSWORD=segredo-so$' "$ROOT/.env.runtime" && echo "ok   chave só-SO (comentada no example) entra no runtime" || { echo "FAIL OWNER_PASSWORD do SO não entrou no runtime" >&2; fail=1; }
 
 # Caso 4 — permissões do runtime (segredos): 600.
-perm="$(stat -f %Lp "$ROOT/.env.runtime" 2>/dev/null || stat -c %a "$ROOT/.env.runtime")"
+perm="$(stat -c %a "$ROOT/.env.runtime" 2>/dev/null || stat -f %Lp "$ROOT/.env.runtime")"
 check "runtime com chmod 600" "600" "$perm"
 
 if [ "$fail" -ne 0 ]; then

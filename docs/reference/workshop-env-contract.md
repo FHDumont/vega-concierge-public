@@ -112,9 +112,10 @@ Vars injetáveis por clone (existir no `.env.example` ⇒ o valor do SO **sobrep
 Validação numa VM: `scripts/tests/test-env-precedence.sh` + `curl :8000/api/health` (o
 `DEPLOYMENT_ENVIRONMENT` retornado deve ser o do SO quando divergente do `.env`).
 
-Notas da VM oficial (template): Docker via **snap** (`snap.docker.dockerd.service` — o
-`vega-boot.service` ordena `After=` para pacote e snap); Hugo extended instalado via **.deb**
-(snap não lê `/opt`).
+Notas da VM oficial (template): Docker **via apt (docker-ce, get.docker.com)** — docker via
+snap é confinado e NÃO lê `/opt` (compose/env_file/bind-mounts falham); o bootstrap remove o
+snap e instala docker-ce, e o `vega-boot.service` ordena `After=` para os dois nomes de unit.
+Hugo extended instalado via **.deb** (snap não lê `/opt`).
 
 ## Portas (sem Traefik, ADR-025)
 
