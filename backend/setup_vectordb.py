@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Popula as collections do pgvector (F-GALILEO-1 / F-RAG-LIVE, ADR-031). Idempotente.
+"""Populates the pgvector collections (F-GALILEO-1 / F-RAG-LIVE, ADR-031). Idempotent.
 
-Com `RAG_ENABLED=1`, `./scripts/dev.sh` e `./scripts/up.sh` rodam isto via `scripts/lib/rag-init.sh`.
+With `RAG_ENABLED=1`, `./scripts/dev.sh` and `./scripts/up.sh` run this via `scripts/lib/rag-init.sh`.
 Manual (host dev):
 
     cd backend
@@ -17,12 +17,12 @@ from app.ai_agents import rag
 
 def load(collection: str, documents: list) -> None:
     store = rag.vector_store(collection)
-    # Recria do zero: o corpus é pequeno e derivado, então reindexar é mais barato (e mais
-    # honesto) do que tentar casar upserts por id.
+    # Rebuilds from scratch: the corpus is small and derived, so reindexing is cheaper (and more
+    # honest) than trying to reconcile upserts by id.
     try:
         store.delete_collection()
-    except Exception as exc:  # noqa: BLE001 — primeira execução: a collection ainda não existe
-        print(f"  (collection nova: {type(exc).__name__})")
+    except Exception as exc:  # noqa: BLE001 — first run: the collection doesn't exist yet
+        print(f"  (new collection: {type(exc).__name__})")
     store.create_collection()
     store.add_documents(documents)
     print(f"  {collection}: {len(documents)} chunks")
@@ -30,14 +30,14 @@ def load(collection: str, documents: list) -> None:
 
 def main() -> int:
     if not rag.is_pgvector_enabled():
-        print("RAG_ENABLED != 1 ou RAG_DATABASE_URL vazio — nada a fazer.")
-        print("O Vega funciona sem isto: o retriever keyword é o default.")
+        print("RAG_ENABLED != 1 or RAG_DATABASE_URL empty — nothing to do.")
+        print("Vega works without this: the keyword retriever is the default.")
         return 1
-    print(f"Indexando em {rag.database_url().rsplit('@', 1)[-1]}")
+    print(f"Indexing at {rag.database_url().rsplit('@', 1)[-1]}")
     load(rag.COLLECTION_POLICIES, rag.policy_documents())
     load(rag.COLLECTION_CATALOG, rag.catalog_documents())
     rag.reset()
-    print(f"Pronto. Retriever ativo: {rag.backend_name()}")
+    print(f"Done. Active retriever: {rag.backend_name()}")
     return 0
 
 

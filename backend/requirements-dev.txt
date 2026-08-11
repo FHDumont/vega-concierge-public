@@ -1,5 +1,5 @@
-# Dependências só de desenvolvimento/teste (F-BACKEND-1). A imagem de produção instala apenas
-# `requirements.txt` — nada daqui vai pro container.
+# Development/test-only dependencies (F-BACKEND-1). The production image installs only
+# `requirements.txt` — none of this goes into the container.
 pytest==9.1.1
 pytest-asyncio==1.4.0
 httpx==0.28.1

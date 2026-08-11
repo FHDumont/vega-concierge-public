@@ -1,17 +1,17 @@
-# F-034 / F-DEPLOY-PROD-1 — Build & push das imagens Docker (backend + frontend) via CI.
-# CalVer Cortex-style (ADR-036): tag YYYY.MM.DD-<sha> na main, v* em release, latest na main.
-# Princípio (CONVENCOES › "Build de imagens Docker — somente via CI"): imagens são geradas
-# SOMENTE aqui (GitHub Actions), multi-arch (amd64 + arm64), e publicadas no GHCR. Os ambientes
-# (Mac mini, VMs/AMI do Splunk Show) fazem PULL — nunca `docker build` local no fluxo de run.
+# F-034 / F-DEPLOY-PROD-1 — Build & push of the Docker images (backend + frontend) via CI.
+# CalVer Cortex-style (ADR-036): tag YYYY.MM.DD-<sha> on main, v* on release, latest on main.
+# Principle (CONVENCOES › "Docker image builds — CI only"): images are built
+# ONLY here (GitHub Actions), multi-arch (amd64 + arm64), and published to GHCR. The environments
+# (Mac mini, Splunk Show VMs/AMI) PULL them — never a local `docker build` in the run flow.
 name: build-images
 
 on:
   push:
     branches: [main]
     tags: ["v*"]
-    # F-035: na main, builda só quando muda código (não em commits só de docs/scripts).
-    # Allowlist explícita (CONVENCOES › preferir allowlist a paths-ignore). Não afeta
-    # pushes de tag v* (paths não filtra tag push) nem workflow_dispatch — ambos sempre buildam.
+    # F-035: on main, builds only when code changes (not on docs/scripts-only commits).
+    # Explicit allowlist (CONVENCOES › prefer allowlist over paths-ignore). Doesn't affect
+    # v* tag pushes (paths doesn't filter tag pushes) or workflow_dispatch — both always build.
     paths:
       - "backend/**"
       - "frontend/**"
@@ -20,7 +20,7 @@ on:
       - ".github/workflows/build-images.yml"
   workflow_dispatch: {}
 
-# Permissões mínimas p/ publicar no GitHub Container Registry com o GITHUB_TOKEN.
+# Minimal permissions to publish to the GitHub Container Registry with GITHUB_TOKEN.
 permissions:
   contents: read
   packages: write
@@ -38,9 +38,9 @@ jobs:
           - name: frontend
             context: ./frontend
             image: vega-frontend
-          # F-041: variante OPCIONAL do backend com Playwright+Chromium (modo Browser do
-          # simulador, F-039/ADR-022) p/ o Mac mini gerar sessões reais no RUM. Imagem grande
-          # (Chromium) — o run compose só a usa quando BACKEND_IMAGE=vega-backend-browser.
+          # F-041: OPTIONAL backend variant with Playwright+Chromium (simulator Browser
+          # mode, F-039/ADR-022) for the Mac mini to generate real RUM sessions. Large image
+          # (Chromium) — the run compose only uses it when BACKEND_IMAGE=vega-backend-browser.
           - name: backend-browser
             context: ./backend
             image: vega-backend-browser
@@ -49,7 +49,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # GHCR exige owner em minúsculas no caminho da imagem.
+      # GHCR requires a lowercase owner in the image path.
       - name: Resolve image name (lowercase owner)
         id: img
         run: echo "ref=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.image }}" >> "$GITHUB_OUTPUT"
@@ -60,7 +60,7 @@ jobs:
           SHA="$(echo "${GITHUB_SHA}" | cut -c1-7)"
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
             TAG="${{ github.ref_name }}"
-            # v2026.08.05 → 2026.08.05 (CalVer sem prefixo v)
+            # v2026.08.05 → 2026.08.05 (CalVer without the v prefix)
             VEGA_VERSION="${TAG#v}"
           else
             CALVER="$(date -u +%Y.%m.%d)"
@@ -70,7 +70,7 @@ jobs:
           echo "git_sha=${SHA}" >> "$GITHUB_OUTPUT"
           echo "build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
-      - name: Set up QEMU (emulação p/ arm64)
+      - name: Set up QEMU (arm64 emulation)
         uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
@@ -83,7 +83,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Tags: CalVer (+sha na main) · SHA curto · latest (main) · tag git (releases v*).
+      # Tags: CalVer (+sha on main) · short SHA · latest (main) · git tag (v* releases).
       - name: Docker metadata (tags + labels)
         id: meta
         uses: docker/metadata-action@v6
@@ -99,7 +99,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.context }}
-          # Dockerfile alternativo p/ variantes (ex.: backend-browser → Dockerfile.browser).
+          # Alternate Dockerfile for variants (e.g. backend-browser → Dockerfile.browser).
           file: ${{ matrix.context }}/${{ matrix.dockerfile || 'Dockerfile' }}
           platforms: linux/amd64,linux/arm64
           push: true

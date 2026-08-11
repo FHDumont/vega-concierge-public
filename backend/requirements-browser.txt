@@ -1,6 +1,6 @@
-# Dependência OPCIONAL do modo BROWSER do simulador (F-039) — NÃO entra na imagem base.
-# Instale sob demanda (local ou container) p/ não inchar o backend padrão:
+# OPTIONAL dependency for the simulator's BROWSER mode (F-039) — NOT in the base image.
+# Install on demand (local or container) to avoid bloating the default backend:
 #   pip install -r requirements-browser.txt && playwright install chromium
-# Versão fixada (==), validada em 2026-06-23 sob Python 3.13. Casa com a tag da imagem
-# de browser (backend/Dockerfile.browser → mcr.microsoft.com/playwright/python:v1.60.0).
+# Pinned version (==), validated on 2026-06-23 under Python 3.13. Matches the browser
+# image tag (backend/Dockerfile.browser → mcr.microsoft.com/playwright/python:v1.60.0).
 playwright==1.60.0

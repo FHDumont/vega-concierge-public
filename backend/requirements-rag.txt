@@ -1,7 +1,7 @@
-# Opt-in — embeddings reais no pgvector (F-GALILEO-1, ADR-031). NÃO é pré-requisito da app: o
-# default é o `VegaKeywordRetriever` em processo, que não precisa de banco nem destas deps.
-# Instale junto com o profile `rag` do compose quando quiser demonstrar embeddings de verdade.
-# `langchain-openai` (embeddings) já vem no requirements.txt base.
+# Opt-in — real embeddings in pgvector (F-GALILEO-1, ADR-031). NOT a prerequisite for the app: the
+# default is the in-process `VegaKeywordRetriever`, which needs no database or these deps.
+# Install alongside the compose `rag` profile when you want to demo real embeddings.
+# `langchain-openai` (embeddings) already ships in the base requirements.txt.
 langchain-postgres==0.0.17
 langchain-ollama==1.1.0
 psycopg[binary]==3.3.4
