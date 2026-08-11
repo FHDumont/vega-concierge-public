@@ -50,7 +50,10 @@ prod_up_detached() {
   docker compose "${COMPOSE_ARGS[@]}" pull
   fresh_sqlite_compose "${COMPOSE_ARGS[@]}"
   echo "→ up -d (pull-only; no local build)…"
-  docker compose "${COMPOSE_ARGS[@]}" up -d
+  # --force-recreate: no boot o dockerd ressuscita containers (restart: always) ANTES do
+  # vega-boot; sem recreate, o fresh-state apaga o SQLite por baixo do backend vivo e o
+  # _bootstrap() (que cria as tabelas) nunca re-roda → "no such table" (F-REAL-ENV-2).
+  docker compose "${COMPOSE_ARGS[@]}" up -d --force-recreate
   if [ "$RAG" -eq 1 ] && [ "${RAG_ENABLED:-0}" = "1" ]; then
     RAG_INIT_VIA=docker "$ROOT/scripts/lib/rag-init.sh"
   fi
