@@ -35,7 +35,7 @@ check() { # nome esperado obtido
 }
 
 run_case() { # baseline limpo (a VM real já tem overrides em /etc/environment via PAM) + overrides do caso
-  env -u DEPLOYMENT_ENVIRONMENT -u GALILEO_LOG_STREAM -u CONTROL_PASSWORD -u OWNER_PASSWORD "$@" bash -c '
+  env -u DEPLOYMENT_ENVIRONMENT -u GALILEO_LOG_STREAM -u CONTROL_PASSWORD -u OWNER_PASSWORD -u INSTANCE "$@" bash -c '
     set -euo pipefail
     ROOT="'"$ROOT"'"
     . "$ROOT/scripts/lib/env-load.sh"
@@ -65,7 +65,17 @@ grep -q '^DEPLOYMENT_ENVIRONMENT=user-so$' "$ROOT/.env.runtime" && echo "ok   ru
 run_case OWNER_PASSWORD="segredo-so" >/dev/null
 grep -q '^OWNER_PASSWORD=segredo-so$' "$ROOT/.env.runtime" && echo "ok   chave só-SO (comentada no example) entra no runtime" || { echo "FAIL OWNER_PASSWORD do SO não entrou no runtime" >&2; fail=1; }
 
-# Caso 4 — permissões do runtime (segredos): 600.
+# Caso 4 — INSTANCE (nome único da réplica) vira DEPLOYMENT_ENVIRONMENT quando o SO não o traz.
+out="$(run_case INSTANCE="vm-workshop-42")"
+check "INSTANCE mapeia p/ DEPLOYMENT_ENVIRONMENT (vence o .env)" "vm-workshop-42" "$(sed -n 1p <<<"$out")"
+grep -q '^DEPLOYMENT_ENVIRONMENT=vm-workshop-42$' "$ROOT/.env.runtime" && echo "ok   runtime carrega o INSTANCE mapeado" || { echo "FAIL runtime sem INSTANCE mapeado" >&2; fail=1; }
+grep -q '^INSTANCE=' "$ROOT/.env.runtime" && { echo "FAIL INSTANCE cru não deveria entrar no runtime" >&2; fail=1; } || echo "ok   INSTANCE cru fica fora do runtime"
+
+# Caso 5 — DEPLOYMENT_ENVIRONMENT explícito no SO vence INSTANCE.
+out="$(run_case INSTANCE="vm-workshop-42" DEPLOYMENT_ENVIRONMENT="user-explicito")"
+check "DEPLOYMENT_ENVIRONMENT do SO vence INSTANCE" "user-explicito" "$(sed -n 1p <<<"$out")"
+
+# Caso 6 — permissões do runtime (segredos): 600.
 perm="$(stat -c %a "$ROOT/.env.runtime" 2>/dev/null || stat -f %Lp "$ROOT/.env.runtime")"
 check "runtime com chmod 600" "600" "$perm"
 

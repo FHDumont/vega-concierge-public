@@ -97,17 +97,32 @@ recomendado: `/etc/environment`** (formato `VAR=valor`, uma por linha): vale par
 E é carregado por último nas 4 units systemd. Qualquer outro mecanismo que deixe a variável no
 ambiente dos processos também funciona (os scripts preservam o env já presente).
 
-Vars injetáveis por clone (existir no `.env.example` ⇒ o valor do SO **sobrepõe** o do `.env`):
+**Vars OBRIGATÓRIAS no SO por clone** (valores definidos no momento do workshop/réplica):
+
+| Var | Origem / uso |
+| --- | --- |
+| `INSTANCE` | Criada pela réplica — nome único da VM. A app deriva `DEPLOYMENT_ENVIRONMENT` dela (ver abaixo) |
+| `CONTROL_PASSWORD` | Senha do terminal web (vault do evento) |
+| `GALILEO_CONSOLE_URL` / `GALILEO_API_KEY` / `GALILEO_PROJECT` / `GALILEO_LOG_STREAM` | Splunk Agent Observability do evento |
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `AWS_BEARER_TOKEN_BEDROCK` / `AWS_DEFAULT_REGION` | Keys cloud da cascata LLM |
+
+**Mapeamento `INSTANCE` → `DEPLOYMENT_ENVIRONMENT`:** a réplica não fornece
+`DEPLOYMENT_ENVIRONMENT`; fornece `INSTANCE`. O `env-load.sh` (e o painel :9000) resolvem na
+ordem `DEPLOYMENT_ENVIRONMENT` do SO > `INSTANCE` do SO > `.env` > default — ou seja, na VM
+clonada o rótulo da instância É o `INSTANCE`, sem tocar no `.env` baked.
+
+**Reservadas do ambiente (o11y Splunk, NÃO consumidas pela app hoje):** `REALM` e
+`ACCESS_TOKEN` já estarão no SO junto com `INSTANCE`. A app não as lê nem as repassa ao
+container (não estão no contrato `.env.example`); ficam disponíveis pra uma futura fase de
+o11y sem mudança na réplica.
+
+**Opcionais** (existir no `.env.example` ⇒ o valor do SO **sobrepõe** o do `.env`):
 
 | Var | Uso na réplica |
 | --- | --- |
-| `DEPLOYMENT_ENVIRONMENT` | **sim, sempre** — rótulo único (`user-<n>`) |
-| `CONTROL_PASSWORD` | **sim, sempre** (vault) — senha do terminal web |
-| `ENROLL_TOKEN` | sim (mesmo valor em todas as VMs do lab) |
-| `GALILEO_API_KEY` / `GALILEO_PROJECT` / `GALILEO_LOG_STREAM` | se o clone usa observability |
-| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `AWS_BEARER_TOKEN_BEDROCK` / `AWS_DEFAULT_REGION` | keys cloud da cascata |
-| `IMAGE_TAG` | opcional — pin CalVer do evento |
-| `OWNER_PASSWORD` | opcional — atenção: **vazia ≠ ausente** (vazia zera a senha demo) |
+| `ENROLL_TOKEN` | mesmo valor em todas as VMs do lab (enroll-push do hub) |
+| `IMAGE_TAG` | pin CalVer do evento |
+| `OWNER_PASSWORD` | atenção: **vazia ≠ ausente** (vazia zera a senha demo) |
 
 Validação numa VM: `scripts/tests/test-env-precedence.sh` + `curl :8000/api/health` (o
 `DEPLOYMENT_ENVIRONMENT` retornado deve ser o do SO quando divergente do `.env`).
