@@ -7,7 +7,11 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-# Adjust User/WorkingDirectory per the AMI (lab default: /opt/vega-concierge).
+# Runs as the repo's owner, NOT root — the panel shells out to `docker compose` and up.sh, and
+# writes control-audit.log into the repo; as root those artifacts lock the owner out.
+# splunk is in the `docker` group, so compose works. install.sh substitutes VEGA_USER here.
+User=splunk
+Group=splunk
 WorkingDirectory=/opt/vega-concierge/control
 # The repo's .env carries CONTROL_PASSWORD and VEGA_REPO_DIR.
 # Precedence (F-REAL-ENV-2): /etc/environment AFTER .env — injection by the replica (Ansible) wins over the file.

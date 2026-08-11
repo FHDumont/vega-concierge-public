@@ -17,7 +17,11 @@ if command -v systemctl >/dev/null 2>&1; then
     echo "→ boot-workshop: Ollama active (systemd)"
   elif systemctl list-unit-files ollama.service >/dev/null 2>&1; then
     echo "→ boot-workshop: starting ollama.service…"
-    systemctl start ollama.service || echo "→ boot-workshop: WARN — ollama.service failed" >&2
+    # Unprivileged under vega-boot.service (User=splunk) — the unit's own Wants=ollama.service
+    # is what really pulls Ollama up at boot; this is only a best-effort nudge for manual runs.
+    systemctl start ollama.service 2>/dev/null \
+      || sudo -n systemctl start ollama.service 2>/dev/null \
+      || echo "→ boot-workshop: WARN — could not start ollama.service (no privilege?)" >&2
   else
     echo "→ boot-workshop: Ollama not under systemd — assuming the AMI handles it or manual start"
   fi

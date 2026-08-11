@@ -60,8 +60,8 @@ sudo ./scripts/bootstrap-workshop-host.sh --check
 | ttyd | apt; desabilita unit `ttyd.service` padrão (evita conflito :7681) |
 | python3-venv | venv do Ops Console |
 | `.env` | workshop/production; só grava se ausente (use `--force-env` p/ sobrescrever). Defaults anti-abuso: `API_RATE_AI_MAX=12`, `API_RATE_DEFAULT_MAX=60`, `LLM_RATE_MAX=20` |
-| systemd | `vega-boot`, `vega-control`, `vega-workshop`, `vega-ttyd` |
-| Workshop | override `User=` + limpa `workshop/public/` root-owned |
+| systemd | `vega-boot`, `vega-control`, `vega-workshop`, `vega-ttyd` — todos com `User=`/`Group=` do dono do repo (`--repo-owner`, default `SUDO_USER`), nunca root |
+| Workshop | limpa `workshop/public/` root-owned |
 | Stack | `./scripts/up.sh` (fresh-state + pull + rag-init + health) |
 
 ## URLs após sucesso
@@ -113,6 +113,7 @@ Rate limits da app (`API_RATE_*`, `LLM_RATE_*`) **complementam** — não substi
 | Sintoma | Causa | Ação |
 | --- | --- | --- |
 | `:1313=down`, `permission denied` em `workshop/public` | Hugo rodou como root antes | `sudo rm -rf workshop/public && sudo chown -R ubuntu:ubuntu workshop && sudo systemctl restart vega-workshop` |
+| `Permission denied` em `.env.runtime` ao rodar `./scripts/up.sh` | Units rodaram como root e deixaram artefatos `root:root` | `sudo chown -R $USER:$USER .env.runtime control-audit.log control/.venv` + reinstale os units (`sudo VEGA_USER=$USER ./control/systemd/install.sh`) — o `write_env_runtime` já recria o arquivo sozinho quando não é gravável |
 | `:7681` / terminal Ops falha | `ttyd.service` do apt conflita com `vega-ttyd` | `sudo systemctl disable --now ttyd.service` (o bootstrap já faz) |
 | `dubious ownership` no Hugo | git + systemd user | Script já roda `git safe.directory`; re-execute bootstrap |
 | `ollama.reachable: false` | Ollama só em 127.0.0.1 | Confirme `/etc/systemd/system/ollama.service.d/bind-all.conf` e `systemctl restart ollama` |

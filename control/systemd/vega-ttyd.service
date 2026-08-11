@@ -8,6 +8,11 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+# Web terminal drops into the repo owner's shell, NOT root — same user as an `ssh` session,
+# so anything run here (up.sh, docker compose) leaves owner-writable artifacts behind.
+# install.sh substitutes VEGA_USER here.
+User=splunk
+Group=splunk
 WorkingDirectory=/opt/vega-concierge
 # Precedence (F-REAL-ENV-2): /etc/environment AFTER .env — injection by the replica (Ansible) wins over the file.
 EnvironmentFile=-/opt/vega-concierge/.env

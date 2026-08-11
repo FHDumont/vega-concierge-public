@@ -183,6 +183,12 @@ sem credencial até o Ollama local.
 
 Instalação dos units: `sudo REPO_DIR=/opt/vega-concierge ./control/systemd/install.sh`
 
+**Usuário das units: o dono do repo, NÃO root.** As quatro units carregam `User=`/`Group=`; o
+`install.sh` substitui pelo `VEGA_USER` (default: dono de `$REPO_DIR` — `splunk` na VM do lab) e
+garante esse usuário no grupo `docker`. É o que mantém `.env.runtime`, `control-audit.log` e
+`control/.venv` graváveis por quem loga via SSH — unit rodando como root gera esses artefatos
+`root:root 0600` e o dono passa a levar `Permission denied` ao rodar `./scripts/up.sh` na mão.
+
 ## Fresh-state (ADR-035)
 
 Todo start (`up.sh`, `up.sh update`, reboot, boot systemd) zera SQLite + volume pgvector.

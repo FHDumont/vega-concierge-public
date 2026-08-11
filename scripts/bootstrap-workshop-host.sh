@@ -207,16 +207,13 @@ log "workshop: Hugo permissions (avoids public/ being root-owned)…"
 rm -rf "$REPO_DIR/workshop/public" "$REPO_DIR/workshop/.hugo_build.lock"
 chown -R "$REPO_OWNER:$REPO_OWNER" "$REPO_DIR/workshop"
 
-mkdir -p /etc/systemd/system/vega-workshop.service.d
-cat > /etc/systemd/system/vega-workshop.service.d/override.conf <<EOF
-[Service]
-User=${REPO_OWNER}
-Group=${REPO_OWNER}
-EOF
+# The workshop-only drop-in is obsolete: ALL units now carry User=/Group= (install.sh substitutes
+# VEGA_USER). Remove it so a stale override can't pin an old user on an upgraded host.
+rm -rf /etc/systemd/system/vega-workshop.service.d
 
 chmod +x "$REPO_DIR/scripts/boot-workshop.sh"
-log "systemd (vega-boot, control, workshop, ttyd)…"
-REPO_DIR="$REPO_DIR" "$REPO_DIR/control/systemd/install.sh"
+log "systemd (vega-boot, control, workshop, ttyd) as $REPO_OWNER…"
+REPO_DIR="$REPO_DIR" VEGA_USER="$REPO_OWNER" "$REPO_DIR/control/systemd/install.sh"
 
 if [[ "$SKIP_UP" -eq 0 ]]; then
   log "up.sh (pull GHCR + stack)…"

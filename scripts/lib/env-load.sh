@@ -41,6 +41,9 @@ write_env_runtime() {
       [ -f "$ROOT/.env.example" ] && grep -oE '^#? ?[A-Za-z_][A-Za-z0-9_]*=' "$ROOT/.env.example"
     } | tr -d '# ' | sed 's/=$//' | sort -u
   )"
+  # A leftover from a run under another user (e.g. a root systemd unit) is 0600 and NOT truncatable
+  # by us — the repo dir is ours, so replace the inode instead of failing with Permission denied.
+  { [ -e "$out" ] && [ ! -w "$out" ] && rm -f "$out"; } || :
   : > "$out"
   chmod 600 "$out"
   {
