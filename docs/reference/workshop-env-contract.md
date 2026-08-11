@@ -112,6 +112,27 @@ Vars injetáveis por clone (existir no `.env.example` ⇒ o valor do SO **sobrep
 Validação numa VM: `scripts/tests/test-env-precedence.sh` + `curl :8000/api/health` (o
 `DEPLOYMENT_ENVIRONMENT` retornado deve ser o do SO quando divergente do `.env`).
 
+### Mudei uma variável — o que fazer?
+
+Regras que valem SEMPRE, independente de onde você mudou (`/etc/environment`/SO **ou** `.env`):
+
+1. **Onde mudar nunca muda o que reiniciar.** O que define a ação é **qual serviço consome** a
+   variável — toda fonte é lida no **start** do serviço, nunca em runtime.
+2. **SO vence `.env`.** Se a var existe nos dois, editar o `.env` não tem efeito até remover a
+   var do SO. Pra "voltar ao `.env`", apague a linha do `/etc/environment` e reinicie o serviço.
+3. **Pro container, a chave precisa ser conhecida**: descomentada no `.env` OU listada no
+   `.env.example` (mesmo comentada). Var fora do contrato não entra no `.env.runtime`.
+
+| Variável que você mudou | Quem consome | Ação |
+| --- | --- | --- |
+| `DEPLOYMENT_ENVIRONMENT`, `GALILEO_*`, `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `AWS_*`, `LLM_*`, `RAG_*`, `OLLAMA_*`, `IMAGE_OWNER` / `IMAGE_TAG` / `BACKEND_IMAGE`, `PUBLIC_API_BASE`, `API_RATE_*`, `OWNER_PASSWORD`, `ENROLL_TOKEN`, `TIER_*` | **Containers** (loja :3000 · API :8000 · postgres) | `./scripts/up.sh` **ou** `sudo systemctl restart vega-boot` (mesmo caminho: relê SO+`.env`, regenera `.env.runtime`, recria containers). Sem SSH: Ops Console :9000 → "Atualizar imagens (pull)". |
+| `CONTROL_PASSWORD` | **Painel** (host) | `sudo systemctl restart vega-control` — o `up.sh` NÃO ajuda aqui (a unit lê `.env` + `/etc/environment` direto pelo systemd). |
+| `CONTROL_TTYD_PORT` | **Terminal web** (host) | `sudo systemctl restart vega-ttyd` |
+| (vars do guia, se um dia existirem) | **Hugo** (host) | `sudo systemctl restart vega-workshop` |
+
+**Atalho universal: `sudo reboot`** — todas as units releem tudo. É o caminho natural do clone:
+Ansible injeta as vars e a VM boota em seguida; ninguém reinicia nada na mão.
+
 Notas da VM oficial (template): Docker **via apt (docker-ce, get.docker.com)** — docker via
 snap é confinado e NÃO lê `/opt` (compose/env_file/bind-mounts falham); o bootstrap remove o
 snap e instala docker-ce, e o `vega-boot.service` ordena `After=` para os dois nomes de unit.
