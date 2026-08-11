@@ -1,43 +1,43 @@
-"""Persistência da FONTE de config — local vs remota (hub) — F-026, ADR-019.
+"""Config source persistence — local vs remote (hub) — F-026, ADR-019.
 
-Uma loja pode ser **independente** (`source=local`: usa os provedores do próprio SQLite,
-F-020) ou **cliente de um hub** (`source=remote`: puxa a config de outra loja via URL + token
-de enrollment). O owner escolhe pela tela de Config; a escolha persiste no mesmo SQLite
-(ADR-006), numa tabela de 1 linha (`hub_settings`, id fixo).
+A store can be **independent** (`source=local`: uses its own SQLite providers,
+F-020) or a **hub client** (`source=remote`: pulls config from another store via URL + enrollment token).
+The owner chooses via the Config screen; the choice persists in the same SQLite
+(ADR-006), in a single-row table (`hub_settings`, fixed id).
 
-Esta camada só guarda a **escolha** (mode/url/token/intervalo). Quem efetivamente puxa e
-cacheia a config é `config_source.RemoteConfigSource`; quem serve como hub é `hub.py`.
+This layer only stores the **choice** (mode/url/token/interval). The actual pull and
+cache of config is done by `config_source.RemoteConfigSource`; serving as a hub is done by `hub.py`.
 
-O `enrollment_token` é segredo (autentica o pull do hub): nunca é exposto cru ao front
-(API devolve só `has_token`). Mesma régua das chaves de LLM (DT-012 / DT-013).
+The `enrollment_token` is secret (authenticates the pull from the hub): never exposed raw to the front
+(API returns only `has_token`). Same rule as LLM keys (DT-012 / DT-013).
 """
 import sqlite3
 
 from ..store.db import connect
 
-_ROW_ID = 1  # tabela de 1 linha só (singleton de settings)
+_ROW_ID = 1  # single-row table only (settings singleton)
 
-# Defaults. `serve_token` (lado hub) começa vazio = não serve até o owner definir um token.
+# Defaults. `serve_token` (hub side) starts empty = does not serve until owner sets a token.
 _DEFAULTS = {
     "source": "local",          # local | remote
-    "hub_url": "",              # URL do hub (lado cliente), ex.: http://host:8000/api/hub/config
-    "enrollment_token": "",     # token p/ puxar do hub (lado cliente) — SEGREDO
-    "pull_interval_s": 45,      # refresh periódico do pull (s)
-    "serve_token": "",          # token exigido p/ servir como hub (lado hub) — SEGREDO; '' = não serve
+    "hub_url": "",              # hub URL (client side), e.g.: http://host:8000/api/hub/config
+    "enrollment_token": "",     # token to pull from hub (client side) — SECRET
+    "pull_interval_s": 45,      # periodic refresh interval for pull (s)
+    "serve_token": "",          # token required to serve as hub (hub side) — SECRET; '' = does not serve
 }
 
 
 def init_db() -> None:
-    """create_all no boot: tabela de settings de fonte (1 linha) + linha default idempotente."""
+    """create_all on boot: source settings table (1 row) + idempotent default row."""
     with connect() as conn:
         conn.execute(
             """CREATE TABLE IF NOT EXISTS hub_settings (
                 id               INTEGER PRIMARY KEY,
                 source           TEXT NOT NULL DEFAULT 'local',  -- local | remote
                 hub_url          TEXT NOT NULL DEFAULT '',
-                enrollment_token TEXT NOT NULL DEFAULT '',       -- SEGREDO (pull) — nunca ao front
+                enrollment_token TEXT NOT NULL DEFAULT '',       -- SECRET (pull) — never to front
                 pull_interval_s  INTEGER NOT NULL DEFAULT 45,
-                serve_token      TEXT NOT NULL DEFAULT ''        -- SEGREDO (serve) — nunca ao front
+                serve_token      TEXT NOT NULL DEFAULT ''        -- SECRET (serve) — never to front
             )"""
         )
         conn.execute(
@@ -50,7 +50,7 @@ def init_db() -> None:
 
 
 def get_settings() -> dict:
-    """Settings COM segredos (uso interno: pull, serve). Tolerante a tabela ausente → defaults."""
+    """Settings WITH secrets (internal use: pull, serve). Tolerant of missing table → defaults."""
     try:
         with connect() as conn:
             row = conn.execute("SELECT * FROM hub_settings WHERE id = ?", (_ROW_ID,)).fetchone()
@@ -69,8 +69,8 @@ def get_settings() -> dict:
 
 def update_settings(*, source=None, hub_url=None, enrollment_token=None,
                     pull_interval_s=None, serve_token=None) -> dict:
-    """Atualização parcial. Tokens são **write-only**: só trocam quando vêm não-vazios
-    (vazio/None mantém o atual → o front nunca reenvia o segredo). Devolve os settings novos."""
+    """Partial update. Tokens are **write-only**: only change when received non-empty
+    (empty/None preserves current → front never re-sends the secret). Returns new settings."""
     sets, vals = [], []
     if source is not None:
         sets.append("source = ?"); vals.append("remote" if source == "remote" else "local")
@@ -81,7 +81,7 @@ def update_settings(*, source=None, hub_url=None, enrollment_token=None,
     if enrollment_token:  # write-only
         sets.append("enrollment_token = ?"); vals.append(enrollment_token.strip())
     if serve_token is not None:
-        # serve_token aceita string vazia explícita (owner desliga o servir) — não é write-only.
+        # serve_token accepts explicit empty string (owner disables serving) — not write-only.
         sets.append("serve_token = ?"); vals.append(serve_token.strip())
     if sets:
         vals.append(_ROW_ID)

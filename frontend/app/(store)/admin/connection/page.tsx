@@ -1,9 +1,9 @@
 "use client";
-// CONNECTION / HUB — tela do DONO (owner-only). Separada da config de LLM (F-026 UX): aqui é
-// "de ONDE vem a config" (independente/local ou cliente de um hub) e "servir como hub" (token +
-// clientes conectados). Owner-gated na UI; o backend é a fronteira real (401/403). A tabela de
-// clientes é full-width com filtro + paginação + connected-since/last-seen (cenário de muitos
-// participantes). Tokens nunca chegam ao front (flags has_*).
+// CONNECTION / HUB — OWNER-only screen. Separate from the LLM config (F-026 UX): this is about
+// "WHERE the config comes from" (independent/local or a hub's client) and "serving as a hub"
+// (token + connected clients). Owner-gated in the UI; the backend is the real boundary (401/403).
+// The clients table is full-width with filter + pagination + connected-since/last-seen (scenario
+// with many participants). Tokens never reach the frontend (has_* flags).
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import RumCard from "@/components/RumCard";
@@ -61,7 +61,7 @@ function ConnectionManager() {
   const [src, setSrc] = useState<HubSource | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  // edição local (write-only para tokens — campos em branco mantêm os salvos)
+  // local edits (write-only for tokens — blank fields keep the saved ones)
   const [hubUrl, setHubUrl] = useState("");
   const [enrollToken, setEnrollToken] = useState("");
   const [serveToken, setServeToken] = useState("");
@@ -79,14 +79,14 @@ function ConnectionManager() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  // Auto-refresh do status (last-sync/clientes mudam sozinhos).
+  // Auto-refresh of status (last-sync/clients change on their own).
   useEffect(() => {
     const id = setInterval(() => { getHubStatus().then(setStatus).catch(() => {}); }, 8000);
     return () => clearInterval(id);
   }, []);
 
-  // Refresh sob demanda só do status (clientes/last-sync), sem recarregar a fonte —
-  // não clobbera as edições locais de hub URL/intervalo (F-032).
+  // On-demand refresh of just the status (clients/last-sync), without reloading the source —
+  // doesn't clobber the local edits to hub URL/interval (F-032).
   const refreshStatus = useCallback(async () => {
     try { setStatus(await getHubStatus()); }
     catch (e) { setError((e as Error).message); }
@@ -149,7 +149,7 @@ function ConnectionManager() {
       )}
 
       <div className="ns-cfg-conn-grid">
-        {/* Lado CLIENTE: fonte local|remote + alvo do hub */}
+        {/* CLIENT side: local|remote source + hub target */}
         <div className="ns-adm-card ns-cfg-conn-card">
           <h3 className="ns-cfg-group">Config source</h3>
           <div className="ns-cfg-seg">
@@ -209,7 +209,7 @@ function ConnectionManager() {
           )}
         </div>
 
-        {/* Lado HUB: token de servir */}
+        {/* HUB side: serving token */}
         <div className="ns-adm-card ns-cfg-conn-card">
           <h3 className="ns-cfg-group">Serve as hub</h3>
           <p className="ns-adm-note">
@@ -234,21 +234,21 @@ function ConnectionManager() {
         </div>
       </div>
 
-      {/* Push de enrollment por IP — força N lojas a virar clientes deste hub via API (F-027) */}
+      {/* IP-based enrollment push — forces N stores to become clients of this hub via API (F-027) */}
       <PushEnrollSection serving={status.serving} defaultHubUrl={defaultHubConfigUrl()} pullIntervalS={src.pull_interval_s} />
 
-      {/* Clientes conectados — full-width (muitos participantes): filtro + paginação + tempos */}
+      {/* Connected clients — full-width (many participants): filter + pagination + timestamps */}
       <ClientsTable clients={status.clients} intervalS={src.pull_interval_s} onRefresh={refreshStatus} />
 
-      {/* Splunk RUM (F-040-RUM): snippet injetado no <head> de todas as sessões de navegador */}
+      {/* Splunk RUM (F-040-RUM): snippet injected into the <head> of every browser session */}
       <RumCard />
     </div>
   );
 }
 
-// --- Push de enrollment por IP (F-027) --------------------------------------
-// Empurra `source=remote → este hub` p/ uma lista de IPs/hosts, chamando o endpoint de enroll de
-// cada loja (token-gated por um segredo compartilhado do lab). Resultado por IP. Mecanismo = API.
+// --- IP-based enrollment push (F-027) ----------------------------------------
+// Pushes `source=remote → this hub` to a list of IPs/hosts, calling each store's enroll
+// endpoint (token-gated by a shared lab secret). Result per IP. Mechanism = API.
 function PushEnrollSection({ serving, defaultHubUrl, pullIntervalS }: {
   serving: boolean; defaultHubUrl: string; pullIntervalS: number;
 }) {
@@ -345,15 +345,15 @@ function PushEnrollSection({ serving, defaultHubUrl, pullIntervalS }: {
   );
 }
 
-// --- Tabela de clientes conectados ------------------------------------------
-// Full-width. Filtro por env/IP, paginação client-side (a lista chega inteira), "ativo" =
-// último pull dentro de 3× o intervalo de pull. Tempos relativos (last seen) + absoluto (since).
+// --- Connected clients table --------------------------------------------------
+// Full-width. Filter by env/IP, client-side pagination (the list arrives whole), "active" =
+// last pull within 3x the pull interval. Relative times (last seen) + absolute (since).
 function ClientsTable({ clients, intervalS, onRefresh }: { clients: HubClient[]; intervalS: number; onRefresh: () => Promise<void> | void }) {
   const [q, setQ] = useState("");
   const [page, setPage] = useState(0);
   const [busy, setBusy] = useState(false);
   const [, force] = useState(0);
-  // tick p/ recomputar "ativo"/relativo sem novo fetch
+  // tick to recompute "active"/relative without a new fetch
   useEffect(() => { const id = setInterval(() => force((n) => n + 1), 5000); return () => clearInterval(id); }, []);
 
   const activeWindowMs = Math.max(intervalS * 3, 30) * 1000;
@@ -442,7 +442,7 @@ function ClientsTable({ clients, intervalS, onRefresh }: { clients: HubClient[];
 
 function shortAgent(agent: string | undefined): string {
   if (!agent) return "—";
-  // Extrai o produto/engine principal (ex.: "Mozilla/5.0 … Chrome/148 …" → "Chrome/148").
+  // Extracts the main product/engine (e.g.: "Mozilla/5.0 … Chrome/148 …" → "Chrome/148").
   const m = agent.match(/(Chrome|Firefox|Safari|Edg|Electron|curl|python-requests|Vega)[\/ ]?[\d.]*/i);
   return m ? m[0] : agent.slice(0, 28);
 }

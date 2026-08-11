@@ -1,7 +1,7 @@
-// Status do pedido — design custom (ADR-012/013): ponto colorido por severidade +
-// rótulo textual (o estado nunca depende só da cor — acessibilidade). Reusa a escala
-// pura `orderStatusSeverity` (lib/severity, sem dependência de Splunk) mapeada para
-// classes de paleta (globals.css › .ns-status). Substitui o SeverityTag (Splunk) na Loja.
+// Order status — custom design (ADR-012/013): colored dot by severity +
+// text label (state never depends on color alone — accessibility). Reuses the pure
+// `orderStatusSeverity` scale (lib/severity, no Splunk dependency) mapped to
+// palette classes (globals.css › .ns-status). Replaces the SeverityTag (Splunk) in the Store.
 import { OrderStatus } from "@/lib/api";
 import { orderStatusSeverity, Severity } from "@/lib/severity";
 

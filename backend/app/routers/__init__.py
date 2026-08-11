@@ -1,12 +1,12 @@
-"""Routers por domínio (F-BACKEND-1).
+"""Routers by domain (F-BACKEND-1).
 
-Nenhum router usa `prefix`: o path completo fica escrito em cada rota, como estava em
-`api.py`. `ROUTERS` fixa a ordem de registro na app.
+No router uses `prefix`: the full path is written in each route, as it was in
+`api.py`. `ROUTERS` sets the registration order on the app.
 
-Essa ordem NÃO é a mesma em que as rotas apareciam no módulo único — agrupar por domínio
-reordena, porque os domínios apareciam intercalados lá. A resolução é idêntica mesmo assim:
-nenhum path literal é sombreado por um `{param}` de outro domínio, e `test_api_contract.py`
-guarda o inventário. Quem acrescentar rota que dependa de precedência precisa conferir isto.
+This order is NOT the same as the routes appeared in the single module — grouping by domain
+reorders them, because the domains appeared interleaved there. The resolution is identical anyway:
+no literal path is shadowed by a `{param}` from another domain, and `test_api_contract.py`
+guards the inventory. Whoever adds a route that depends on precedence should check this.
 """
 from . import (
     health,

@@ -1,12 +1,12 @@
-"""API FastAPI do Vega Concierge. Loja + Behind the Scenes.
+"""Vega Concierge FastAPI. Store + Behind the Scenes.
 
-Este módulo só MONTA a app: bootstrap do estado no `lifespan`, CORS e registro dos routers.
-Cada rota mora no router do seu domínio, em `app/routers/` — nenhum router usa `prefix`, então o
-path completo continua escrito na própria rota (o contrato com o frontend é congelado:
-`CONVENCOES.md` §NÃO mude).
+This module ONLY MOUNTS the app: state bootstrap in `lifespan`, CORS and router registration.
+Each route lives in its domain router, in `app/routers/` — no router uses `prefix`, so the
+full path stays written on the route itself (the contract with the frontend is frozen:
+`CONVENCOES.md` §DO NOT change).
 
-O bootstrap roda no **startup**, não no import. Importar `app.api` (para inspecionar rotas, por
-exemplo) não toca mais no SQLite nem inicializa o Agent Control; quem faz isso é subir a app.
+Bootstrap runs on **startup**, not on import. Importing `app.api` (to inspect routes, for
+example) no longer touches SQLite or initializes Agent Control; that's done by starting the app.
 """
 import logging
 from contextlib import asynccontextmanager
@@ -27,30 +27,30 @@ log = logging.getLogger(__name__)
 
 
 def _bootstrap() -> None:
-    """Estado que a app precisa ter de pé antes do primeiro request. Tudo idempotente — roda
-    igual num boot novo, num restart e a cada recarga do `--reload`."""
-    log.info("config resolvida (segredo aparece só como True/False):\n%s",
+    """State the app needs up and running before the first request. All idempotent — runs
+    the same on fresh boot, restart, and on each `--reload`."""
+    log.info("config resolved (secrets appear as True/False only):\n%s",
              "\n".join(settings.summary_lines()))
 
-    orders.init_db()  # create_all no boot (ADR-006)
-    users.init_db()   # tabela de usuários (F-008) + papel OWNER (F-020)
-    seed_workshop_stock()  # estoque alto no boot; NS-005/NS-022 esgotados de demo
-    users.seed_demo_user()   # usuário de teste de DEMO + histórico → tier GOLD (idempotente; F-010)
-    users.seed_owner_user()  # usuário OWNER (config de LLM owner-only; idempotente; F-020)
-    llm_config.init_db()     # tabela de provedores de LLM (F-020)
-    _restored = llm_config.restore_providers_backup()  # fresh-state preserva cascata LLM (F-REAL-ENV-1)
-    _seeded = llm_config.seed_providers_from_env()  # cascata `.env` + LLM_PROVIDER_PRIORITY (F-BACKEND-3)
+    orders.init_db()  # create_all on boot (ADR-006)
+    users.init_db()   # users table (F-008) + OWNER role (F-020)
+    seed_workshop_stock()  # high inventory on boot; NS-005/NS-022 depleted for demo
+    users.seed_demo_user()   # DEMO test user + history → tier GOLD (idempotent; F-010)
+    users.seed_owner_user()  # OWNER user (owner-only LLM config; idempotent; F-020)
+    llm_config.init_db()     # LLM provider table (F-020)
+    _restored = llm_config.restore_providers_backup()  # fresh-state preserves LLM cascade (F-REAL-ENV-1)
+    _seeded = llm_config.seed_providers_from_env()  # cascade `.env` + LLM_PROVIDER_PRIORITY (F-BACKEND-3)
     log.info(
-        "llm providers: restaurados=%d, seed_env criados=%d, chaves atualizadas=%d, ordem aplicada=%d",
+        "llm providers: restored=%d, seed_env created=%d, keys updated=%d, order applied=%d",
         _restored, _seeded["created"], _seeded["updated"], _seeded["ordered"],
     )
-    agent_config.init_db()      # tabela de config por agente (F-021)
-    agent_config.seed_defaults()  # semeia os 6 agentes com os prompts atuais (idempotente; F-021)
-    agent_config.migrate_f052_prompts()  # prompts pré-F-052 no SQLite → chatbot (F-052)
-    hub_settings.init_db()      # tabela de fonte local|remote (hub/peer — F-026)
-    feature_flags.init_db()     # tabela de feature flags de menu/superfícies (F-033)
-    rum.init_db()               # tabela de config do Splunk RUM (snippet + toggle — F-040-RUM)
-    hub.apply_source()          # instala a ConfigSource ativa conforme os settings (F-026)
+    agent_config.init_db()      # config table per agent (F-021)
+    agent_config.seed_defaults()  # seeds 6 agents with current prompts (idempotent; F-021)
+    agent_config.migrate_f052_prompts()  # pre-F-052 prompts in SQLite → chatbot (F-052)
+    hub_settings.init_db()      # local|remote source table (hub/peer — F-026)
+    feature_flags.init_db()     # feature flags table for menu/surfaces (F-033)
+    rum.init_db()               # Splunk RUM config table (snippet + toggle — F-040-RUM)
+    hub.apply_source()          # installs active ConfigSource per settings (F-026)
     galileo_control.init_once()  # Agent Control / Protect (F-GALILEO-2, ADR-033)
 
 

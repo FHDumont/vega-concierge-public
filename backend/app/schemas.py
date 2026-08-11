@@ -1,10 +1,10 @@
-"""Modelos de REQUEST da API (Pydantic) — extraídos de `api.py` na F-BACKEND-1.
+"""API REQUEST models (Pydantic) — extracted from `api.py` in F-BACKEND-1.
 
-Só forma de entrada: zero lógica, zero import de domínio. Os modelos ficam agrupados pelo
-domínio do endpoint que os consome, na mesma ordem em que aparecem nos routers.
+Input form only: zero logic, zero domain imports. Models are grouped by
+the endpoint domain that consumes them, in the same order they appear in routers.
 
-O formato de RESPOSTA não mora aqui — os endpoints devolvem os dicts que os módulos de domínio
-já montam, e esse contrato é congelado (`CONVENCOES.md` §NÃO mude).
+RESPONSE format doesn't live here — endpoints return the dicts that domain modules
+already build, and that contract is frozen (`CONVENCOES.md` §DO NOT change).
 """
 from __future__ import annotations
 
@@ -40,11 +40,11 @@ class ProductQARequest(BaseModel):
     sku: str
     question: str = ""
 class CompareRequest(BaseModel):
-    # Compare 2 produtos (F-029): coordinator → comparator + tools (dados reais).
+    # Compare 2 products (F-029): coordinator → comparator + tools (real data).
     sku_a: str
     sku_b: str
 class CartCrossSellRequest(BaseModel):
-    # IA-Carrinho (F-023): cross-sell a partir dos SKUs no carrinho atual.
+    # AI-Cart (F-023): cross-sell from current cart SKUs.
     skus: list[str] = []
 class OrderItemIn(BaseModel):
     sku: str
@@ -75,48 +75,48 @@ class ProblemUpdate(BaseModel):
     cost_spike: bool | None = None
     payment_outage: bool | None = None
     payment_latency: bool | None = None
-    refund_false_denial: bool | None = None  # F-029: nega um reembolso elegível (erro do agente)
-    prompt_injection: bool | None = None  # UC-4: agente aceita override de preço/política do comprador
-    active_scenario: str | None = None  # preset UC ativo (uc-1..uc-5); "" limpa
+    refund_false_denial: bool | None = None  # F-029: denies an eligible refund (agent error)
+    prompt_injection: bool | None = None  # UC-4: agent accepts buyer's price/policy override
+    active_scenario: str | None = None  # active UC preset (uc-1..uc-5); "" clears
 class InspectorToggle(BaseModel):
-    # Liga/desliga o LLM Inspector (F-023; owner-only).
+    # Toggles LLM Inspector on/off (F-023; owner-only).
     enabled: bool
 class RumIn(BaseModel):
-    # Edição parcial da config do Splunk RUM (F-040-RUM; owner-only). None = não mexe.
+    # Partial edit of Splunk RUM config (F-040-RUM; owner-only). None = don't change.
     enabled: bool | None = None
     snippet: str | None = None
 class FlagsIn(BaseModel):
-    # Edição parcial das feature flags de menu (F-033; owner-only). None = não mexe.
+    # Partial edit of menu feature flags (F-033; owner-only). None = don't change.
     behind_the_scenes: bool | None = None
     admin: bool | None = None
     simulator: bool | None = None
     inspector: bool | None = None
 class SimStartRequest(BaseModel):
-    # Config do simulador avançado (F-018). Tudo opcional → defaults/clamps em SimConfig.from_dict.
-    mode: str | None = None                  # api | browser (F-039): API in-process vs navegador real
-    concurrency: int | None = None          # N: tamanho do pool E nº de jornadas concorrentes
-    wait_min_s: float | None = None         # espera entre jornadas (slot ocioso)
+    # Advanced simulator config (F-018). All optional → defaults/clamps in SimConfig.from_dict.
+    mode: str | None = None                  # api | browser (F-039): in-process API vs real browser
+    concurrency: int | None = None          # N: pool size AND number of concurrent journeys
+    wait_min_s: float | None = None         # wait between journeys (idle slot)
     wait_max_s: float | None = None
-    think_min_s: float | None = None        # think-time entre ações
+    think_min_s: float | None = None        # think-time between actions
     think_max_s: float | None = None
-    actions_min: int | None = None          # nº de ações de navegação por jornada
+    actions_min: int | None = None          # number of navigation actions per journey
     actions_max: int | None = None
-    concierge_pct: int | None = None        # % de jornadas que usam o Concierge
-    problem_pct: int | None = None          # % de jornadas que injetam um problema
-    problems: list[str] | None = None       # quais problemas elegíveis p/ injeção
-    category_mix: dict[str, int] | None = None  # peso por categoria no carrinho
-    tier_mix: dict[str, int] | None = None      # distribuição de tier dos usuários criados
-    speed: float | None = None              # multiplicador dos sleeps (<1 = demo rápido)
+    concierge_pct: int | None = None        # % of journeys using Concierge
+    problem_pct: int | None = None          # % of journeys that inject a problem
+    problems: list[str] | None = None       # which problems eligible for injection
+    category_mix: dict[str, int] | None = None  # weight per category in cart
+    tier_mix: dict[str, int] | None = None      # distribution of tiers of created users
+    speed: float | None = None              # multiplier for sleeps (<1 = fast demo)
     target_kind: str | None = None          # none | orders | duration
-    target_value: int | None = None         # nº de pedidos OU segundos
-    reset: bool | None = None               # limpar pedidos antes de iniciar
+    target_value: int | None = None         # number of orders OR seconds
+    reset: bool | None = None               # clear orders before starting
     max_lines: int | None = None
     max_qty: int | None = None
 class SimPauseRequest(BaseModel):
     paused: bool = True
 class ProviderIn(BaseModel):
-    # Cria um provider da cascata de LLM (config owner-only — F-020). `api_key` é segredo
-    # (write-only; nunca volta ao front). `kind`: openai | anthropic | bedrock.
+    # Creates an LLM cascade provider (owner-only config — F-020). `api_key` is secret
+    # (write-only; never returns to front). `kind`: openai | anthropic | bedrock.
     name: str
     kind: str = "openai"
     base_url: str = ""
@@ -124,7 +124,7 @@ class ProviderIn(BaseModel):
     api_key: str = ""
     enabled: bool = True
 class ProviderUpdate(BaseModel):
-    # Atualização parcial. `api_key` vazio/omitido MANTÉM a chave atual (write-only).
+    # Partial update. `api_key` empty/omitted KEEPS the current key (write-only).
     name: str | None = None
     kind: str | None = None
     base_url: str | None = None
@@ -135,42 +135,42 @@ class ProviderUpdate(BaseModel):
 class ReorderIn(BaseModel):
     ids: list[str]
 class TestProviderIn(BaseModel):
-    # Test "ao vivo" de um provider ainda não salvo (UI). Se vier vazio, testa o salvo por id.
+    # Live test of an unsaved provider (UI). If empty, tests the saved one by id.
     name: str | None = None
     kind: str | None = None
     base_url: str | None = None
     model: str | None = None
     api_key: str | None = None
 class AgentUpdate(BaseModel):
-    # Config por agente (F-021). Campos parciais; None mantém. Sem segredo (vai cru ao front).
-    connection: str | None = None   # provider id (LP-xxxx) ou '' = cascata completa
-    model: str | None = None        # override opcional do modelo
+    # Config per agent (F-021). Partial fields; None keeps existing. No secret (goes raw to front).
+    connection: str | None = None   # provider id (LP-xxxx) or '' = full cascade
+    model: str | None = None        # optional model override
     role: str | None = None
     system_prompt: str | None = None
 class AgentTestIn(BaseModel):
-    # Test "ao vivo" de um agente: edições opcionais sobre o salvo → 1 chamada real ao LLM resolvido.
+    # Live test of an agent: optional edits over saved → 1 real call to resolved LLM.
     connection: str | None = None
     model: str | None = None
     role: str | None = None
     system_prompt: str | None = None
 class HubSourceIn(BaseModel):
-    # Fonte de config local|remote (hub/peer — F-026). Tokens são write-only (segredo;
-    # nunca voltam ao front). `serve_token` aceita '' explícito (owner desliga o servir).
+    # Config source local|remote (hub/peer — F-026). Tokens are write-only (secret;
+    # never return to front). `serve_token` accepts explicit '' (owner disables serving).
     source: str | None = None             # local | remote
-    hub_url: str | None = None            # URL do hub (lado cliente)
-    enrollment_token: str | None = None   # token p/ puxar do hub (write-only)
+    hub_url: str | None = None            # hub URL (client side)
+    enrollment_token: str | None = None   # token to pull from hub (write-only)
     pull_interval_s: int | None = None
-    serve_token: str | None = None        # token exigido p/ servir como hub
+    serve_token: str | None = None        # token required to serve as hub
 class EnrollIn(BaseModel):
-    # Enroll RECEBIDO (lado cliente — F-027). Máquina-a-máquina: o hub manda a própria URL +
-    # o token p/ esta loja puxar a config. Gateado por ENROLL_TOKEN (segredo do lab), não owner.
+    # Enroll RECEIVED (client side — F-027). Machine-to-machine: hub sends its own URL +
+    # token for this store to pull config. Gated by ENROLL_TOKEN (lab secret), not owner.
     hub_url: str
     enrollment_token: str = ""
     pull_interval_s: int | None = None
 class EnrollPushIn(BaseModel):
-    # Enroll PUSH (lado hub — F-027, owner-only): força N lojas (por IP) a virar clientes deste hub.
+    # Enroll PUSH (hub side — F-027, owner-only): forces N stores (by IP) to become clients of this hub.
     ips: list[str]
-    hub_url: str                          # URL deste hub (como os alvos o alcançam)
-    enroll_token: str                     # segredo compartilhado p/ autenticar nos alvos (ENROLL_TOKEN deles)
-    enrollment_token: str                 # token que os alvos usarão p/ puxar (= serve_token deste hub)
+    hub_url: str                          # URL of this hub (how targets reach it)
+    enroll_token: str                     # shared secret to authenticate on targets (their ENROLL_TOKEN)
+    enrollment_token: str                 # token that targets will use to pull (= this hub's serve_token)
     pull_interval_s: int | None = None

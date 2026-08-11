@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Production / Docker startup for Vega Concierge (portas diretas, sem Traefik).
+# Production / Docker startup for Vega Concierge (direct ports, no Traefik).
 #
 #   ./scripts/up.sh              # wizard + pull + up -d + Postgres/pgvector RAG (default)
-#   ./scripts/up.sh --no-rag       # sem Postgres — keyword retriever only
+#   ./scripts/up.sh --no-rag       # without Postgres — keyword retriever only
 #   ./scripts/up.sh --build        # local compose with build (docker-compose.yml)
 #   ./scripts/up.sh down           # stop production stack
 #   ./scripts/up.sh logs           # follow logs (production)
@@ -14,7 +14,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 wait_for_health() {
-  echo "→ aguardando GET /api/health…"
+  echo "→ waiting for GET /api/health…"
   local i health_json
   for i in $(seq 1 60); do
     if health_json="$(curl -sf http://localhost:8000/api/health 2>/dev/null)"; then
@@ -27,7 +27,7 @@ wait_for_health() {
     fi
     sleep 2
   done
-  echo "up.sh: backend não respondeu em /api/health após 120s" >&2
+  echo "up.sh: backend didn't respond on /api/health after 120s" >&2
   exit 1
 }
 
@@ -50,9 +50,9 @@ prod_up_detached() {
   docker compose "${COMPOSE_ARGS[@]}" pull
   fresh_sqlite_compose "${COMPOSE_ARGS[@]}"
   echo "→ up -d (pull-only; no local build)…"
-  # --force-recreate: no boot o dockerd ressuscita containers (restart: always) ANTES do
-  # vega-boot; sem recreate, o fresh-state apaga o SQLite por baixo do backend vivo e o
-  # _bootstrap() (que cria as tabelas) nunca re-roda → "no such table" (F-REAL-ENV-2).
+  # --force-recreate: on boot, dockerd resurrects containers (restart: always) BEFORE
+  # vega-boot; without recreate, fresh-state wipes the SQLite out from under the live backend and
+  # _bootstrap() (which creates the tables) never re-runs → "no such table" (F-REAL-ENV-2).
   docker compose "${COMPOSE_ARGS[@]}" up -d --force-recreate
   if [ "$RAG" -eq 1 ] && [ "${RAG_ENABLED:-0}" = "1" ]; then
     RAG_INIT_VIA=docker "$ROOT/scripts/lib/rag-init.sh"
@@ -61,7 +61,7 @@ prod_up_detached() {
   print_image_digests
   echo "→ Store http://<VM-IP>:3000  ·  API http://<VM-IP>:8000  ·  Ops Console http://<VM-IP>:9000"
   if [ "$RAG" -eq 1 ]; then
-    echo "  rag: pgvector (default) — use --no-rag p/ keyword-only"
+    echo "  rag: pgvector (default) — use --no-rag for keyword-only"
   fi
   echo "  './scripts/up.sh logs' to follow, './scripts/up.sh down' to stop."
 }
@@ -82,7 +82,7 @@ while [ $# -gt 0 ]; do
       shift
       ;;
     --rag)
-      shift ;;  # legacy no-op — RAG é default desde F-RAG-LIVE
+      shift ;;  # legacy no-op — RAG has been default since F-RAG-LIVE
     --force-setup)
       FORCE_SETUP=1
       shift
@@ -143,7 +143,7 @@ if [ "$RAG" -eq 1 ]; then
   COMPOSE_ARGS+=(--profile rag)
 fi
 
-# SO vence .env (contrato F-REAL-ENV-2) — e o merged vira .env.runtime pro compose.
+# OS wins over .env (F-REAL-ENV-2 contract) — and the merged result becomes .env.runtime for compose.
 # shellcheck disable=SC1091
 . "$ROOT/scripts/lib/env-load.sh"
 load_env_os_first

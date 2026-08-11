@@ -1,15 +1,15 @@
-"""Cliente LLM multi-provider com fallback em cascata (F-020).
+"""Multi-provider LLM client with cascading fallback (F-020).
 
-Adapters reais (OpenAI-compatível e Anthropic) + StubLLM offline como último recurso.
-A cascata tenta os providers habilitados na ordem; em falha (erro/timeout/rate-limit)
-cai para o próximo; o StubLLM garante que a app continua standalone sem nenhuma chave.
+Real adapters (OpenAI-compatible and Anthropic) + offline StubLLM as last resort.
+Cascade tries enabled providers in order; on failure (error/timeout/rate-limit)
+falls to the next; StubLLM ensures the app continues standalone without any key.
 
-O provider é resolvido POR CHAMADA a partir da config corrente, não fixado no import — mudar a
-config aplica sem restart. QUAL config usar, em que ordem, é decisão de `llm_providers` (base
-única, F-BACKEND-1); este módulo só sabe FALAR com cada provider.
+Provider is resolved PER CALL from current config, not fixed at import — config changes apply
+without restart. WHICH config to use and in what order is decided by `llm_providers` (single base,
+F-BACKEND-1); this module only knows HOW TO TALK to each provider.
 
-HTTP via SDKs oficiais (`openai`, `anthropic`) — F-OBS-PREP-1 / ADR-027; readiness
-Splunk Agent Observability/OTel. Chaves de API são SEGREDOS: nunca são logadas nem retornadas.
+HTTP via official SDKs (`openai`, `anthropic`) — F-OBS-PREP-1 / ADR-027; readiness for
+Splunk Agent Observability/OTel. API keys are SECRETS: never logged or returned.
 """
 import random
 import time
@@ -22,7 +22,7 @@ from .http_ssl import sync_http_client
 from .llm_providers import bedrock_region, load_provider_configs, resolve_provider_configs
 from ..settings import settings
 
-# Timeout por chamada ao provider (s). Curto p/ a cascata cair rápido no fallback.
+# Timeout per provider call (s). Short so cascade falls to fallback quickly.
 LLM_TIMEOUT_S = settings.llm_timeout_s
 DEFAULT_STUB_MODEL = settings.llm_stub_model
 
@@ -33,17 +33,17 @@ class LLMResult:
     input_tokens: int
     output_tokens: int
     model: str
-    provider: str = "stub"   # nome amigável do provider que respondeu
-    system: str = "stub"     # família do provider (openai | anthropic | stub)
-    fallback: bool = False   # True se um provider anterior na cascata falhou antes deste
-    prompt_cache_tokens: int = 0  # tokens de input cobertos por prompt-cache do provider (F-COST-CACHE)
+    provider: str = "stub"   # friendly name of the provider that responded
+    system: str = "stub"     # provider family (openai | anthropic | stub)
+    fallback: bool = False   # True if a prior provider in cascade failed before this one
+    prompt_cache_tokens: int = 0  # input tokens covered by provider prompt-cache (F-COST-CACHE)
 
 
 # --- Adapters ---------------------------------------------------------------
 
 class StubLLM:
-    """Determinístico-ish, gera tokens plausíveis sem chamar rede. Último recurso
-    da cascata → mantém a app funcionando offline sem nenhuma chave configurada."""
+    """Deterministic-ish, generates plausible tokens without network call. Last resort
+    in cascade — keeps app working offline without any key configured."""
     name = "stub"
     system = "stub"
 
@@ -54,14 +54,14 @@ class StubLLM:
         time.sleep(0.05)
         out = f"[stub:{self.model}] resposta para: {prompt[:48]}"
         in_tok = max(8, len(system.split()) + len(prompt.split()))
-        # `max_tokens` (teto por feature — F-022) limita o tamanho sintético; senão usa o default.
+        # `max_tokens` (cap per feature — F-022) limits synthetic size; otherwise uses default.
         out_tok = (max_tokens or (120 if verbose else 30)) + random.randint(0, 10)
         return LLMResult(out, in_tok, out_tok, self.model, provider=self.name, system=self.system)
 
 
 class OpenAICompatAdapter:
-    """Chat Completions OpenAI-compatível: cobre OpenAI, Groq, xAI/Grok, OpenRouter e
-    afins (basta `base_url` + `api_key` + `model`). Tokens/modelo reais vêm da resposta."""
+    """OpenAI-compatible Chat Completions: covers OpenAI, Groq, xAI/Grok, OpenRouter, and
+    the like (just `base_url` + `api_key` + `model`). Real tokens/model from response."""
     system = "openai"
 
     def __init__(self, name: str, base_url: str, api_key: str, model: str):
@@ -104,9 +104,9 @@ class OpenAICompatAdapter:
 
 
 class AnthropicAdapter:
-    """Anthropic Messages API (Claude). `base_url` default oficial; tokens reais da resposta.
-    Alternativa (decisão em aberto da spec): rotear Claude via OpenRouter usando o adapter
-    OpenAI-compatível — suportamos os DOIS caminhos (ADR-015)."""
+    """Anthropic Messages API (Claude). Official `base_url` default; real tokens from response.
+    Alternative (spec decision pending): route Claude via OpenRouter using OpenAI-compatible adapter
+    — we support BOTH paths (ADR-015)."""
     system = "anthropic"
     ANTHROPIC_VERSION = "2023-06-01"
 
@@ -153,7 +153,7 @@ class AnthropicAdapter:
 
 
 def make_bedrock_client(region: str, api_key: str, model: str, timeout: float = LLM_TIMEOUT_S):
-    """Cliente Bedrock via API key (UI). Usa AnthropicBedrock (bedrock-runtime) — Mantle exige IAM."""
+    """Bedrock client via API key (UI). Uses AnthropicBedrock (bedrock-runtime) — Mantle requires IAM."""
     if not api_key:
         raise ValueError("Bedrock provider requires api_key (Bedrock API key from Admin UI)")
     return AnthropicBedrock(
@@ -165,8 +165,8 @@ def make_bedrock_client(region: str, api_key: str, model: str, timeout: float = 
 
 
 class BedrockAdapter:
-    """Amazon Bedrock (Claude via Anthropic SDK). `base_url` = região AWS; `api_key` = Bedrock API key
-    cadastrada na UI (workshop não usa IAM/credential chain no runtime)."""
+    """Amazon Bedrock (Claude via Anthropic SDK). `base_url` = AWS region; `api_key` = Bedrock API key
+    registered in UI (workshop does not use IAM/credential chain at runtime)."""
     system = "bedrock"
 
     def __init__(self, name: str, base_url: str, api_key: str, model: str):
@@ -199,12 +199,12 @@ class BedrockAdapter:
         )
 
 
-# kind da config → classe do adapter. Acrescentar outro provider = uma linha aqui.
+# config kind → adapter class. Add another provider = one line here.
 _ADAPTERS = {"openai": OpenAICompatAdapter, "anthropic": AnthropicAdapter, "bedrock": BedrockAdapter}
 
 
 def build_adapter(cfg: dict):
-    """Constrói um adapter a partir de um dict de config. Retorna None se falta kind/modelo/api_key."""
+    """Build adapter from config dict. Returns None if kind/model/api_key is missing."""
     kind = cfg.get("kind", "openai")
     cls = _ADAPTERS.get(kind)
     if cls is None or not cfg.get("model") or not cfg.get("api_key"):
@@ -217,18 +217,18 @@ def build_adapter(cfg: dict):
     )
 
 
-# --- Cascata ----------------------------------------------------------------
+# --- Cascade ---------------------------------------------------------------
 
 class CascadeLLM:
-    """Tenta os adapters em ordem; em falha (erro/timeout/rate-limit) cai p/ o próximo.
-    O último adapter é sempre o StubLLM → a app nunca fica sem resposta (standalone-first)."""
+    """Tries adapters in order; on failure (error/timeout/rate-limit) falls to next.
+    Last adapter is always StubLLM → app never goes without response (standalone-first)."""
 
     def __init__(self, adapters: list):
-        self.adapters = adapters  # ordenados; StubLLM por último
+        self.adapters = adapters  # ordered; StubLLM last
 
     def primary_model(self) -> str:
-        """Modelo do adapter de maior prioridade (1º da cascata) — usado como parte da CHAVE de
-        cache (F-022) ANTES da chamada. Stub por último garante sempre um valor."""
+        """Model of highest-priority adapter (1st in cascade) — used as part of cache KEY
+        (F-022) BEFORE call. Stub last ensures always a value."""
         return self.adapters[0].model if self.adapters else DEFAULT_STUB_MODEL
 
     def complete(self, system: str, prompt: str, verbose: bool = False, max_tokens: int | None = None) -> LLMResult:
@@ -238,28 +238,28 @@ class CascadeLLM:
                 r = adapter.complete(system, prompt, verbose=verbose, max_tokens=max_tokens)
                 r.fallback = i > 0  # algum provider anterior falhou antes deste responder
                 return r
-            except Exception as e:  # noqa: BLE001 — qualquer falha derruba p/ o próximo (não loga: a msg pode citar a chave)
+            except Exception as e:  # noqa: BLE001 — any failure drops to next (no logging: msg may cite key)
                 last_err = e
                 continue
-        # Inalcançável na prática (StubLLM não falha), mas seja explícito.
-        raise RuntimeError(f"todos os providers da cascata falharam: {type(last_err).__name__}")
+        # Unreachable in practice (StubLLM doesn't fail), but be explicit.
+        raise RuntimeError(f"all cascade providers failed: {type(last_err).__name__}")
 
 
-# --- Resolução da config (fonte evolui; consumidores não) -------------------
+# --- Config resolution (source evolves; consumers don't) ------------------
 
 def get_llm() -> CascadeLLM:
-    """Cascata resolvida a partir da config CORRENTE (por chamada, não no import) — mudar
-    a config aplica sem restart. Sempre termina no StubLLM (último recurso offline)."""
+    """Cascade resolved from CURRENT config (per call, not at import) — config changes apply
+    without restart. Always ends with StubLLM (offline last resort)."""
     adapters = [a for a in (build_adapter(c) for c in load_provider_configs()) if a is not None]
     adapters.append(StubLLM())
     return CascadeLLM(adapters)
 
 
 def get_llm_for(connection: str = "", model: str = "") -> CascadeLLM:
-    """LLM resolvido para UM agente (F-021). `connection` = id do provider a fixar (ou '' =
-    cascata completa); `model` = override opcional do modelo. Sempre termina no StubLLM →
-    fixar numa conexão desabilitada/ausente cai p/ o stub (offline). Sem connection nem model
-    é equivalente a `get_llm()` (cascata corrente)."""
+    """LLM resolved for ONE agent (F-021). `connection` = provider id to pin (or '' =
+    full cascade); `model` = optional model override. Always ends with StubLLM —
+    pinning to disabled/absent connection falls to stub (offline). Without connection or model
+    is equivalent to `get_llm()` (current cascade)."""
     cfgs = resolve_provider_configs(connection, model)
     adapters = [a for a in (build_adapter(c) for c in cfgs) if a is not None]
     adapters.append(StubLLM(model or DEFAULT_STUB_MODEL))
@@ -267,9 +267,9 @@ def get_llm_for(connection: str = "", model: str = "") -> CascadeLLM:
 
 
 def test_provider(cfg: dict) -> dict:
-    """Chamada de teste a UM provider (botão 'Test' da config — F-020 etapa 3). Mede latência
-    e usa modelo/tokens reais. NÃO loga nem ecoa a chave; em erro devolve tipo+mensagem (a
-    exceção dos adapters não contém a chave, que vai só no header)."""
+    """Test call to ONE provider (config 'Test' button — F-020 stage 3). Measures latency
+    using real model/tokens. Does NOT log or echo key; on error returns type+message (adapter
+    exceptions don't contain key, which only goes in header)."""
     adapter = build_adapter(cfg)
     if adapter is None:
         return {"ok": False, "error": "provider incompleto (kind/model/api_key)"}
@@ -285,9 +285,9 @@ def test_provider(cfg: dict) -> dict:
 
 
 def test_agent(connection: str = "", model: str = "", system: str = "You are a health check.") -> dict:
-    """Test por agente (F-021): resolve o LLM do agente (`get_llm_for`) e faz UMA chamada real
-    com o system prompt efetivo. Como a cascata sempre termina no stub, `ok` é True mesmo offline
-    — `provider`/`model` mostram o que o agente REALMENTE usaria (stub se nada configurado/caiu)."""
+    """Test per agent (F-021): resolve agent's LLM (`get_llm_for`) and make ONE real call
+    with effective system prompt. Since cascade always ends in stub, `ok` is True even offline
+    — `provider`/`model` show what agent would ACTUALLY use (stub if nothing configured/down)."""
     llm = get_llm_for(connection, model)
     t0 = time.perf_counter()
     try:

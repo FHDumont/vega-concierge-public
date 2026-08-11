@@ -1,4 +1,4 @@
-"""Camada de config (F-BACKEND-1) — precedência e ausência de segredo no resumo de boot."""
+"""Config layer (F-BACKEND-1) — precedence and absence of secrets in the boot summary."""
 from __future__ import annotations
 
 import os
@@ -9,7 +9,7 @@ from app.settings import Settings, settings
 
 
 def test_os_environment_wins_over_the_env_file(monkeypatch, tmp_path):
-    """Requisito das EC2s: o `.env` da AMI é o piso; o token injetado pelo Ansible tem de vencer."""
+    """EC2 requirement: the AMI's `.env` is the floor; the token injected by Ansible must win."""
     env_file = tmp_path / ".env"
     env_file.write_text("GALILEO_PROJECT=do-arquivo\nOWNER_NAME=do-arquivo\n")
 
@@ -35,19 +35,19 @@ def test_field_default_applies_with_no_environment_and_no_file(monkeypatch):
 
 def test_galileo_log_stream_accepts_both_spellings(monkeypatch):
     monkeypatch.delenv("GALILEO_LOG_STREAM", raising=False)
-    monkeypatch.setenv("GALILEO_LOGSTREAM", "alias-antigo")
-    assert Settings(_env_file=None).galileo_log_stream == "alias-antigo"
+    monkeypatch.setenv("GALILEO_LOGSTREAM", "old-alias")
+    assert Settings(_env_file=None).galileo_log_stream == "old-alias"
 
 
 def test_summary_never_exposes_a_secret(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-super-secreto")
-    monkeypatch.setenv("OWNER_PASSWORD", "senha-do-dono")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-super-secret")
+    monkeypatch.setenv("OWNER_PASSWORD", "owner-password")
     summary = Settings(_env_file=None).summary()
 
     assert summary["openai_api_key"] is True
     assert summary["owner_password"] is True
-    assert "sk-super-secreto" not in str(summary)
-    assert "senha-do-dono" not in str(summary)
+    assert "sk-super-secret" not in str(summary)
+    assert "owner-password" not in str(summary)
 
 
 def test_summary_covers_every_field():
@@ -64,7 +64,7 @@ def test_env_file_defaults_to_the_repo_root(monkeypatch):
 
 
 def test_empty_vega_env_file_disables_file_loading(monkeypatch):
-    # É o modo em que a suíte roda: só ambiente do SO + defaults.
+    # This is the mode the suite runs in: only the OS environment + defaults.
     from app.settings import _env_file_path
 
     monkeypatch.setenv("VEGA_ENV_FILE", "")
@@ -79,8 +79,8 @@ def test_vega_env_file_can_point_elsewhere(monkeypatch, tmp_path):
 
 
 def test_export_to_environ_fills_what_third_party_sdks_read(monkeypatch, tmp_path):
-    """O SDK do Galileo lê `os.environ` sozinho — um valor que só existisse no `.env` deixaria a
-    app se dar por habilitada e o SDK falhar na credencial."""
+    """The Galileo SDK reads `os.environ` on its own — a value that only existed in `.env` would
+    let the app consider itself enabled and the SDK would fail on the credential."""
     env_file = tmp_path / ".env"
     env_file.write_text("GALILEO_API_KEY=do-arquivo\n")
     monkeypatch.delenv("GALILEO_API_KEY", raising=False)
@@ -99,9 +99,9 @@ def test_export_to_environ_never_overwrites_the_os_environment(monkeypatch, tmp_
     assert os.environ["GALILEO_PROJECT"] == "do-ambiente"
 
 
-# --- tolerância a valor mal formado ------------------------------------------
-# A `Settings` é a lista de variáveis que o time de Ansible renderiza nas 150 EC2s. Um campo
-# numérico em branco ou com lixo não pode derrubar a instância no import.
+# --- tolerance for malformed values ------------------------------------------
+# `Settings` is the list of variables the Ansible team renders across the 150 EC2s. A numeric
+# field that is blank or contains garbage must not crash the instance on import.
 
 @pytest.mark.parametrize("raw", ["", "   ", "muitos"])
 def test_broken_numeric_value_falls_back_to_the_default(monkeypatch, raw):
@@ -116,7 +116,7 @@ def test_broken_boolean_value_falls_back_to_the_default(monkeypatch, raw):
 
 
 def test_blank_text_field_stays_blank(monkeypatch):
-    # Campo de texto é diferente: `GALILEO_API_KEY=` vazio quer dizer vazio, não default.
+    # A text field is different: an empty `GALILEO_API_KEY=` means empty, not default.
     monkeypatch.setenv("GALILEO_API_KEY", "")
     assert Settings(_env_file=None).galileo_api_key == ""
 

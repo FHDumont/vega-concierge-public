@@ -57,13 +57,13 @@ class SearchCatalogInput(BaseModel):
 
 
 class GetPriceInput(BaseModel):
-    """Arguments for get_price. One SKU per call — no batch fields (Galileo #69, item 4: a schema
-    anterior expunha `skus`/`sku_a`/`sku_b` + `extra='allow'`, contradizendo a description e
-    induzindo o LLM a inventar campos tipo `{sku1,sku2,cmpFunc}` sem se recuperar)."""
+    """Arguments for get_price. One SKU per call — no batch fields (Galileo #69, item 4: previous schema
+    exposed `skus`/`sku_a`/`sku_b` + `extra='allow'`, contradicting the description and
+    leading the LLM to invent fields like `{sku1,sku2,cmpFunc}` without recovery)."""
 
-    # `Any` de propósito: o modelo manda `"NS-001"`, `["NS-001"]` ou lixo, e quem decide o
-    # que é SKU é o `tool_arg_normalize` (que já trata lista). Tipar `str` aqui devolveria a
-    # decisão ao pydantic, que só sabe estourar ValidationError.
+    # `Any` on purpose: the model sends `"NS-001"`, `["NS-001"]` or garbage, and `tool_arg_normalize`
+    # (which already handles lists) decides what is a SKU. Typing `str` here would defer the
+    # decision to pydantic, which only knows how to raise ValidationError.
     sku: Any = Field(
         default=None,
         description="Product SKU from the catalog (e.g. NS-001). Pass exactly one SKU — call "
@@ -74,9 +74,9 @@ class GetPriceInput(BaseModel):
 class DeleteProductInput(BaseModel):
     """Arguments for delete_product."""
 
-    # `Any` + default=None de propósito (DT-033): sem SKU válido, `normalize_sku_arg` devolve
-    # `{ok:false}` em vez do pydantic estourar ValidationError cru. Sem `extra="allow"` — é 1
-    # arg só e a tool de alto risco da UC-4, não vale a pena caçar o SKU noutro campo.
+    # `Any` + default=None on purpose (DT-033): without valid SKU, `normalize_sku_arg` returns
+    # `{ok:false}` instead of pydantic raising raw ValidationError. No `extra="allow"` — it's 1
+    # arg only and the high-risk UC-4 tool, not worth hunting SKU in another field.
     sku: Any = Field(
         default=None,
         description="Product SKU to remove from the catalog (e.g. NS-001).",
@@ -96,21 +96,21 @@ class ListRecentCustomersInput(BaseModel):
 class CheckInventoryInput(BaseModel):
     """Arguments for check_inventory."""
 
-    # `extra="allow"` deixa o SKU chegar ao reparo mesmo quando o modelo o põe noutro campo
-    # (mesma config de GetPriceInput). Sem isso o pydantic descarta o campo antes do wrapper.
+    # `extra="allow"` lets SKU reach repair even when model puts it in another field
+    # (same config as GetPriceInput). Without this pydantic discards the field before wrapper.
     model_config = ConfigDict(extra="allow")
 
-    # Opcional de propósito: o modelo às vezes chama sem `sku`, e o reparo é feito em
-    # `_check_inventory_tool` (mesmo padrão de GetPriceInput). Estrito aqui só trocaria um
-    # erro tratável por um ValidationError cru no trace.
+    # Optional on purpose: model sometimes calls without `sku`, and repair happens in
+    # `_check_inventory_tool` (same pattern as GetPriceInput). Being strict here would just swap
+    # a handlable error for raw ValidationError in the trace.
     sku: Any = Field(default=None, description="Product SKU to check stock availability for.")
 
 
 class PolicyLookupInput(BaseModel):
     """Arguments for policy_lookup (DT-033).
 
-    Só `status` importa pro cálculo (`order_id`/`total` ficam pra contexto/logging) — `Any` +
-    default=None pra chegar ao wrapper sem o pydantic estourar antes do reparo rodar."""
+    Only `status` matters for calculation (`order_id`/`total` stay for context/logging) — `Any` +
+    default=None to reach wrapper without pydantic failing before repair runs."""
 
     order_id: Any = Field(default=None, description="Order identifier (e.g. ORD-7781).")
     status: Any = Field(
@@ -120,7 +120,7 @@ class PolicyLookupInput(BaseModel):
 
 
 class RefundCalcInput(BaseModel):
-    """Arguments for refund_calc (DT-033). Só `total` importa pro cálculo."""
+    """Arguments for refund_calc (DT-033). Only `total` matters for calculation."""
 
     order_id: Any = Field(default=None, description="Order identifier (e.g. ORD-7781).")
     status: Any = Field(
@@ -132,8 +132,8 @@ class RefundCalcInput(BaseModel):
 class SearchPoliciesInput(BaseModel):
     """Arguments for search_policies."""
 
-    # `extra="allow"` de propósito: aceita a pergunta sob sinônimos comuns (query/q/text/input)
-    # sem o pydantic descartar o campo antes do `normalize_search_policies_args` ver — DT-033.
+    # `extra="allow"` on purpose: accepts question under common synonyms (query/q/text/input)
+    # without pydantic discarding field before `normalize_search_policies_args` sees it — DT-033.
     model_config = ConfigDict(extra="allow")
 
     question: str | None = Field(
@@ -174,8 +174,8 @@ def _policy_lookup_tool(order_id: Any = None, status: Any = None, total: Any = N
 
 
 def _search_policies_tool(question: str | None = None, config: RunnableConfig = None, **kwargs):
-    """`config` é injetado pelo LangChain (param anotado `RunnableConfig`) e repassado ao
-    retriever — sem ele o retriever span não aparece aninhado no tool span."""
+    """`config` is injected by LangChain (annotated param `RunnableConfig`) and passed to
+    retriever — without it the retriever span doesn't appear nested in tool span."""
     q, err = normalize_search_policies_args({"question": question, **kwargs})
     if err:
         return err
@@ -306,7 +306,7 @@ def _decide_fraud_allow_or_block_tool(
 
 
 def _confirm_cart_stock_tool(items_json: str, config: RunnableConfig) -> str:
-    """`config` propagado p/ o tool span aninhar no trace do checkout."""
+    """`config` passed so tool span nests in checkout trace."""
     try:
         items = json.loads(items_json) if items_json else []
     except (ValueError, TypeError):
@@ -318,7 +318,7 @@ def _confirm_cart_stock_tool(items_json: str, config: RunnableConfig) -> str:
 
 
 def _charge_payment_tool(order_json: str, config: RunnableConfig) -> str:
-    """`config` propagado p/ o tool span aninhar no trace do checkout."""
+    """`config` passed so tool span nests in checkout trace."""
     try:
         order = json.loads(order_json) if order_json else {}
     except (ValueError, TypeError):
@@ -330,10 +330,10 @@ def _charge_payment_tool(order_json: str, config: RunnableConfig) -> str:
 
 
 def _delete_product_tool(sku: Any = None, config: RunnableConfig = None) -> str:
-    """Único choke point da mutação — Agent Control pre-Block em delete_product (UC-4).
+    """Sole choke point of mutation — Agent Control pre-Block on delete_product (UC-4).
 
-    O `return err` tem de vir ANTES de `galileo_control.controlled_delete_product` — um SKU
-    inválido não pode registrar step de controle fantasma no Agent Control (DT-033)."""
+    The `return err` must come BEFORE `galileo_control.controlled_delete_product` — an invalid SKU
+    cannot register phantom control step in Agent Control (DT-033)."""
     norm_sku, err = normalize_sku_arg({"sku": sku})
     if err:
         return json.dumps(err)
@@ -346,7 +346,7 @@ def _delete_product_tool(sku: Any = None, config: RunnableConfig = None) -> str:
 
 
 def _process_refund_tool(order_json: str, config: RunnableConfig) -> str:
-    """Único choke point da mutação REFUNDED — invoke só em nós pós-ReAct (F-GALILEO-16)."""
+    """Sole choke point of REFUNDED mutation — invoke only in post-ReAct nodes (F-GALILEO-16)."""
     try:
         order = json.loads(order_json) if order_json else {}
     except (ValueError, TypeError):
@@ -367,7 +367,7 @@ def _process_refund_tool(order_json: str, config: RunnableConfig) -> str:
 
 
 def _send_order_notification_tool(order_json: str, config: RunnableConfig) -> str:
-    """`config` propagado p/ o tool span aninhar no trace do checkout."""
+    """`config` passed so tool span nests in checkout trace."""
     try:
         order = json.loads(order_json) if order_json else {}
     except (ValueError, TypeError):
@@ -586,7 +586,7 @@ _DOMAIN_MAP: dict[str, list[StructuredTool]] = {
 
 
 def get_tools(domain: str) -> list[StructuredTool]:
-    """Return StructuredTools for domain: concierge | fulfillment | returns | compare."""
+    """Returns StructuredTools for domain: concierge | fulfillment | returns | compare."""
     if domain not in _DOMAIN_MAP:
         valid = ", ".join(_DOMAIN_MAP)
         raise ValueError(f"Unknown domain {domain!r}. Expected one of: {valid}")

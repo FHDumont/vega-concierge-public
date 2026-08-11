@@ -1,7 +1,7 @@
 "use client";
-// IA-Carrinho (F-023): cross-sell/bundle dentro do carrinho slide-over. "Complete your purchase"
-// com sugestões geradas a partir dos itens do carrinho (no backend, reusa a camada de custo F-022
-// + honra os toggles). Opt-in: LLM só no clique (F-LLM-ON-DEMAND).
+// Cart AI (F-023): cross-sell/bundle inside the cart slide-over. "Complete your purchase"
+// with suggestions generated from the cart items (on the backend, reuses the F-022 cost layer
+// + honors the toggles). Opt-in: LLM only on click (F-LLM-ON-DEMAND).
 import { useEffect, useState } from "react";
 import { Product, cartCrossSell } from "@/lib/api";
 import { emojiOf, formatMoney, gradientOf } from "@/lib/shop";

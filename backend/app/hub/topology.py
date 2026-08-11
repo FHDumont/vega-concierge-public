@@ -1,29 +1,29 @@
-"""Topologia da orquestração de agentes (F-027) — derivada do grafo real (agents.py, ADR-029).
+"""Agent orchestration topology (F-027) — derived from real graph (agents.py, ADR-029).
 
-Expõe NÓS (agentes/tools/deps) e ARESTAS (quem chama quem) p/ o **editor visual** do owner.
-O diagrama achata finalize e usa layout hub-and-spoke no cluster concierge (arestas de retorno curator/respond → coordinator).
+Exposes NODES (agents/tools/deps) and EDGES (who calls whom) for owner's **visual editor**.
+Diagram flattens finalize and uses hub-and-spoke layout in concierge cluster (return edges curator/respond → coordinator).
 
-- **Cluster concierge** (recomendação): `concierge.workflow → agent.concierge (coordinator)` →
+- **Concierge cluster** (recommendation): `concierge.workflow → agent.concierge (coordinator)` →
   `{agent.curator → tool.search_catalog/tool.get_price, agent.respond}`.
-- **Cluster fulfillment** (fechamento): `agent.fulfillment_coordinator →
+- **Fulfillment cluster** (checkout): `agent.fulfillment_coordinator →
   {tool.check_inventory, tool.get_price, agent.fraude, payment.charge, notify.send_email}`.
-- **Standalone** (chamada direta, sem orquestração): as features de IA da Loja (F-022/F-024) —
+- **Standalone** (direct call, no orchestration): Store AI features (F-022/F-024) —
   product_qa, search, cart_crosssell,
   fraud_explain, admin_insights.
 
-Não há um 2º modelo de verdade: a estrutura é fixa (espelha o código) e os papéis (`role`) e a
-lista de agentes configuráveis vêm de `agent_config` (a mesma config por-agente da F-021), p/ o
-editor abrir/editar a config ao clicar num agente. Tools/deps são folhas (não configuráveis).
+No second source of truth: structure is fixed (mirrors code) and roles (`role`) and
+configurable agents list come from `agent_config` (same per-agent config as F-021), for
+editor to open/edit config on agent click. Tools/deps are leaves (not configurable).
 """
 from . import agent_config
 
-# Nós-agente configuráveis dos clusters orquestrados → clicáveis (abrem a config F-021).
-# Tools (sem LLM) e deps externas são folhas informativas (não clicáveis p/ config).
+# Configurable agent nodes in orchestrated clusters → clickable (open F-021 config).
+# Tools (LLM-less) and external deps are informative leaves (not clickable for config).
 _TOOL_LABELS = {
     "tool.search_catalog": "search_catalog",
     "tool.get_price": "get_price",
     "tool.check_inventory": "check_inventory",
-    # Returns/Refund (F-029) — tools sem LLM da cadeia do Returns Coordinator.
+    # Returns/Refund (F-029) — LLM-less tools in Returns Coordinator chain.
     "tool.policy_lookup": "policy_lookup",
     "tool.refund_calc": "refund_calc",
     "tool.process_refund": "process_refund",
@@ -33,8 +33,8 @@ _DEP_LABELS = {
     "notify.send_email": "email provider",
 }
 
-# Clusters orquestrados: (id, label, root, arestas pai→filho). Os agentes referenciam nomes
-# reais de `agent_config`; as tools/deps usam os identificadores de store/tools.py e
+# Orchestrated clusters: (id, label, root, edges parent→child). Agents reference
+# real names from `agent_config`; tools/deps use identifiers from store/tools.py and
 # store/payments.py.
 _CLUSTERS = [
     {
@@ -100,20 +100,20 @@ _CLUSTERS = [
 
 
 def _agent_node(name: str) -> dict:
-    """Nó de um agente configurável (clicável): traz o `role` real da config por-agente (F-021)."""
+    """Node of configurable agent (clickable): fetches real `role` from per-agent config (F-021)."""
     cfg = agent_config.get_agent(name)
     return {"id": name, "kind": "agent", "agent": name, "role": cfg["role"], "label": name}
 
 
 def _leaf_node(node_id: str) -> dict:
-    """Nó folha não-configurável: tool (sem LLM) ou dep externa."""
+    """Non-configurable leaf node: tool (LLM-less) or external dep."""
     if node_id in _TOOL_LABELS:
         return {"id": node_id, "kind": "tool", "agent": None, "role": "", "label": _TOOL_LABELS[node_id]}
     return {"id": node_id, "kind": "dep", "agent": None, "role": "", "label": _DEP_LABELS.get(node_id, node_id)}
 
 
 def _build_cluster(spec: dict) -> dict:
-    """Monta nós (deduplicados, na ordem em que aparecem) + arestas de um cluster."""
+    """Builds nodes (deduplicated, in order of appearance) + edges of a cluster."""
     edges = [{"from": a, "to": b} for a, b in spec["edges"]]
     order: list[str] = []
     for a, b in spec["edges"]:
@@ -135,7 +135,7 @@ def _build_cluster(spec: dict) -> dict:
 
 
 def build() -> dict:
-    """Topologia completa p/ o editor: clusters orquestrados + agentes standalone (features)."""
+    """Complete topology for editor: orchestrated clusters + standalone agents (features)."""
     clusters = [_build_cluster(c) for c in _CLUSTERS]
     standalone = [_agent_node(name) for name in agent_config.FEATURE_NAMES]
     return {"clusters": clusters, "standalone": standalone}

@@ -1,6 +1,6 @@
-"""Contrato ReAct sob stub (F-OBS-PREP-7) — ex `run_react_contract_demo.py`.
+"""ReAct contract under stub (F-OBS-PREP-7) — formerly `run_react_contract_demo.py`.
 
-Garante que os nomes de tool e os SKUs do carrinho chegam ao message history dos grafos.
+Ensures the tool names and cart SKUs reach the graphs' message history.
 """
 from __future__ import annotations
 
@@ -50,18 +50,18 @@ def test_fulfillment_returns_inventory_and_price_tool_results():
 
 
 def test_fulfillment_uses_one_inventory_and_price_result_per_cart_sku():
-    """Regressão do #72: sem o humano seedado, o stub caía no fallback NS-001, o
-    `resolve_quote_node` descartava e refazia as tools — 1 turno + 1 span desperdiçados.
-    Com o SKU real no histórico desde o 1º turno, o carrinho fecha em exatamente 1
-    `check_inventory` + 1 `get_price`, ambos com o SKU do carrinho, e 2 turnos do coordinator."""
+    """Regression for #72: without the human seeded, the stub fell back to NS-001, and
+    `resolve_quote_node` would discard and redo the tools — 1 wasted turn + 1 wasted span.
+    With the real SKU in the history from the 1st turn, the cart closes in exactly 1
+    `check_inventory` + 1 `get_price`, both with the cart's SKU, and 2 coordinator turns."""
     sku, items, total = _cart_item()
     raw = run_fulfillment_workflow(items, total)
     assert raw["inventory"].get("sku") == sku, raw["inventory"]
     assert raw["quote"].get("sku") == sku, raw["quote"]
 
 def test_compare_uses_a_price_for_each_non_default_sku():
-    """Análogo pro compare: SKUs não-default fecham em 2 `get_price` (1 por SKU) e 3 turnos
-    do coordinator, sem precisar da injeção de `_inject_get_price_call`."""
+    """Analogous for compare: non-default SKUs close in 2 `get_price` calls (1 per SKU) and 3
+    coordinator turns, without needing the `_inject_get_price_call` injection."""
     a, b = CATALOG[3], CATALOG[4]
     raw = compare_products(a["sku"], b["sku"])
     assert raw

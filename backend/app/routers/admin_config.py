@@ -1,23 +1,23 @@
-"""Config OWNER-only — cascata de LLM, agentes, fonte local/hub, flags, RUM e Inspector."""
+"""OWNER-only config — LLM cascade, agents, local/hub source, flags, RUM, and Inspector."""
 from fastapi import APIRouter, Header, HTTPException
 from ..hub import agent_config, feature_flags, hub, hub_settings, rum, topology
 from ..llm import llm, llm_providers, llm_activity, llm_config
 from ..schemas import AgentTestIn, AgentUpdate, FlagsIn, HubSourceIn, InspectorToggle, ProviderIn, ProviderUpdate, ReorderIn, RumIn, TestProviderIn
 from ._common import _require_owner
 
-# Sem `prefix`: cada rota carrega o path completo, igualzinho ao que estava em `api.py`.
+# No `prefix`: each route carries the full path, just like it was in `api.py`.
 router = APIRouter()
 
 
-# --- Config de LLM (OWNER-only — F-020, ADR-015) ----------------------------
-# Gerencia os provedores da cascata (ordem/enable/modelo/chave). Diferente do resto do
-# Admin (sem auth, controles de workshop), estes endpoints são GATED a OWNER: a config
-# guarda SEGREDOS (chaves). A API só devolve a versão MASCARADA (sem `api_key`).
+# --- LLM Config (OWNER-only — F-020, ADR-015) ----------------------------
+# Manages cascade providers (order/enable/model/key). Different from rest of
+# Admin (no auth, workshop controls), these endpoints are GATED to OWNER: the config
+# guards SECRETS (keys). The API only returns the MASKED version (no `api_key`).
 
 @router.get("/api/admin/config/llm-types")
 def config_llm_types(authorization: str | None = Header(default=None)):
-    # Catálogo de Type presets (base_url + modelos econômicos sugeridos) p/ a UI de conexão
-    # (F-021). Não guarda segredo — gated a OWNER só p/ consistência do namespace de config.
+    # Catalog of Type presets (base_url + suggested economical models) for the connection UI
+    # (F-021). No secrets — gated to OWNER only for config namespace consistency.
     _require_owner(authorization)
     return llm_providers.list_type_presets()
 
@@ -59,9 +59,9 @@ def config_reorder(body: ReorderIn, authorization: str | None = Header(default=N
 
 @router.post("/api/admin/config/providers/{provider_id}/test")
 def config_test(provider_id: str, body: TestProviderIn, authorization: str | None = Header(default=None)):
-    # Faz UMA chamada de teste e devolve ok/erro/latência (sem vazar a chave). Usa o provider
-    # salvo (com a chave guardada) mesclado com os campos editados na UI; se a UI mandar uma
-    # nova chave usa-a, senão mantém a salva — assim o owner testa edições antes de salvar.
+    # Makes ONE test call and returns ok/error/latency (without leaking the key). Uses the saved provider
+    # (with the key stored) merged with fields edited in the UI; if the UI sends a new
+    # key it uses it, otherwise keeps the saved one — so the owner tests edits before saving.
     _require_owner(authorization)
     stored = llm_config.get_provider_with_key(provider_id)
     if stored is None:
@@ -71,15 +71,15 @@ def config_test(provider_id: str, body: TestProviderIn, authorization: str | Non
     return llm.test_provider(cfg)
 
 
-# --- Config por agente (OWNER-only — F-021; + features de loja F-022) --------
-# Os 6 agentes do Concierge + as features de IA da Loja (product_qa/search/cart_crosssell),
-# cada um com connection/model/role/system_prompt. Sem segredo (vai cru ao front), mas gated
-# a OWNER p/ consistência do namespace de config.
+# --- Agent config (OWNER-only — F-021; + store AI features F-022) --------
+# The 6 Concierge agents + the store AI features (product_qa/search/cart_crosssell),
+# each with connection/model/role/system_prompt. No secrets (goes raw to front), but gated
+# to OWNER for config namespace consistency.
 
 @router.get("/api/admin/agents/topology")
 def config_agents_topology(authorization: str | None = Header(default=None)):
-    # Editor visual (F-027): topologia da orquestração (clusters + standalone) derivada do
-    # grafo real (agents.py, ADR-018). Owner-only — clicar num agente abre/edita a config (F-021).
+    # Visual editor (F-027): orchestration topology (clusters + standalone) derived from
+    # the real graph (agents.py, ADR-018). Owner-only — clicking an agent opens/edits config (F-021).
     _require_owner(authorization)
     return topology.build()
 
@@ -101,8 +101,8 @@ def config_agent_update(name: str, p: AgentUpdate, authorization: str | None = H
 
 @router.post("/api/admin/config/agents/{name}/test")
 def config_agent_test(name: str, p: AgentTestIn, authorization: str | None = Header(default=None)):
-    # Resolve o LLM do agente (saved + edições da UI) e faz UMA chamada real com o system
-    # efetivo (role + system_prompt). Mostra provider/modelo/tokens reais (stub se cair).
+    # Resolves agent LLM (saved + UI edits) and makes ONE real call with the effective
+    # system (role + system_prompt). Shows real provider/model/tokens (stub if it fails).
     _require_owner(authorization)
     if name not in agent_config.AGENT_NAMES:
         raise HTTPException(status_code=404, detail="agent not found")
@@ -111,10 +111,10 @@ def config_agent_test(name: str, p: AgentTestIn, authorization: str | None = Hea
                           agent_config.effective_system(cfg))
 
 
-# --- Fonte de config: local | remote (hub/peer — F-026, ADR-019) ------------
-# O owner escolhe se a loja é independente (local) ou cliente de um hub (remote, puxa a
-# config de outra loja). Owner-only (guarda tokens de enrollment — segredos). A API devolve
-# o status SEM segredos (tokens viram flags has_*). Mudar a fonte aplica a quente.
+# --- Config source: local | remote (hub/peer — F-026, ADR-019) ------------
+# Owner chooses whether the store is independent (local) or a hub client (remote, pulls
+# config from another store). Owner-only (stores enrollment tokens — secrets). The API returns
+# status WITHOUT secrets (tokens become has_* flags). Changing source applies live.
 
 @router.get("/api/admin/config/source")
 def config_source_get(authorization: str | None = Header(default=None)):
@@ -132,26 +132,26 @@ def config_source_set(body: HubSourceIn, authorization: str | None = Header(defa
 
 @router.post("/api/admin/config/source/sync")
 def config_source_sync(authorization: str | None = Header(default=None)):
-    # Botão "sync agora": força um pull do hub (só em modo remote).
+    # "Sync now" button: forces a hub pull (only in remote mode).
     _require_owner(authorization)
     return hub.sync_now()
 
 
-# --- Feature flags de menu/superfícies (F-033) ------------------------------
-# O owner liga/desliga áreas do menu (o que os PARTICIPANTES veem). Servidas pela mesma fonte
-# de config (local/hub): em `remote` valem as flags do hub (propaga p/ as 150 VMs). A leitura
-# das EFETIVAS é PÚBLICA (o front decide o que mostrar/bloquear); a edição é OWNER-only.
+# --- Menu/surface feature flags (F-033) ------------------------------
+# Owner toggles on/off menu areas (what PARTICIPANTS see). Served by the same config
+# source (local/hub): in `remote` hub flags apply (propagates to 150 VMs). Reading
+# EFFECTIVE flags is PUBLIC (front decides what to show/block); editing is OWNER-only.
 
 @router.get("/api/flags")
 def flags_effective():
-    # Flags efetivas (públicas o suficiente p/ o front decidir menu/rotas). Sem segredo.
+    # Effective flags (public enough for front to decide menu/routes). No secrets.
     return feature_flags.effective_flags()
 
 
 @router.get("/api/admin/flags")
 def flags_admin(authorization: str | None = Header(default=None)):
-    # Tela de toggles do owner: as flags LOCAIS (editáveis) + as EFETIVAS + a fonte, p/ deixar
-    # claro quando o hub está sobrepondo o local (modo remote).
+    # Owner toggle screen: LOCAL flags (editable) + EFFECTIVE ones + source, to make
+    # clear when the hub is overriding local (remote mode).
     _require_owner(authorization)
     s = hub_settings.get_settings()
     return {"local": feature_flags.get_local_flags(),
@@ -169,14 +169,14 @@ def flags_set(body: FlagsIn, authorization: str | None = Header(default=None)):
             "source": s["source"]}
 
 
-# --- Splunk RUM (Browser Agent) — snippet configurável pelo owner (F-040-RUM) -
-# O owner cola o snippet bruto do RUM + liga o toggle; o front injeta no <head> (server-render)
-# p/ todas as sessões de navegador. Leitura PÚBLICA (o token RUM é client-side por natureza, vai
-# ao HTML de todo visitante); EDIÇÃO owner-only (snippet bruto = JS arbitrário nos clientes — DT).
+# --- Splunk RUM (Browser Agent) — snippet configurable by owner (F-040-RUM) -
+# Owner pastes raw RUM snippet + toggles on; front injects in <head> (server-render)
+# for all browser sessions. Reading PUBLIC (RUM token is client-side by nature, goes
+# to every visitor's HTML); EDITING owner-only (raw snippet = arbitrary JS on clients — DT).
 
 @router.get("/api/rum")
 def rum_public():
-    # O que o front injeta (server-render no layout): só traz o snippet quando enabled. Sem gate.
+    # What front injects (server-render in layout): only brings snippet when enabled. No gate.
     return rum.public_config()
 
 
@@ -192,11 +192,11 @@ def rum_set(body: RumIn, authorization: str | None = Header(default=None)):
     return rum.update_config(**body.model_dump(exclude_none=True))
 
 
-# --- LLM Inspector (OWNER-only, desligável — F-023, ADR-017) ----------------
-# Captura LOCAL de atividade de LLM (system/user prompt + resposta + modelo/provider/tokens/
-# cache/latência) num ring buffer em memória — o conteúdo de prompt fica local. Owner-only
-# (guarda conteúdo de prompt); desligável (flag em memória, default ON; vira feature flag de
-# verdade na F-025). Some p/ participantes.
+# --- LLM Inspector (OWNER-only, toggleable — F-023, ADR-017) ----------------
+# LOCAL capture of LLM activity (system/user prompt + response + model/provider/tokens/
+# cache/latency) in a ring buffer in memory — prompt content stays local. Owner-only
+# (guards prompt content); toggleable (in-memory flag, default ON; becomes real feature flag in
+# F-025). Hidden from participants.
 
 @router.get("/api/admin/llm-activity")
 def llm_activity_list(authorization: str | None = Header(default=None)):

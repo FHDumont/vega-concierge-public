@@ -1,10 +1,10 @@
-"""Saúde da instância — versão, RAG, Ollama do host e nº de providers da cascata."""
+"""Instance health — version, RAG, Ollama on host, and cascade provider count."""
 from fastapi import APIRouter
 from ..ai_agents import rag
 from ..llm import llm_config
 from ..settings import settings
 
-# Sem `prefix`: cada rota carrega o path completo, igualzinho ao que estava em `api.py`.
+# No `prefix`: each route carries the full path, just like it was in `api.py`.
 router = APIRouter()
 
 

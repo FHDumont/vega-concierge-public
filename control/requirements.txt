@@ -1,4 +1,4 @@
-# Vega Ops Console (F-047, ADR-025) — serviço de host, enxuto (stdlib + FastAPI/uvicorn).
+# Vega Ops Console (F-047, ADR-025) — lean host service (stdlib + FastAPI/uvicorn).
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 httpx==0.28.1

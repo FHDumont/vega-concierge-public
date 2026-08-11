@@ -1,10 +1,10 @@
-// Mapeia estados do domínio (pedido, estoque) para a escala de SEVERIDADE do Splunk
-// Design System (CONVENCOES › Design System / ADR-009). A cor + um rótulo/ícone
-// (nunca só cor) comunicam o estado — ver SeverityTag.
+// Maps domain states (order, stock) to the Splunk Design System's SEVERITY
+// scale (CONVENCOES › Design System / ADR-009). Color + a label/icon
+// (never color alone) communicate the state — see SeverityTag.
 import { OrderStatus } from "./api";
 import { StockState } from "./shop";
 
-// Subconjunto da escala (Emergency→Info) usado pela Loja.
+// Subset of the scale (Emergency→Info) used by the Shop.
 export type Severity = "normal" | "info" | "notice" | "warning" | "alert" | "critical" | "unknown";
 
 export function orderStatusSeverity(status: OrderStatus): Severity {

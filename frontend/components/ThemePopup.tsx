@@ -1,7 +1,7 @@
 "use client";
-// Popup de paleta/esquema no header da loja (F-NAV-1). Visível para todos (logado ou não).
-// Fecha com Esc, clique fora ou botão fechar. Paleta global via data-palette/data-scheme
-// no <html> continua valendo em todas as camadas (ADR-013).
+// Palette/scheme popup in the store header (F-NAV-1). Visible to everyone (logged in or not).
+// Closes with Esc, outside click, or the close button. Global palette via data-palette/data-scheme
+// on <html> keeps applying across all layers (ADR-013).
 import { useCallback, useEffect, useRef, useState } from "react";
 import PalettePicker from "./PalettePicker";
 

@@ -1,5 +1,5 @@
 "use client";
-// Thread de chat com renderização de artefatos por intent (F-050-CHAT).
+// Chat thread with artifact rendering by intent (F-050-CHAT).
 import { useEffect, useRef } from "react";
 import AiThinking from "@/components/AiThinking";
 import { AnswerLayoutBlock, AnswerLayout, hasLayoutContent } from "@/components/AnswerLayout";
@@ -9,8 +9,8 @@ import ProductCard from "./ProductCard";
 
 type Turn = ChatMessage & { result?: ChatResult };
 
-// Resposta de LLM indisponível não deve renderizar card de produto/comparação: o backend
-// marca `llm_unavailable`; o teste de `[stub` cobre resposta offline sem falha de provider.
+// An unavailable LLM response should not render a product/comparison card: the backend
+// flags `llm_unavailable`; the `[stub` test covers the offline response without a provider failure.
 function shouldShowArtifacts(content: string, result?: ChatResult): boolean {
   if (!result) return false;
   if (result.llm_unavailable) return false;

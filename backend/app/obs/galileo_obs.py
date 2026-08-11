@@ -1,22 +1,22 @@
-"""Integração Splunk Agent Observability (ADR-032) — opt-in pela presença de `GALILEO_API_KEY`.
+"""Splunk Agent Observability integration (ADR-032) — opt-in via presence of `GALILEO_API_KEY`.
 
-Padrão do `healthcare-assistant/2-app-with-instrumentation`: `galileo_context(project, log_stream)`
-+ `start_session(external_id=...)` por request, e **um `GalileoAsyncCallback` por request** (cada
-turno do usuário vira um trace próprio). Nada de decorator `@log` nem de wrapper `galileo.openai`.
+Pattern from `healthcare-assistant/2-app-with-instrumentation`: `galileo_context(project, log_stream)`
++ `start_session(external_id=...)` per request, and **one `GalileoAsyncCallback` per request** (each
+user turn becomes own trace). No `@log` decorator or `galileo.openai` wrapper.
 
-Sem `GALILEO_API_KEY` — ou sem o pacote `galileo` instalado — tudo aqui é no-op e a app roda
-idêntica ao comportamento anterior: é a demo "base" do workshop. O import do SDK é lazy e guardado
-justamente pra que `requirements.txt` não vire pré-requisito de subir a loja.
+Without `GALILEO_API_KEY` — or without `galileo` package installed — everything here is no-op and app runs
+identical to prior behavior: it's workshop "base" demo. SDK import is lazy and guarded
+precisely so `requirements.txt` doesn't become prerequisite to running store.
 
-Os **evaluators são configurados no Console** (no Log stream), não aqui. Nenhum nome de métrica
-Splunk Agent Observability aparece no código do Vega.
+**Evaluators are configured in Console** (in Log stream), not here. No Splunk Agent Observability metric names
+appear in Vega code.
 
-Rótulos legíveis de span (LLM `name=`, nós ReAct, `run_name` em chains) vivem em `galileo_span.py`;
-este módulo entrega o callback, o contexto de sessão e — desde a F-BACKEND-3 (D.3) — o **trace
-vivo** do request: `start_trace` logo depois do `start_session`, `conclude`+flush no `finally`. É
-o trace aberto que dá um `current_parent()` ao SDK durante todo o request, sem o qual o Agent
-Control não tem onde pendurar o span `[control]` (o modo batch do callback só materializa spans
-no `commit()` final, tarde demais). Se abrir o trace falhar, tudo degrada pro modo batch anterior.
+Readable span labels (LLM `name=`, ReAct nodes, `run_name` in chains) live in `galileo_span.py`;
+this module delivers callback, session context, and — since F-BACKEND-3 (D.3) — **live trace**
+of request: `start_trace` right after `start_session`, `conclude`+flush in `finally`. It's
+open trace that gives `current_parent()` to SDK throughout request, without which Agent
+Control has nowhere to hang `[control]` span (callback's batch mode only materializes spans
+on final `commit()`, too late). If opening trace fails, everything degrades to prior batch mode.
 """
 from __future__ import annotations
 
@@ -29,17 +29,17 @@ from ..settings import settings
 
 log = logging.getLogger(__name__)
 
-# Falha de observabilidade não pode derrubar a loja: avisamos uma vez e seguimos cegos.
+# Observability failure can't break store: warn once, then go blind.
 _warned = False
 
-# D.3 — `True` enquanto o request tem um trace VIVO aberto (`start_trace` deu certo). É o que o
-# `callbacks()` lê pra configurar o callback em modo "pendura no trace existente" em vez do modo
-# batch (que só materializa spans no `commit()` final). ContextVar porque o escopo é o request.
+# D.3 — `True` while request has LIVE trace open (`start_trace` succeeded). That's what
+# `callbacks()` reads to set callback in "hang on existing trace" mode instead of batch mode
+# (which only materializes spans on final `commit()`). ContextVar because scope is request.
 _live_trace_var: contextvars.ContextVar[bool] = contextvars.ContextVar(
     "galileo_live_trace", default=False,
 )
 
-# Nome do trace quando o chamador não informa a feature (run_demo, simulador, caminhos internos).
+# Trace name when caller doesn't give feature (run_demo, simulator, internal paths).
 _DEFAULT_TRACE_NAME = "vega.request"
 
 
@@ -52,8 +52,8 @@ def project() -> str:
 
 
 def log_stream() -> str:
-    """`GALILEO_LOG_STREAM` é o nome que o SDK/console usa; `GALILEO_LOGSTREAM` é aceito porque
-    é o que o `.env.example` trazia antes desta fase."""
+    """`GALILEO_LOG_STREAM` is name SDK/console uses; `GALILEO_LOGSTREAM` accepted because
+    it's what `.env.example` had before this stage."""
     return settings.galileo_log_stream
 
 
@@ -62,9 +62,9 @@ def console_url() -> str:
 
 
 def agent_control_url() -> str:
-    """URL do Agent Control — derivada do console quando não vier explícita.
+    """Agent Control URL — derived from console when not explicit.
 
-    Fonte única: `galileo_control.init_once` consome esta mesma função (F-BACKEND-1).
+    Single source: `galileo_control.init_once` consumes this same function (F-BACKEND-1).
     """
     explicit = settings.agent_control_url.strip()
     if explicit:
@@ -76,8 +76,8 @@ def agent_control_url() -> str:
 
 
 def session_idle_minutes() -> int:
-    """Minutos sem request de IA antes do front rotacionar a session Splunk Agent Observability (F-GALILEO-8).
-    `0` = só rotaciona manualmente (botão BTS). Default 5."""
+    """Minutes without AI request before front rotates Splunk Agent Observability session (F-GALILEO-8).
+    `0` = rotate manually only (BTS button). Default 5."""
     value = settings.vega_session_idle_minutes
     if value < 0:
         return 0
@@ -97,7 +97,7 @@ def shopper_session_name(active_scenario: str | None = None) -> str | None:
 
 
 def public_config() -> dict:
-    """Metadados públicos (sem API key) — precedente: `rum.public_config()`."""
+    """Public metadata (no API key) — precedent: `rum.public_config()`."""
     return {
         "enabled": is_enabled(),
         "console_url": console_url(),
@@ -112,12 +112,12 @@ def _warn_once(exc: Exception) -> None:
     global _warned
     if not _warned:
         _warned = True
-        log.warning("Splunk Agent Observability desabilitado nesta execução (%s: %s)", type(exc).__name__, exc)
+        log.warning("Splunk Agent Observability disabled for this run (%s: %s)", type(exc).__name__, exc)
 
 
 def new_session_id(candidate: str | None = None) -> str:
-    """UUID válido para agrupar a sessão. O Splunk Agent Observability exige UUID no `external_id`, então um header
-    ausente ou malformado é substituído por um novo em vez de rejeitar a request."""
+    """Valid UUID to group the session. Splunk Agent Observability requires a UUID in `external_id`, so a header
+    that's missing or malformed is replaced with a new one instead of rejecting the request."""
     if candidate:
         try:
             return str(uuid.UUID(candidate.strip()))
@@ -127,81 +127,81 @@ def new_session_id(candidate: str | None = None) -> str:
 
 
 def live_trace_active() -> bool:
-    """`True` quando o `session_scope` deste request conseguiu abrir o trace vivo (D.3)."""
+    """`True` when this request's `session_scope` managed to open the live trace (D.3)."""
     return _live_trace_var.get()
 
 
 def callbacks() -> list:
-    """`[VegaGalileoCallback()]` quando habilitado, `[]` caso contrário. Um por request."""
+    """`[VegaGalileoCallback()]` when enabled, `[]` otherwise. One per request."""
     if not is_enabled():
         return []
     try:
         from .galileo_callback import VegaGalileoCallback
 
         if live_trace_active():
-            # Trace já aberto pelo `session_scope`: o callback pendura a árvore no parent vivo.
-            # `start_new_trace=False` evita um SEGUNDO trace (concorrente) no `commit()`; e
-            # `flush_on_chain_end=False` deixa o flush pro `finally` do `session_scope` — flush
-            # no meio do request zera o `current_parent()` e mataria o `[control]` de qualquer
-            # avaliação posterior (e o próprio `conclude` da raiz).
+            # Trace already opened by `session_scope`: the callback hangs the tree on the live parent.
+            # `start_new_trace=False` avoids a SECOND (concurrent) trace on `commit()`; and
+            # `flush_on_chain_end=False` leaves the flush to `session_scope`'s `finally` — flushing
+            # mid-request zeroes out `current_parent()` and would kill the `[control]` of any
+            # later evaluation (and the root's own `conclude`).
             return [VegaGalileoCallback(start_new_trace=False, flush_on_chain_end=False)]
         return [VegaGalileoCallback()]
-    except Exception as exc:  # noqa: BLE001 — pacote ausente ou SDK sem credencial válida
+    except Exception as exc:  # noqa: BLE001 — package missing or SDK without valid credential
         _warn_once(exc)
         return []
 
 
 def _logger_instance() -> Any:
-    """Logger do contexto Splunk Agent Observability corrente — o MESMO que o callback usa
-    (`GalileoBaseHandler` também sai de `galileo_context.get_logger_instance()`)."""
+    """Current Splunk Agent Observability context logger — the SAME ONE the callback uses
+    (`GalileoBaseHandler` also comes from `galileo_context.get_logger_instance()`)."""
     from galileo import galileo_context
 
     return galileo_context.get_logger_instance()
 
 
 def _enable_agent_control_bridge(logger_instance: Any) -> None:
-    """Garante o bridge Agent Control → Galileo no logger do request (rede de segurança).
+    """Ensures the Agent Control → Galileo bridge on the request's logger (safety net).
 
-    `galileo_control.init_once()` configura o SDK com `observability_sink_name="registered"`, e o
-    único sink que atende por esse nome é o `GalileoAgentControlBridge`, criado por
-    `logger.enable_agent_control()`. No `galileo==2.6.0` o próprio `GalileoLogger.__init__` já faz
-    isso (`_auto_enable_agent_control_if_available`) — mas é comportamento de versão pinada, e sem
-    o bridge NÃO existe span `[control]`. A chamada é idempotente (o `register()` do bridge volta
-    na hora se já estiver registrado), então repetir custa nada e cobre a ordem inversa."""
+    `galileo_control.init_once()` configures the SDK with `observability_sink_name="registered"`, and the
+    only sink that answers to that name is `GalileoAgentControlBridge`, created by
+    `logger.enable_agent_control()`. In `galileo==2.6.0` `GalileoLogger.__init__` itself already does
+    this (`_auto_enable_agent_control_if_available`) — but that's pinned-version behavior, and without
+    the bridge there's NO `[control]` span. The call is idempotent (the bridge's `register()` returns
+    immediately if already registered), so repeating it costs nothing and covers the reverse order."""
     try:
-        from . import galileo_control  # import tardio: galileo_control importa este módulo
+        from . import galileo_control  # late import: galileo_control imports this module
 
         if not galileo_control.is_active():
             return
         logger_instance.enable_agent_control()
-    except Exception as exc:  # noqa: BLE001 — sem bridge o trace segue, só sem `[control]`
-        log.debug("Agent Control bridge indisponível (%s: %s)", type(exc).__name__, exc)
+    except Exception as exc:  # noqa: BLE001 — without the bridge the trace continues, just without `[control]`
+        log.debug("Agent Control bridge unavailable (%s: %s)", type(exc).__name__, exc)
 
 
 def _start_live_trace(feature: str | None, session_id: str) -> Any | None:
-    """Abre o trace do request ANTES do processamento e devolve o logger — `None` = modo batch.
+    """Opens the request trace BEFORE processing and returns the logger — `None` = batch mode.
 
-    Por que vivo: o `GalileoAgentControlBridge` só converte evento de Agent Control quando o
-    logger tem um `current_parent()` ativo, e no modo batch o callback só materializa spans no
-    `commit()` final — quando as avaliações de controle já passaram. Com o trace aberto aqui, o
-    parent existe durante todo o request e o `[control]` entra como filho da raiz.
+    Why live: `GalileoAgentControlBridge` only converts an Agent Control event when the
+    logger has an active `current_parent()`, and in batch mode the callback only materializes spans
+    on the final `commit()` — by which point control evaluations have already happened. With the trace
+    open here, the parent exists throughout the whole request and `[control]` enters as a child of the root.
 
-    Degradação: qualquer falha devolve `None` e o request segue no modo batch de antes da D.3
-    (o callback volta a abrir/concluir/flushar o trace sozinho no `commit()`)."""
+    Degradation: any failure returns `None` and the request continues in the pre-D.3 batch mode
+    (the callback goes back to opening/concluding/flushing the trace on its own at `commit()`)."""
     try:
         logger_instance = _logger_instance()
         if logger_instance.current_parent() is not None:
-            # Já existe trace aberto neste contexto (aninhamento inesperado): abrir outro faria
-            # o SDK levantar. Melhor deixar quem abriu concluir.
+            # A trace is already open in this context (unexpected nesting): opening another would make
+            # the SDK raise. Better to let whoever opened it conclude it.
             return None
         name = (feature or "").strip() or _DEFAULT_TRACE_NAME
         trace = logger_instance.start_trace(
-            input="",  # preenchido pelo callback com o payload compacto do workflow LangGraph
+            input="",  # filled in by the callback with the compact LangGraph workflow payload
             name=name,
             metadata={"feature": name, "session_id": session_id},
         )
         if trace is None:
-            # O SDK engole exceção de infra dentro do `start_trace` e devolve `None`.
+            # The SDK swallows infra exceptions inside `start_trace` and returns `None`.
             return None
         _enable_agent_control_bridge(logger_instance)
         return logger_instance
@@ -212,27 +212,27 @@ def _start_live_trace(feature: str | None, session_id: str) -> Any | None:
 
 
 def _abandon_live_trace() -> None:
-    """Desfaz um trace meio-aberto pra que o modo batch (fallback) possa abrir o dele."""
+    """Undoes a half-open trace so batch mode (fallback) can open its own."""
     try:
         logger_instance = _logger_instance()
         if logger_instance.current_parent() is not None:
             logger_instance.conclude(conclude_all=True)
-    except Exception:  # noqa: BLE001 — melhor esforço; nada aqui pode escapar pro request
+    except Exception:  # noqa: BLE001 — best effort; nothing here can escape to the request
         pass
 
 
 def _conclude_live_trace(logger_instance: Any) -> None:
-    """Fecha e sobe o trace do request. Nada aqui pode escapar pro request."""
+    """Closes and flushes the request trace. Nothing here can escape to the request."""
     trace = None
     try:
         trace = logger_instance.current_parent()
-        # Sem `output` explícito o SDK herda o do último filho — que é o workflow LangGraph já
-        # compactado (`compact_trace_payload`). `conclude_all` fecha qualquer span que tenha
-        # ficado aberto por um erro no meio do grafo.
+        # Without an explicit `output` the SDK inherits it from the last child — which is the LangGraph
+        # workflow, already compacted (`compact_trace_payload`). `conclude_all` closes any span left
+        # open by an error partway through the graph.
         logger_instance.conclude(conclude_all=True)
         if trace is not None and not getattr(trace, "spans", None):
-            # Request que não gerou span nenhum (cache, curto-circuito): trace vazio é só ruído
-            # no Console — no modo batch ele nem existiria ("No nodes to commit").
+            # Request that produced no spans at all (cache, short-circuit): an empty trace is just noise
+            # in the Console — in batch mode it wouldn't even exist ("No nodes to commit").
             try:
                 logger_instance.traces.remove(trace)
             except (ValueError, AttributeError):
@@ -247,13 +247,13 @@ def _conclude_live_trace(logger_instance: Any) -> None:
 
 @contextmanager
 def session_scope(session_id: str | None = None, *, feature: str | None = None) -> Iterator[str | None]:
-    """Abre o contexto Splunk Agent Observability (projeto + log stream), a sessão da jornada do
-    comprador e o **trace vivo** do request (D.3).
+    """Opens the Splunk Agent Observability context (project + log stream), the shopper journey
+    session, and the request's **live trace** (D.3).
 
-    O `session_id` vem do header `X-Vega-Session` (UUID persistido no `localStorage` do front), o
-    que costura vários requests numa sessão só — é o que habilita as métricas de nó de sessão do
-    Console. O `feature` vira o nome da raiz do trace. No-op quando o Splunk Agent Observability
-    está desligado."""
+    `session_id` comes from the `X-Vega-Session` header (a UUID persisted in the front end's
+    `localStorage`), which stitches multiple requests into a single session — that's what enables
+    the Console's session-node metrics. `feature` becomes the trace root's name. No-op when
+    Splunk Agent Observability is disabled."""
     if not is_enabled():
         yield None
         return
@@ -267,7 +267,7 @@ def session_scope(session_id: str | None = None, *, feature: str | None = None) 
     ctx = galileo_context(project=project(), log_stream=log_stream())
     try:
         ctx.__enter__()
-    except Exception as exc:  # noqa: BLE001 — console inalcançável / credencial inválida
+    except Exception as exc:  # noqa: BLE001 — console unreachable / invalid credential
         _warn_once(exc)
         yield None
         return
@@ -280,9 +280,9 @@ def session_scope(session_id: str | None = None, *, feature: str | None = None) 
             if session_name:
                 session_kwargs["name"] = session_name
             galileo_context.start_session(**session_kwargs)
-        except Exception as exc:  # noqa: BLE001 — sessão é enriquecimento, não requisito
+        except Exception as exc:  # noqa: BLE001 — session is enrichment, not a requirement
             _warn_once(exc)
-        # Trace vivo DEPOIS da sessão (a sessão precisa estar setada quando o trace é ingerido).
+        # Live trace AFTER the session (the session needs to be set when the trace is ingested).
         live_logger = _start_live_trace(feature, resolved)
         if live_logger is not None:
             live_token = _live_trace_var.set(True)
@@ -292,9 +292,9 @@ def session_scope(session_id: str | None = None, *, feature: str | None = None) 
             _live_trace_var.reset(live_token)
         if live_logger is not None:
             _conclude_live_trace(live_logger)
-        # O `__exit__` do SDK faz o flush dos spans. Se a rede cair exatamente aqui, a loja não
-        # pode devolver 500 por causa disso — por isso o CM é entrado/saído à mão, em vez de um
-        # `with`: um `with` deixaria a falha de flush escapar pro request.
+        # The SDK's `__exit__` flushes the spans. If the network drops right here, the store
+        # can't return a 500 because of it — that's why the CM is entered/exited by hand instead of a
+        # `with`: a `with` would let the flush failure escape to the request.
         try:
             ctx.__exit__(None, None, None)
         except Exception as exc:  # noqa: BLE001

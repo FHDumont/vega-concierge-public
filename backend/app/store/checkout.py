@@ -1,16 +1,16 @@
-"""Lógica de fechamento de pedido (checkout), extraída do endpoint p/ reúso (F-017).
+"""Order-close logic (checkout), extracted from endpoint for reuse (F-017).
 
-`place_order` é o caminho ÚNICO do fechamento. Na F-025 (ADR-018) passou a ser **orquestrado
-por um agente Fulfillment Coordinator**: valida o carrinho → `check_inventory`/`get_price`
-(tools) → **`fraude`** (agente, decisão) → `payment` (gateway) → `place_order` (persistência) →
-notificação. O endpoint `POST /api/orders` e o simulador de tráfego chamam a MESMA função, então
-o pedido sintético exercita exatamente a mesma orquestração do real.
+`place_order` is the UNIQUE close path. In F-025 (ADR-018) it became **orchestrated
+by a Fulfillment Coordinator agent**: validates cart → `check_inventory`/`get_price`
+(tools) → **`fraud`** (agent, decision) → `payment` (gateway) → `place_order` (persistence) →
+notification. The `POST /api/orders` endpoint and traffic simulator call the SAME function, so
+synthetic order exercises exactly the same orchestration as real.
 
-Mapa de problemas "decisão errada × dado correto" (ligado aos toggles do ProblemPanel):
-- `fraud_false_positive` → o agente de fraude BLOQUEIA com cartão/dado válido → FAILED;
-- `inventory_outage` → `check_inventory` (tool) levanta 503 com estoque real OK → FAILED;
-- `payment_outage`/`payment_latency` → gateway falha/lento com cartão válido (F-016);
-- `price_hallucination` → quote fora do catálogo correto (não bloqueia a venda)."""
+Problem map "wrong decision × correct data" (tied to ProblemPanel toggles):
+- `fraud_false_positive` → fraud agent BLOCKS with valid card/data → FAILED;
+- `inventory_outage` → `check_inventory` (tool) raises 503 with real stock OK → FAILED;
+- `payment_outage`/`payment_latency` → gateway fails/slow with valid card (F-016);
+- `price_hallucination` → quote outside correct catalog (doesn't block sale)."""
 from . import orders
 from ..ai_agents.fulfillment_workflow import run_fulfillment_workflow
 from ..problems import FLAGS
@@ -18,7 +18,7 @@ from ..runnable_config import build_runnable_config, make_thread_id, resolve_con
 
 
 def _fulfillment_config(base, *, user_id: str | None, order_id: str):
-    """Config do grafo fulfillment — mergeia order_id; 1 callback = 1 trace no Splunk Agent Observability."""
+    """Fulfillment graph config — merges order_id; 1 callback = 1 trace in Splunk Agent Observability."""
     meta = dict(base.get("metadata") or {})
     meta["order_id"] = order_id
     if user_id is not None:
@@ -40,10 +40,10 @@ def place_order(
     *,
     config=None,
 ) -> dict:
-    """Cria e fecha um pedido. Recomputa o total; o **Fulfillment Coordinator** orquestra a
-    decisão (estoque-serviço/preço/fraude) e o fechamento só ocorre se a decisão permite, há
-    estoque real E o gateway de pagamento aprova (F-016); senão FAILED. Liga ao usuário da sessão
-    se houver (F-008)."""
+    """Creates and closes an order. Recomputes total; **Fulfillment Coordinator** orchestrates
+    decision (stock-service/price/fraud) and close only happens if decision allows, there's
+    real stock AND payment gateway approves (F-016); otherwise FAILED. Links to session user
+    if present (F-008)."""
     total = sum(i["qty"] * i["price"] for i in items)
     order = orders.create_order(items, customer, total, status="PENDING", user_id=user_id)
     base = resolve_config(config, feature="fulfillment", user_id=user_id)
@@ -72,7 +72,7 @@ async def aplace_order(
     *,
     config=None,
 ) -> dict:
-    """Async variant of place_order — usa arun_fulfillment_graph (F-OBS-PREP-5)."""
+    """Async variant of place_order — uses arun_fulfillment_graph (F-OBS-PREP-5)."""
     total = sum(i["qty"] * i["price"] for i in items)
     order = orders.create_order(items, customer, total, status="PENDING", user_id=user_id)
     base = resolve_config(config, feature="fulfillment", user_id=user_id)

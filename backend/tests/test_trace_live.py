@@ -1,13 +1,13 @@
-"""Trace vivo por request (F-BACKEND-3, Etapa D.3).
+"""Live per-request trace (F-BACKEND-3, Step D.3).
 
-O que está sob teste é o **ciclo de vida**: `session_scope` abre um trace de verdade antes do
-processamento (é o `current_parent()` vivo que faz o `GalileoAgentControlBridge` aceitar os
-eventos e o span `[control]` existir), configura o callback pra pendurar a árvore nele, e fecha
-tudo no `finally`.
+What's under test is the **lifecycle**: `session_scope` opens a real trace before processing
+(it's the live `current_parent()` that makes `GalileoAgentControlBridge` accept events and the
+`[control]` span exist), sets up the callback to hang the tree on it, and closes everything in
+the `finally`.
 
-A regra que mais importa aqui é a **degradação**: se qualquer coisa do SDK falhar, o request tem
-que continuar e o trace volta ao modo batch de antes desta etapa. Observabilidade não derruba a
-loja — por isso metade dos testes abaixo é caminho de erro.
+The rule that matters most here is **degradation**: if anything in the SDK fails, the request
+must continue and the trace falls back to the pre-this-step batch mode. Observability must never
+take down the store — that's why half the tests below are error paths.
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from galileo import galileo_context  # noqa: E402
 
 
 # =============================================================================
-# Dublês
+# Test doubles
 # =============================================================================
 
 class FakeTrace:
@@ -35,7 +35,7 @@ class FakeTrace:
 
 
 class FakeLogger:
-    """`GalileoLogger` reduzido ao contrato que a D.3 usa (galileo==2.6.0)."""
+    """`GalileoLogger` reduced to the contract that D.3 uses (galileo==2.6.0)."""
 
     def __init__(self, *, start_raises=None, start_returns_none=False, conclude_raises=None,
                  flush_raises=None, parent=None) -> None:
@@ -87,16 +87,16 @@ class FakeCallback:
 
 @pytest.fixture
 def obs_live(monkeypatch):
-    """Splunk Agent Observability "ligado" sem rede: contexto e sessão viram no-op, o logger é
-    um dublê e o callback é registrado sem tocar no SDK."""
+    """Splunk Agent Observability "on" without a network: context and session become no-ops,
+    the logger is a test double, and the callback is registered without touching the SDK."""
     from app.obs import galileo_callback as callback_module
 
     logger = FakeLogger()
     monkeypatch.setattr(galileo_obs, "is_enabled", lambda: True)
     monkeypatch.setattr(galileo_obs, "_logger_instance", lambda: logger)
     monkeypatch.setattr(callback_module, "VegaGalileoCallback", FakeCallback)
-    # `session_scope` chama estes três explicitamente como atributo do singleton — dá pra
-    # substituir na instância sem mexer na classe.
+    # `session_scope` calls these three explicitly as an attribute of the singleton — that lets
+    # us swap them on the instance without touching the class.
     monkeypatch.setattr(galileo_context, "__enter__", lambda *a, **k: galileo_context)
     monkeypatch.setattr(galileo_context, "__exit__", lambda *a, **k: None)
     monkeypatch.setattr(galileo_context, "start_session", lambda **k: None)
@@ -104,7 +104,7 @@ def obs_live(monkeypatch):
 
 
 # =============================================================================
-# Ciclo de vida feliz
+# Happy-path lifecycle
 # =============================================================================
 
 def test_live_trace_opens_named_by_feature_and_closes_on_exit(obs_live):
@@ -117,9 +117,9 @@ def test_live_trace_opens_named_by_feature_and_closes_on_exit(obs_live):
         assert trace.name == "chat"
         assert trace.user_metadata["feature"] == "chat"
         assert trace.user_metadata["session_id"] == session_id
-        trace.spans.append(object())  # o grafo rodou
+        trace.spans.append(object())  # the graph ran
 
-    # `conclude` sem output: o SDK herda o do último filho (o workflow já compactado).
+    # `conclude` with no output: the SDK inherits the last child's (the already-compacted workflow).
     assert obs_live.calls == ["start_trace", "conclude", "flush"]
     assert obs_live.concluded_all is True
     assert obs_live.traces == [trace]
@@ -164,8 +164,8 @@ def test_agent_control_bridge_is_registered_when_control_is_active(obs_live, mon
     monkeypatch.setattr(galileo_control, "is_active", lambda: True)
     with galileo_obs.session_scope(feature="chat"):
         pass
-    # Sem o bridge registrado no logger, o sink "registered" do Agent Control fica vazio e
-    # nenhum evento vira span `[control]` — por mais vivo que o trace esteja.
+    # Without the bridge registered on the logger, Agent Control's "registered" sink stays empty
+    # and no event turns into a `[control]` span — no matter how live the trace is.
     assert obs_live.agent_control_enabled == 1
 
 
@@ -179,15 +179,15 @@ def test_agent_control_bridge_is_skipped_when_control_is_inactive(obs_live, monk
 
 
 def test_empty_trace_is_dropped_instead_of_polluting_the_console(obs_live):
-    # Request que não gerou span nenhum (cache/curto-circuito): no modo batch o trace nem
-    # existiria ("No nodes to commit").
+    # A request that generated no spans at all (cache/short-circuit): in batch mode the trace
+    # wouldn't even exist ("No nodes to commit").
     with galileo_obs.session_scope(feature="chat"):
         pass
     assert obs_live.traces == []
 
 
 # =============================================================================
-# Callback: pendura no trace vivo, não abre um concorrente
+# Callback: hangs on the live trace, doesn't open a competing one
 # =============================================================================
 
 def test_callback_hangs_on_the_live_trace(obs_live):
@@ -202,12 +202,12 @@ def test_callback_outside_a_live_trace_keeps_batch_mode(obs_live):
 
 
 # =============================================================================
-# Degradação — nada aqui pode derrubar o request
+# Degradation — nothing here can take down the request
 # =============================================================================
 
 @pytest.mark.parametrize("boom", [
-    RuntimeError("console fora do ar"),
-    ValueError("trace já aberto"),
+    RuntimeError("console is down"),
+    ValueError("trace already open"),
 ])
 def test_start_trace_exception_degrades_to_batch_mode(monkeypatch, boom):
     from app.obs import galileo_callback as callback_module
@@ -221,17 +221,17 @@ def test_start_trace_exception_degrades_to_batch_mode(monkeypatch, boom):
     monkeypatch.setattr(galileo_context, "start_session", lambda **k: None)
 
     with galileo_obs.session_scope(feature="chat") as session_id:
-        # O request continua: sessão resolvida, callback no modo batch de antes da D.3.
+        # The request continues: session resolved, callback in the pre-D.3 batch mode.
         assert session_id is not None
         assert galileo_obs.live_trace_active() is False
         (cb,) = galileo_obs.callbacks()
         assert cb.kwargs == {}
 
-    assert "conclude" not in logger.calls  # não há trace vivo pra concluir
+    assert "conclude" not in logger.calls  # no live trace to conclude
 
 
 def test_start_trace_returning_none_degrades_to_batch_mode(monkeypatch):
-    # O SDK engole exceção de infra dentro do `start_trace` e devolve `None` em vez de levantar.
+    # The SDK swallows an infra exception inside `start_trace` and returns `None` instead of raising.
     logger = FakeLogger(start_returns_none=True)
     monkeypatch.setattr(galileo_obs, "is_enabled", lambda: True)
     monkeypatch.setattr(galileo_obs, "_logger_instance", lambda: logger)
@@ -245,8 +245,8 @@ def test_start_trace_returning_none_degrades_to_batch_mode(monkeypatch):
 
 
 def test_no_second_trace_when_one_is_already_open(monkeypatch):
-    # Aninhamento inesperado: abrir outro trace faria o SDK levantar ValueError.
-    already_open = FakeTrace("outro")
+    # Unexpected nesting: opening another trace would make the SDK raise ValueError.
+    already_open = FakeTrace("other")
     logger = FakeLogger(parent=already_open)
     monkeypatch.setattr(galileo_obs, "is_enabled", lambda: True)
     monkeypatch.setattr(galileo_obs, "_logger_instance", lambda: logger)
@@ -261,8 +261,8 @@ def test_no_second_trace_when_one_is_already_open(monkeypatch):
 
 def test_conclude_and_flush_failures_never_reach_the_request(monkeypatch):
     logger = FakeLogger(
-        conclude_raises=RuntimeError("rede caiu no conclude"),
-        flush_raises=RuntimeError("rede caiu no flush"),
+        conclude_raises=RuntimeError("network dropped during conclude"),
+        flush_raises=RuntimeError("network dropped during flush"),
     )
     monkeypatch.setattr(galileo_obs, "is_enabled", lambda: True)
     monkeypatch.setattr(galileo_obs, "_logger_instance", lambda: logger)
@@ -271,7 +271,7 @@ def test_conclude_and_flush_failures_never_reach_the_request(monkeypatch):
     monkeypatch.setattr(galileo_context, "start_session", lambda **k: None)
 
     with galileo_obs.session_scope(feature="chat"):
-        pass  # o `finally` roda os dois e engole os dois
+        pass  # the `finally` runs both and swallows both
 
     assert logger.calls == ["start_trace", "conclude", "flush"]
     assert galileo_obs.live_trace_active() is False
@@ -280,7 +280,7 @@ def test_conclude_and_flush_failures_never_reach_the_request(monkeypatch):
 def test_body_exception_still_closes_the_trace(obs_live):
     with pytest.raises(RuntimeError):
         with galileo_obs.session_scope(feature="chat"):
-            raise RuntimeError("erro de negócio no meio do request")
+            raise RuntimeError("business error in the middle of the request")
     assert obs_live.calls == ["start_trace", "conclude", "flush"]
     assert galileo_obs.live_trace_active() is False
 
@@ -294,14 +294,14 @@ def test_scope_is_a_noop_when_observability_is_off(monkeypatch):
 
 
 # =============================================================================
-# Raiz do trace: input compacto emprestado do workflow LangGraph
+# Trace root: compact input borrowed from the LangGraph workflow
 # =============================================================================
 
 from app.obs.galileo_callback import VegaGalileoCallback  # noqa: E402
 
 
 class SeedHandler:
-    """Só o que `_seed_live_trace_input` consulta no handler do SDK."""
+    """Only what `_seed_live_trace_input` queries on the SDK handler."""
 
     def __init__(self, logger, *, start_new_trace=False) -> None:
         self._galileo_logger = logger
@@ -345,8 +345,8 @@ async def test_root_workflow_lends_its_compact_input_to_the_live_trace():
 
     await cb.on_chain_start({"name": "chat.workflow"}, CHAT_STATE, run_id=_uuid(), parent_run_id=None)
 
-    # Compactado pelas mesmas regras do output: preview da resposta, sem o histórico inteiro.
-    # `request` (F-WORKSHOP-STAB-4) entra truncado a 500 — o teto sobe pra caber os dois previews.
+    # Compacted by the same rules as the output: answer preview, without the full history.
+    # `request` (F-WORKSHOP-STAB-4) comes in truncated to 500 — the ceiling rises to fit both previews.
     assert "answer_preview" in trace.input
     assert "messages" not in trace.input
     assert len(trace.input) < 1350
@@ -382,19 +382,19 @@ async def test_seeding_failure_does_not_break_the_chain_start(monkeypatch):
     from app.obs import galileo_callback as callback_module
 
     def boom(*_a, **_k):
-        raise RuntimeError("serialização quebrada")
+        raise RuntimeError("broken serialization")
 
     monkeypatch.setattr(callback_module, "compact_trace_payload", boom)
     trace = FakeTrace("chat")
     cb, _logger = _seeding_callback(parent=trace)
-    # Sem o guard, um erro aqui derrubaria o request inteiro no primeiro nó do grafo.
+    # Without the guard, an error here would take down the entire request at the graph's first node.
     await cb.on_chain_start({"name": "chat.workflow"}, CHAT_STATE, run_id=_uuid(), parent_run_id=None)
     assert trace.input == ""
 
 
 def test_compaction_still_anchors_on_the_langchain_root():
-    # A raiz do trace mudou de identidade (agora é o trace vivo), mas a compactação continua
-    # ancorada no run raiz do LangChain — que nunca tem `parent_run_id`.
+    # The trace root changed identity (it's now the live trace), but compaction is still
+    # anchored on the LangChain root run — which never has a `parent_run_id`.
     from app.obs.galileo_trace_compact import should_compact_workflow_io
 
     assert should_compact_workflow_io("chat.workflow", None) is True

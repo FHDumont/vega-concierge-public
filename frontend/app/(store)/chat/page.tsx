@@ -1,5 +1,5 @@
 "use client";
-// Redirect /chat → home com query params p/ abrir o widget (F-051).
+// Redirect /chat → home with query params to open the widget (F-051).
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 

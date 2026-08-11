@@ -1,4 +1,4 @@
-"""Vitrine e features de IA da Loja — catálogo, políticas, produto, compare e carrinho."""
+"""Store storefront and AI features — catalog, policies, product, compare, and cart."""
 from fastapi import APIRouter, Header, HTTPException
 from ..ai_agents.gift_recommend import recommend_gift
 from ..ai_agents.product_qa import answer_product_question

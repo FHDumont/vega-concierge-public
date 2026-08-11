@@ -1,9 +1,9 @@
-"""Compactação de trace root (`obs/galileo_trace_compact.py`) — F-WORKSHOP-STAB-4, Etapa 1.
+"""Root trace compaction (`obs/galileo_trace_compact.py`) — F-WORKSHOP-STAB-4, Step 1.
 
-UC-4 (Prompt Injection) precisa do texto do comprador no trace: sem ele o evaluator não tem o
-que avaliar. `_compact_chat_state`/`_compact_concierge_state` descartavam `request` inteiro —
-este arquivo cobre a sobrevivência do campo, o truncamento e o fallback pro último humano em
-chat multi-turno.
+UC-4 (Prompt Injection) needs the shopper's text in the trace: without it the evaluator has
+nothing to evaluate. `_compact_chat_state`/`_compact_concierge_state` used to drop `request`
+entirely — this file covers the field's survival, truncation, and the fallback to the last
+human message in multi-turn chat.
 """
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ def test_messages_and_candidates_stay_out_of_compact_output():
 
 
 # =============================================================================
-# _compact_returns_state — Etapa 2 (UC-3): desfecho real do refund
+# _compact_returns_state — Step 2 (UC-3): real refund outcome
 # =============================================================================
 
 _ORDER_DELIVERED = {"id": "ORD-1", "status": "DELIVERED", "total": 99.5, "history": []}
@@ -136,8 +136,8 @@ def test_returns_state_request_is_the_coordinator_question():
 
 
 def test_returns_state_never_leaks_fulfillment_only_keys():
-    """Regressão da causa raiz: `allow`/`checkout_success`/`stock_ok` são chaves do fulfillment,
-    não existem em `ReturnsState` — se aparecerem aqui é o compactador errado de novo."""
+    """Root-cause regression: `allow`/`checkout_success`/`stock_ok` are fulfillment keys,
+    they do not exist in `ReturnsState` — if they show up here, it's the wrong compactor again."""
     data = {
         "order": _ORDER_DELIVERED,
         "allow": True,
@@ -207,8 +207,8 @@ def test_compact_trace_payload_routes_gift_recommend_workflow_with_redundant_sig
 
 
 def test_fulfillment_compaction_is_unaffected_by_the_returns_routing():
-    """Congela o comportamento atual do fulfillment — guarda contra a "correção" refutada
-    (`_compact_fulfillment_state` lendo `updated_order`) ser reintroduzida."""
+    """Freezes the current fulfillment behavior — guards against the refuted "fix"
+    (`_compact_fulfillment_state` reading `updated_order`) being reintroduced."""
     from app.obs.galileo_trace_compact import compact_trace_payload
 
     data = {

@@ -1,16 +1,16 @@
-"""Camada de controle de custo de LLM (F-022) — transversal a TODA chamada de IA das features.
+"""LLM cost control layer (F-022) — transversal to ALL AI calls from features.
 
-Para que "IA em toda a app" não exploda token, toda feature passa por aqui:
-- **Cache de resposta** por chave `(feature, input normalizado, model, system_hash, max_tokens, verbose)`, com TTL configurável.
-  In-memory (basta p/ a VM, 1 usuário; reseta no restart — decisão da spec, não SQLite).
-- **single-flight**: chamadas idênticas concorrentes (ex.: simulador) dedupam — só UMA vai ao
-  provider, as demais reusam o resultado. (locks por chave).
-- **rate-limit por instância**: janela deslizante; ao estourar, degrada p/ o StubLLM (offline,
-  sem gasto) em vez de quebrar — standalone-first. Marca o motivo no status.
-- **max_tokens** por feature: o teto vai direto ao adapter (ver `llm.py`).
+So "AI everywhere in app" doesn't explode tokens, every feature goes through here:
+- **Response cache** by key `(feature, normalized input, model, system_hash, max_tokens, verbose)`, with configurable TTL.
+  In-memory (enough for VM, 1 user; resets on restart — spec decision, not SQLite).
+- **single-flight**: identical concurrent calls (e.g., simulator) deduplicate — only ONE goes to
+  provider, others reuse result. (per-key locks).
+- **rate-limit per instance**: sliding window; on overflow, degrades to StubLLM (offline,
+  no cost) instead of breaking — standalone-first. Marks reason in status.
+- **max_tokens** per feature: cap goes direct to adapter (see `llm.py`).
 
-Não resolve config — quem chama (`agents.feature_complete`) usa o resultado (hit|miss). Sem
-dependência nova; thread-safe (endpoints sync rodam em threadpool).
+Doesn't resolve config — caller (`agents.feature_complete`) uses result (hit|miss). No
+new dependency; thread-safe (sync endpoints run in threadpool).
 """
 import hashlib
 import threading
@@ -34,25 +34,25 @@ from ..rate_limit import RateLimiter
 from ..runnable_config import current_runnable_config
 from ..settings import settings
 
-# Knobs por env (defaults convenientes p/ o workshop; rate generoso p/ não atrapalhar uso normal,
-# mas conter floods do simulador / cost_spike). TTL do cache em segundos.
+# Knobs per env (convenient defaults for workshop; generous rate to not interfere with normal use,
+# but contain simulator floods / cost_spike). Cache TTL in seconds.
 CACHE_TTL_S = settings.llm_cache_ttl_s
 CACHE_MAX = settings.llm_cache_max
-RATE_MAX = settings.llm_rate_max              # nº de chamadas reais ao provider...
-RATE_WINDOW_S = settings.llm_rate_window_s    # ...por janela (s); <=0 desliga.
+RATE_MAX = settings.llm_rate_max              # number of real provider calls...
+RATE_WINDOW_S = settings.llm_rate_window_s    # ...per window (s); <=0 disables.
 
 
 def cache_globally_enabled() -> bool:
-    """True quando `LLM_CACHE_ENABLED` está ligado (default `1`). Falsy: 0/false/no/off."""
+    """True when `LLM_CACHE_ENABLED` is on (default `1`). Falsy: 0/false/no/off."""
     return settings.llm_cache_enabled
 
 
-# UC-5 (F-WORKSHOP-STAB-4): cache hit não invoca o modelo → sem `model.invoke` não nasce span
-# `[llm]`, e sem o span os evaluators de PII/tone não têm o que avaliar. Choke point declarativo
-# em vez de espalhar `use_cache=False` por call site — espelha `galileo_control.CONTROL_FEATURES_POST`
-# (`obs/galileo_control.py:25`) sem inverter a camada (`llm/` não importa `obs/`). Escopo restrito
-# aos dois alvos de post/Steer por ora: `product_qa`/`search` (pre) são as features mais chamadas
-# da loja e a chave de cache já inclui a pergunta — incluir só se um hit real aparecer na UC-1.
+# UC-5 (F-WORKSHOP-STAB-4): cache hit doesn't invoke model → without `model.invoke` no
+# `[llm]` span is born, and without span PII/tone evaluators have nothing to assess. Declarative choke point
+# instead of sprinkling `use_cache=False` per call site — mirrors `galileo_control.CONTROL_FEATURES_POST`
+# (`obs/galileo_control.py:25`) without inverting layer (`llm/` doesn't import `obs/`). Scope limited
+# to two post/Steer targets for now: `product_qa`/`search` (pre) are most-called features
+# in store and cache key already includes question — include only if real hit appears in UC-1.
 NO_RESPONSE_CACHE_FEATURES: frozenset[str] = frozenset({"notification_copy"})
 
 
@@ -61,19 +61,19 @@ def cache_enabled_for(feature: str, use_cache: bool) -> bool:
 
 
 def normalize(text: str) -> str:
-    """Normaliza o input p/ a chave de cache: colapsa espaços + lowercase (hits robustos a
-    variações triviais de digitação/whitespace)."""
+    """Normalize input for cache key: collapse spaces + lowercase (hits robust to
+    trivial typing/whitespace variations)."""
     return " ".join((text or "").split()).lower()
 
 
 def system_hash(system: str) -> str:
-    """Hash curto do system prompt (F-COST-CACHE): muda o system → miss limpo, sem stale."""
+    """Short hash of system prompt (F-COST-CACHE): change system → clean miss, no stale."""
     return hashlib.sha256(normalize(system).encode("utf-8")).hexdigest()[:16]
 
 
 def make_cache_key(feature: str, prompt: str, model_key: str, *,
                    system: str = "", max_tokens: int | None = None, verbose: bool = False):
-    """Chave estável: feature + prompt norm + model + system_hash + max_tokens + verbose."""
+    """Stable key: feature + prompt norm + model + system_hash + max_tokens + verbose."""
     return (
         feature,
         normalize(prompt),
@@ -85,8 +85,8 @@ def make_cache_key(feature: str, prompt: str, model_key: str, *,
 
 
 class ResponseCache:
-    """Cache TTL simples (dict + lock). Chave arbitrária → (expira_em, valor). Evicção: ao
-    encher, descarta entradas expiradas e, se ainda cheio, a mais antiga (FIFO aproximado)."""
+    """Simple TTL cache (dict + lock). Arbitrary key → (expires_at, value). Eviction: on
+    fill, discards expired entries and, if still full, the oldest (approximate FIFO)."""
 
     def __init__(self, ttl: float = CACHE_TTL_S, maxsize: int = CACHE_MAX):
         self.ttl = ttl
@@ -117,7 +117,7 @@ class ResponseCache:
         expired = [k for k, (exp, _) in self._d.items() if exp < now]
         for k in expired:
             self._d.pop(k, None)
-        if len(self._d) >= self.maxsize:  # ainda cheio → descarta o mais antigo inserido
+        if len(self._d) >= self.maxsize:  # still full → discard oldest inserted
             oldest = next(iter(self._d), None)
             if oldest is not None:
                 self._d.pop(oldest, None)
@@ -131,7 +131,7 @@ class ResponseCache:
 
 
 class _KeyedLocks:
-    """Mapa de locks por chave p/ o single-flight: serializa chamadas idênticas concorrentes."""
+    """Map of per-key locks for single-flight: serializes identical concurrent calls."""
 
     def __init__(self):
         self._locks: dict = {}
@@ -145,7 +145,7 @@ class _KeyedLocks:
             return lock
 
 
-# Singletons por instância (1 backend por VM). Trocáveis em teste via reset_state().
+# Per-instance singletons (1 backend per VM). Swappable in test via reset_state().
 _cache = ResponseCache()
 _inflight = _KeyedLocks()
 _limiter = RateLimiter(RATE_MAX, RATE_WINDOW_S)
@@ -168,7 +168,7 @@ def _make_check_response_cache_tool(
     cache: Literal["hit", "miss"],
     cached: LLMResult | None = None,
 ) -> StructuredTool:
-    """StructuredTool compartilhado — decisão F-022 visível como tool span no Console."""
+    """Shared StructuredTool — F-022 decision visible as tool span in Console."""
 
     def check_response_cache(input: str) -> dict:
         out: dict = {"cache": cache, "feature": feature, "input": input}
@@ -200,7 +200,7 @@ def _make_check_response_cache_tool(
 
 
 def _trace_config_for_cache(*, cache: Literal["hit", "miss", "disabled"], cached: LLMResult | None = None):
-    """Metadata `response_cache` no config corrente; None se não há trace ativo."""
+    """Metadata `response_cache` in current config; None if no active trace."""
     config = current_runnable_config()
     if not config or not config.get("callbacks"):
         return None
@@ -217,12 +217,12 @@ def _trace_config_for_cache(*, cache: Literal["hit", "miss", "disabled"], cached
 
 
 def _emit_cache_hit_trace(feature: str, prompt: str, cached: LLMResult) -> None:
-    """Replay sintético no trace quando F-022 devolve hit (DT-018 / F-GALILEO-9).
+    """Synthetic replay in trace when F-022 returns hit (DT-018 / F-GALILEO-9).
 
-    No hit não há `model.invoke`, então não nasce LLM span. Emite chain `feature.{step}` com
-    **tool span** `check_response_cache` (StructuredTool — decisão visível como tool no Console)
-    e replay da resposta cacheada como output da chain. Só emite se já existe trace em
-    andamento — nunca fabrica um trace órfão."""
+    On hit there's no `model.invoke`, so no LLM span is born. Emits chain `feature.{step}` with
+    **tool span** `check_response_cache` (StructuredTool — decision visible as tool in Console)
+    and replay of cached response as chain output. Only emits if trace already in progress
+    — never fabricates orphan trace."""
     trace_config = _trace_config_for_cache(cache="hit", cached=cached)
     if trace_config is None:
         return
@@ -241,7 +241,7 @@ def _emit_cache_hit_trace(feature: str, prompt: str, cached: LLMResult) -> None:
             )
         ).with_config({"run_name": run_name, "name": run_name})
         chain.invoke({"input": prompt}, config=trace_config)
-    except Exception:  # noqa: BLE001 — observabilidade não derruba a resposta
+    except Exception:  # noqa: BLE001 — observability doesn't break response
         pass
 
 
@@ -252,11 +252,11 @@ def build_cache_miss_chain(
     prep: Runnable | None = None,
     provider: str = "",
 ) -> Runnable:
-    """Monta chain LCEL miss: [prep |] check_response_cache | llm — um único `invoke` (F-GALILEO-17).
+    """Build LCEL miss chain: [prep |] check_response_cache | llm — single `invoke` (F-GALILEO-17).
 
-    D.2: `check_response_cache` vira metadata no span ancestral (política de supressão em
-    `galileo_span_policy`) — o `invoke_llm` sobrevivente é o único span que resta pra carregar
-    a identidade do attempt, daí `llm_attempt`/`llm_provider` irem aqui via `with_config`."""
+    D.2: `check_response_cache` becomes metadata in ancestor span (suppression policy in
+    `galileo_span_policy`) — the surviving `invoke_llm` is the only span left to carry
+    attempt identity, hence `llm_attempt`/`llm_provider` go here via `with_config`."""
     run_name = _feature_run_name(feature)
     invoke_name = response_cache_invoke_run_name(run_name)
 
@@ -283,7 +283,7 @@ def build_cache_miss_chain(
     cache_tool = _make_check_response_cache_tool(feature, cache="miss")
 
     def _cache_miss_with_passthrough(state: dict, config: RunnableConfig | None = None) -> dict:
-        """Tool span + preserva `system_context` e demais campos do prep."""
+        """Tool span + preserves `system_context` and other prep fields."""
         meta = cache_tool.invoke({"input": state["input"]}, config=config)
         return {**state, **meta}
 
@@ -299,10 +299,10 @@ def build_cache_miss_chain(
 
 
 def _invoke_with_cache_miss_trace(feature: str, prompt: str, invoke_fn):
-    """Encadeia `check_response_cache` (cache=miss) antes da chain LLM real (F-GALILEO-10).
+    """Chain `check_response_cache` (cache=miss) before real LLM chain (F-GALILEO-10).
 
-    Simetria com o hit: o Console mostra a decisão de cache antes do LLM span. Sem callbacks
-    ativos, delega direto a `invoke_fn()` — zero overhead offline."""
+    Symmetry with hit: Console shows cache decision before LLM span. Without active callbacks,
+    delegates directly to `invoke_fn()` — zero offline overhead."""
     if not cache_globally_enabled():
         return invoke_fn()
     trace_config = _trace_config_for_cache(cache="miss")
@@ -323,7 +323,7 @@ def _invoke_with_cache_miss_trace(feature: str, prompt: str, invoke_fn):
             )
         ).with_config({"run_name": run_name, "name": run_name})
         return chain.invoke({"input": prompt}, config=trace_config)
-    except Exception:  # noqa: BLE001 — observabilidade não derruba a resposta
+    except Exception:  # noqa: BLE001 — observability doesn't break response
         return invoke_fn()
 
 
@@ -342,7 +342,7 @@ def invoke_cached_chain(
     use_cache: bool = True,
     config=None,
 ):
-    """Como `invoke_cached`, mas no miss executa `miss_chain` LCEL inteira (retrieval + cache + LLM)."""
+    """Like `invoke_cached`, but on a miss runs the entire `miss_chain` LCEL (retrieval + cache + LLM)."""
 
     def _run_miss(cfg):
         if cfg is None:
@@ -353,7 +353,7 @@ def invoke_cached_chain(
     if not effective:
         if not _limiter.allow():
             if degrade_fn is None:
-                raise RuntimeError("rate_limited sem degrade_fn")
+                raise RuntimeError("rate_limited without degrade_fn")
             return degrade_fn(), "rate_limited"
         trace_config = _trace_config_for_cache(cache="disabled")
         if config is not None and config.get("callbacks"):
@@ -380,7 +380,7 @@ def invoke_cached_chain(
             return cached, "hit"
         if not _limiter.allow():
             if degrade_fn is None:
-                raise RuntimeError("rate_limited sem degrade_fn")
+                raise RuntimeError("rate_limited without degrade_fn")
             return degrade_fn(), "rate_limited"
         trace_config = _trace_config_for_cache(cache="miss")
         if config is not None and config.get("callbacks"):
@@ -391,7 +391,7 @@ def invoke_cached_chain(
             trace_config = merged
         try:
             result = _run_miss(trace_config)
-        except Exception:  # noqa: BLE001 — observabilidade não derruba a resposta
+        except Exception:  # noqa: BLE001 — observability must not break the response
             result = to_llm_result(miss_chain.invoke(miss_input, config=config))
         _cache.put(key, result)
         return result, "miss"
@@ -400,17 +400,17 @@ def invoke_cached_chain(
 def invoke_cached(feature: str, prompt: str, model_key: str, invoke_fn, *,
                   system: str = "", max_tokens: int | None = None, verbose: bool = False,
                   degrade_fn=None, use_cache: bool = True):
-    """Executa `invoke_fn()` com cache + single-flight + rate-limit. Devolve
-    `(LLMResult, status)` com `status ∈ {"hit", "miss", "rate_limited"}`. A chave de cache usa
-    `model_key` + system/max_tokens/verbose conhecidos ANTES da chamada.
+    """Execute `invoke_fn()` with cache + single-flight + rate-limit. Returns
+    `(LLMResult, status)` with `status ∈ {"hit", "miss", "rate_limited"}`. Cache key uses
+    `model_key` + system/max_tokens/verbose known BEFORE call.
 
-    Ordem: cache → single-flight (serializa idênticas) → recheck → rate-limit → provider → cache.
-    Assim chamadas idênticas concorrentes dedupam ANTES de consumir orçamento de rate-limit."""
+    Order: cache → single-flight (serializes identical) → recheck → rate-limit → provider → cache.
+    So identical concurrent calls deduplicate BEFORE consuming rate-limit budget."""
     effective = cache_enabled_for(feature, use_cache)
     if not effective:
         if not _limiter.allow():
             if degrade_fn is None:
-                raise RuntimeError("rate_limited sem degrade_fn")
+                raise RuntimeError("rate_limited without degrade_fn")
             return degrade_fn(), "rate_limited"
         _trace_config_for_cache(cache="disabled")
         return invoke_fn(), "miss"
@@ -424,15 +424,15 @@ def invoke_cached(feature: str, prompt: str, model_key: str, invoke_fn, *,
         _emit_cache_hit_trace(feature, prompt, cached)
         return cached, "hit"
 
-    with _inflight.get(key):  # single-flight: idênticas concorrentes esperam aqui
-        cached = _cache.get(key)  # outra thread idêntica pode ter preenchido enquanto esperávamos
+    with _inflight.get(key):  # single-flight: identical concurrent ones wait here
+        cached = _cache.get(key)  # another identical thread may have filled while we waited
         if cached is not None:
             _emit_cache_hit_trace(feature, prompt, cached)
             return cached, "hit"
         if not _limiter.allow():
             if degrade_fn is None:
-                raise RuntimeError("rate_limited sem degrade_fn")
-            return degrade_fn(), "rate_limited"  # NÃO cacheia degradação (é transitória)
+                raise RuntimeError("rate_limited without degrade_fn")
+            return degrade_fn(), "rate_limited"  # DON'T cache degradation (it's transitory)
         result = _invoke_with_cache_miss_trace(feature, prompt, invoke_fn)
         _cache.put(key, result)
         return result, "miss"
@@ -440,7 +440,7 @@ def invoke_cached(feature: str, prompt: str, model_key: str, invoke_fn, *,
 
 def complete_cached(llm, feature: str, system: str, prompt: str, *,
                     max_tokens: int | None = None, verbose: bool = False, use_cache: bool = True):
-    """Wrapper legado sobre `invoke_cached` para `llm.complete` (F-022 smoke / adapters antigos)."""
+    """Legacy wrapper over `invoke_cached` for `llm.complete` (F-022 smoke / old adapters)."""
     model_key = llm.primary_model()
 
     def invoke_fn():
@@ -457,12 +457,12 @@ def complete_cached(llm, feature: str, system: str, prompt: str, *,
 
 
 def clear_cache() -> None:
-    """Limpa o cache de resposta (uso em teste / reset entre turmas / update de agente)."""
+    """Clear response cache (use in test / reset between sessions / agent update)."""
     _cache.clear()
 
 
 def reset_state() -> None:
-    """Zera cache + rate-limit (isolamento entre testes)."""
+    """Zero cache + rate-limit (isolation between tests)."""
     global _cache, _inflight, _limiter
     _cache = ResponseCache()
     _inflight = _KeyedLocks()
@@ -470,5 +470,5 @@ def reset_state() -> None:
 
 
 def llm_rate_allow() -> bool:
-    """Orçamento de chamadas reais ao provider na janela LLM (F-WORKSHOP-GUARD)."""
+    """Budget for real provider calls in LLM window (F-WORKSHOP-GUARD)."""
     return _limiter.allow()

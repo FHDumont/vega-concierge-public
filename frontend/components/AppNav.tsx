@@ -1,6 +1,6 @@
 "use client";
-// Nav lateral unificada do portal (conta + admin). Grupos: topo (Store/Account/Purchases),
-// Business, Workshop, Global Settings. Colapsável; persistência em localStorage (F-NAV-1).
+// Unified portal side nav (account + admin). Groups: top (Store/Account/Purchases),
+// Business, Workshop, Global Settings. Collapsible; persisted in localStorage (F-NAV-1).
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";

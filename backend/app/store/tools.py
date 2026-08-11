@@ -1,4 +1,4 @@
-"""Mock tools (ops de negócio sem LLM). Lógica determinística em memória.
+"""Mock tools (business ops without LLM). Deterministic in-memory logic.
 
 LangChain wrappers (StructuredTool + domain catalogs): see langchain_tools.py.
 """
@@ -6,9 +6,9 @@ import time
 from ..problems import FLAGS
 from ..settings import settings
 
-# Catálogo mock (em memória). `description` = copy estática da vitrine/PDP (UI em inglês — CONVENCOES).
-# Tags → categorias na vitrine: audio→Audio, wearable→Wearables, casa→Home, presente→Gifts.
-# `stock` (F-005) decrementa ao fechar o pedido (PAID). Em memória, reseta no restart (DT-007).
+# Mock catalog (in memory). `description` = static copy from storefront/PDP (UI in English — CONVENCOES).
+# Tags → storefront categories: audio→Audio, wearable→Wearables, casa→Home, presente→Gifts.
+# `stock` (F-005) decrements on order close (PAID). In memory, resets on restart (DT-007).
 CATALOG = [
     {"sku": "NS-001", "name": "Aura Bluetooth Headphones", "price": 249.0, "tags": ["presente", "audio"], "stock": 12,
      "description": "Premium wireless over-ear headphones built for all-day listening. Plush memory-foam ear cushions and an adjustable headband keep you comfortable on long flights or work sessions, while 30-hour battery life means fewer charging breaks. Multipoint Bluetooth lets you switch between laptop and phone without re-pairing — a thoughtful gift for commuters and music lovers alike."},
@@ -68,18 +68,18 @@ CATALOG = [
      "description": "Wi-Fi smart scale measures weight, body fat, muscle mass, and BMI, syncing trends automatically to the Vega app. Multi-user profiles recognize family members barefoot, and tempered glass design fits modern bathrooms. Helpful for fitness journeys and health-conscious households that want more than a basic bathroom scale."},
 ]
 
-LOW_STOCK_THRESHOLD = 3  # stock>0 e <=3 → "Low stock"; ==0 → "Out of stock" (espelhado no front)
+LOW_STOCK_THRESHOLD = 3  # stock>0 and <=3 → "Low stock"; ==0 → "Out of stock" (mirrored in front)
 
-# Estoque alto no boot do workshop; NS-005/NS-022 ficam 0 de propósito (demo esgotado).
+# High stock at workshop boot; NS-005/NS-022 stay 0 on purpose (demo out of stock).
 WORKSHOP_DEFAULT_STOCK = 50
 OUT_OF_STOCK_DEMO_SKUS = frozenset({"NS-005", "NS-022"})
 
-# Níveis INICIAIS de estoque (snapshot dos valores de origem do CATALOG no import). O estoque
-# vive em memória e decrementa ao fechar pedidos (DT-007); "Clear Sales" (F-027) repõe a estes
-# valores. Capturado uma vez no import — antes de qualquer decremento.
+# INITIAL stock levels (snapshot of CATALOG origin values at import). Stock
+# lives in memory and decrements on order close (DT-007); "Clear Sales" (F-027) replenishes to these
+# values. Captured once at import — before any decrement.
 INITIAL_STOCK = {p["sku"]: p["stock"] for p in CATALOG}
 
-# Soft-delete snapshot (F-GALILEO-7): todos começam visíveis; Clear Sales repõe via restore_catalog().
+# Soft-delete snapshot (F-GALILEO-7): all start visible; Clear Sales restores via restore_catalog().
 INITIAL_DELETED = {p["sku"]: False for p in CATALOG}
 
 
@@ -92,15 +92,15 @@ def _active_catalog() -> list[dict]:
 
 
 def reset_stock() -> int:
-    """Restaura o estoque de cada item ao nível inicial (reposição no Clear Sales — F-027).
-    Em memória (DT-007). Retorna quantos SKUs foram repostos."""
+    """Restores each item stock to initial level (replenishment on Clear Sales — F-027).
+    In memory (DT-007). Returns how many SKUs were replenished."""
     for p in CATALOG:
         p["stock"] = INITIAL_STOCK.get(p["sku"], p["stock"])
     return len(CATALOG)
 
 
 def seed_workshop_stock() -> int:
-    """Boot do workshop: estoque alto em todos os SKUs, exceto demos de esgotado."""
+    """Workshop boot: high stock in all SKUs except out-of-stock demos."""
     for p in CATALOG:
         level = 0 if p["sku"] in OUT_OF_STOCK_DEMO_SKUS else WORKSHOP_DEFAULT_STOCK
         p["stock"] = level
@@ -109,7 +109,7 @@ def seed_workshop_stock() -> int:
 
 
 def restore_catalog() -> int:
-    """Restaura soft-deletes ao snapshot inicial (Clear Sales — F-GALILEO-7). Retorna SKUs repostos."""
+    """Restores soft-deletes to initial snapshot (Clear Sales — F-GALILEO-7). Returns restored SKUs."""
     restored = 0
     for p in CATALOG:
         target = INITIAL_DELETED.get(p["sku"], False)
@@ -120,7 +120,7 @@ def restore_catalog() -> int:
 
 
 def delete_product(sku: str) -> dict:
-    """Soft-delete de SKU no catálogo em memória (UC-4 tool destrutiva — misconfig curator)."""
+    """Soft-delete of SKU in in-memory catalog (UC-4 destructive tool — misconfig curator)."""
     for p in CATALOG:
         if p["sku"] == sku:
             if _is_deleted(p):
@@ -131,7 +131,7 @@ def delete_product(sku: str) -> dict:
 
 
 def list_recent_customers(sku: str | None = None, limit: int = 5) -> list[dict]:
-    """Lista compradores recentes com PII — tool de workshop UC-4 (vazamento cross-user)."""
+    """Lists recent buyers with PII — workshop UC-4 tool (cross-user leak)."""
     from . import orders
 
     cap = max(1, min(int(limit or 5), 20))
@@ -160,19 +160,19 @@ def get_stock(sku: str) -> int:
     return next((p["stock"] for p in CATALOG if p["sku"] == sku), 0)
 
 def has_stock(items: list[dict]) -> bool:
-    """True se há estoque real p/ todos os itens (qty). Independe de inventory_outage,
-    que é falha simulada do serviço (problem toggle), não nível real."""
+    """True if there is real stock for all items (qty). Independent of inventory_outage,
+    which is simulated service failure (problem toggle), not real level."""
     return all(get_stock(it["sku"]) >= it.get("qty", 1) for it in items)
 
 def decrement_stock(items: list[dict]) -> None:
-    """Baixa o estoque real dos itens no fechamento (PAID). Em memória (DT-007)."""
+    """Decrements real item stock on close (PAID). In memory (DT-007)."""
     for it in items:
         for p in CATALOG:
             if p["sku"] == it["sku"]:
                 p["stock"] = max(0, p["stock"] - it.get("qty", 1))
 
 def _catalog_brief(p: dict) -> dict:
-    """Compact catalog record for tool spans — no long description copy."""
+    """Compact catalog record for tool spans — no long description text."""
     return {
         "sku": p["sku"],
         "name": p["name"],
@@ -193,10 +193,10 @@ def check_inventory(sku: str):
     return {"sku": sku, "in_stock": True, "eta_days": 2}
 
 def get_price(sku: str):
-    """Payload NÃO carrega `grounded` (Galileo #69, item 5: vazava pro LLM via ToolMessage, e a
-    instrução negativa 'não mencione grounded' era frágil contra um dado presente). O sinal de
-    fundamentação é `not FLAGS.price_hallucination` — consumido direto da flag por quem precisa
-    dele pra telemetria/quality (ex. `graphs/concierge.py`), nunca pelo payload da tool."""
+    """Payload does NOT carry `grounded` (Galileo #69, item 5: leaked to LLM via ToolMessage, and
+    negative instruction 'don't mention grounded' was fragile against present data). The grounding signal
+    is `not FLAGS.price_hallucination` — consumed directly from flag by those who need it for
+    telemetry/quality (e.g. `graphs/concierge.py`), never by tool payload."""
     real = next((p["price"] for p in _active_catalog() if p["sku"] == sku), None)
     if FLAGS.price_hallucination:
         return {"sku": sku, "price": 9.9}
@@ -205,28 +205,28 @@ def get_price(sku: str):
 def place_order(order: dict):
     return {"order_id": "ORD-7781", "status": "CONFIRMED"}
 
-# --- Returns/Refund (F-029): tools sem LLM da cadeia do Returns Coordinator ----
-# Política/cálculo simples e determinísticos (escolha da fase): elegível p/ reembolso se DELIVERED
-# dentro da janela; reembolso = total integral. São tools (dados/regras), não decisões — as
-# decisões (elegibilidade/abuso) são agentes (returns.py).
+# --- Returns/Refund (F-029): LLM-less tools from Returns Coordinator chain ----
+# Simple and deterministic policy/calculation (phase choice): eligible for refund if DELIVERED
+# within window; refund = full total. Are tools (data/rules), not decisions — decisions
+# (eligibility/abuse) are agents (returns.py).
 REFUND_WINDOW_DAYS = settings.refund_window_days
 
 def policy_lookup(order: dict):
-    """Tool: política de devolução (janela + se a categoria do pedido é reembolsável). Determinística."""
-    refundable = order.get("status") == "DELIVERED"  # política: pedidos entregues são reembolsáveis
+    """Tool: return policy (window + order category refundability). Deterministic."""
+    refundable = order.get("status") == "DELIVERED"  # policy: delivered orders are refundable
     return {"window_days": REFUND_WINDOW_DAYS, "refundable": refundable}
 
 def refund_calc(order: dict):
-    """Tool: valor do reembolso = total integral do pedido (regra simples/determinística)."""
+    """Tool: refund amount = full order total (simple/deterministic rule)."""
     return {"amount": round(float(order.get("total", 0.0)), 2)}
 
 
 def search_policies(question: str, *, config=None):
-    """Tool de RETRIEVAL (F-GALILEO-1, ADR-031): busca as políticas escritas da loja (devolução,
-    frete, garantia, pagamento) e devolve os trechos relevantes. Diferente de `policy_lookup`,
-    que é a regra calculada — aqui vem o TEXTO, que é o que o agente pode contradizer (UC-1).
+    """RETRIEVAL tool (F-GALILEO-1, ADR-031): searches the store's written policies (returns,
+    shipping, warranty, payment) and returns relevant excerpts. Different from `policy_lookup`,
+    which is the calculated rule — here comes the TEXT, which is what the agent can contradict (UC-1).
 
-    Passa o `config` ao retriever: é ele que carrega os callbacks e faz o retriever span nascer."""
+    Passes `config` to retriever: it loads callbacks and makes the retriever span appear."""
     from ..ai_agents import rag
 
     chunks = rag.retrieve_policies(question, config=config)

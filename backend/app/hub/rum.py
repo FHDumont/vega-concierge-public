@@ -1,24 +1,24 @@
-"""Config do Splunk RUM (Browser Agent) — F-040-RUM.
+"""Splunk RUM (Browser Agent) config — F-040-RUM.
 
-O owner cola o **snippet bruto** do RUM (do manual do Splunk) e liga o toggle; o frontend
-injeta o snippet no `<head>` (server-render no `layout.tsx`) p/ TODAS as sessões de navegador —
-visitantes reais e as sessões headless do simulador modo Browser (F-039). **Off por default**
-(standalone-first, ADR-003): nada é injetado até o owner ligar.
+Owner pastes **raw RUM snippet** (from Splunk manual) and toggles on; frontend
+injects snippet into `<head>` (server-render in `layout.tsx`) for ALL browser sessions —
+real visitors and headless simulator Browser mode sessions (F-039). **Off by default**
+(standalone-first, ADR-003): nothing injected until owner enables.
 
-Persistência: tabela de 1 linha (`rum_config`) no mesmo SQLite (ADR-006), espelhando o padrão de
-`feature_flags.py`. O `snippet` NÃO é segredo no sentido usual: o RUM access token é **client-side
-por natureza** (vai parar no HTML de todo visitante), então a leitura pública (`GET /api/rum`) é ok.
-Mesmo assim a EDIÇÃO é owner-only (snippet bruto = JS arbitrário em todos os clientes — ver DT).
+Persistence: single-row table (`rum_config`) in the same SQLite (ADR-006), mirroring
+`feature_flags.py` pattern. `snippet` is NOT secret in the usual sense: RUM access token is **client-side
+by nature** (ends up in HTML of every visitor), so public read (`GET /api/rum`) is ok.
+Still, EDIT is owner-only (raw snippet = arbitrary JS to all clients — see DT).
 """
 import sqlite3
 
 from ..store.db import connect
 
-_ROW_ID = 1  # tabela de 1 linha (singleton de config)
+_ROW_ID = 1  # single-row table (config singleton)
 
 
 def init_db() -> None:
-    """create_all no boot: tabela de config do RUM (1 linha) + linha default (off, vazio)."""
+    """create_all on boot: RUM config table (1 row) + default row (off, empty)."""
     with connect() as conn:
         conn.execute(
             """CREATE TABLE IF NOT EXISTS rum_config (
@@ -34,7 +34,7 @@ def init_db() -> None:
 
 
 def get_config() -> dict:
-    """Config persistida ({enabled, snippet}). Tolerante a tabela ausente → default (off, vazio)."""
+    """Persisted config ({enabled, snippet}). Tolerant of missing table → default (off, empty)."""
     try:
         with connect() as conn:
             row = conn.execute("SELECT * FROM rum_config WHERE id = ?", (_ROW_ID,)).fetchone()
@@ -46,7 +46,7 @@ def get_config() -> dict:
 
 
 def update_config(enabled: bool | None = None, snippet: str | None = None) -> dict:
-    """Edita a config (owner). Campos None são mantidos. Devolve a config nova."""
+    """Edits config (owner). None fields are kept. Returns new config."""
     sets, vals = [], []
     if enabled is not None:
         sets.append("enabled = ?")
@@ -62,7 +62,7 @@ def update_config(enabled: bool | None = None, snippet: str | None = None) -> di
 
 
 def public_config() -> dict:
-    """O que o front consome (server-render no `layout.tsx`): só devolve o `snippet` quando
-    `enabled` (desligado → nada a injetar)."""
+    """What front consumes (server-render in `layout.tsx`): returns `snippet` only when
+    `enabled` (disabled → nothing to inject)."""
     cfg = get_config()
     return {"enabled": cfg["enabled"], "snippet": cfg["snippet"] if cfg["enabled"] else ""}

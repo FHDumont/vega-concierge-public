@@ -1,4 +1,4 @@
-// Helpers da Loja (vitrine). Texto de UI em inglês; aqui só lógica/derivações.
+// Shop (storefront) helpers. UI text is in English; this file only has logic/derivations.
 import { Product, Tier } from "./api";
 
 export const CATEGORIES = ["All", "Audio", "Wearables", "Home", "Gifts"] as const;
@@ -6,7 +6,7 @@ export type Category = (typeof CATEGORIES)[number];
 
 export type CartItem = { product: Product; qty: number };
 
-// Tags do catálogo (backend) → categorias exibidas (inglês).
+// Catalog tags (backend) → displayed categories (English).
 const TAG_TO_CATEGORY: Record<string, Category> = {
   audio: "Audio",
   wearable: "Wearables",
@@ -30,8 +30,8 @@ export function inCategory(p: Product, c: Category): boolean {
   return c === "All" || categoriesOf(p).includes(c);
 }
 
-// Placeholder de imagem: emoji por SKU (sem assets externos; VM offline). Cada produto tem
-// ícone próprio — evita vitrine monótona quando vários itens compartilham categoria.
+// Image placeholder: emoji per SKU (no external assets; offline VM). Each product has
+// its own icon — avoids a monotonous storefront when several items share a category.
 const SKU_EMOJI: Record<string, string> = {
   "NS-001": "🎧", // Aura Bluetooth Headphones
   "NS-002": "⌚", // Smartwatch Pulse
@@ -71,8 +71,8 @@ export function emojiOf(p: Product): string {
   return CATEGORY_EMOJI[cat];
 }
 
-// Gradiente do placeholder (sem assets reais — decisão F-009). Estável por SKU, sorteado
-// de uma paleta fixa de gradientes para a vitrine não ficar monótona. Ver ADR-012.
+// Placeholder gradient (no real assets — decision F-009). Stable per SKU, drawn
+// from a fixed palette of gradients so the storefront isn't monotonous. See ADR-012.
 const PLACEHOLDER_GRADIENTS = [
   "linear-gradient(135deg,#6d5efc,#9c6bff 55%,#16c0a6)",
   "linear-gradient(135deg,#16c0a6,#0264d7)",
@@ -101,20 +101,20 @@ export function formatMoney(v: number): string {
   return v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
 
-// Rating cosmético e estável (4.2–4.9) derivado do SKU — o catálogo mock não traz rating.
+// Cosmetic, stable rating (4.2–4.9) derived from the SKU — the mock catalog has no rating.
 export function ratingOf(sku: string): number {
   let h = 0;
   for (const ch of sku) h = (h * 31 + ch.charCodeAt(0)) % 1000;
   return Math.round((4.2 + (h % 8) / 10) * 10) / 10;
 }
 
-// Tiers (F-008): thresholds de gasto acumulado (USD). ESPELHAM os defaults do backend
-// (users.py › TIER_GOLD_USD/TIER_PLATINUM_USD); usados só para exibir o progresso ao
-// próximo tier. O tier de verdade é sempre o computado pelo backend.
+// Tiers (F-008): accumulated spend thresholds (USD). MIRROR the backend defaults
+// (users.py › TIER_GOLD_USD/TIER_PLATINUM_USD); used only to display progress toward
+// the next tier. The real tier is always the one computed by the backend.
 export const TIER_GOLD_AT = 1000;
 export const TIER_PLATINUM_AT = 5000;
 
-// Mensagem de progresso ao próximo tier (ou null se já é o topo).
+// Progress message toward the next tier (or null if already at the top).
 export function nextTierHint(tier: Tier, spend: number): string | null {
   if (tier === "PLATINUM") return null;
   const target = tier === "GOLD" ? TIER_PLATINUM_AT : TIER_GOLD_AT;
@@ -123,12 +123,12 @@ export function nextTierHint(tier: Tier, spend: number): string | null {
   return `Spend ${formatMoney(remaining)} more to reach ${next}`;
 }
 
-// Estoque (F-005): backend baixa `stock` ao fechar o pedido. Espelha LOW_STOCK_THRESHOLD do backend.
+// Stock (F-005): backend decrements `stock` when the order closes. Mirrors the backend's LOW_STOCK_THRESHOLD.
 export const LOW_STOCK = 3;
 export type StockState = "in" | "low" | "out";
 
 export function stockState(p: Product): StockState {
-  if (p.stock === undefined) return "in"; // catálogo sem stock (compat) → tratar como disponível
+  if (p.stock === undefined) return "in"; // catalog without stock (compat) → treat as available
   if (p.stock <= 0) return "out";
   if (p.stock <= LOW_STOCK) return "low";
   return "in";

@@ -1,13 +1,12 @@
-"""Persistência da config de LLM (F-020, etapa 2 — ADR-015).
+"""LLM config persistence (F-020, stage 2 — ADR-015).
 
-Provedores da cascata `{name, kind, base_url, model, enabled, order, api_key}` em SQLite
-(mesmo arquivo dos pedidos/usuários — ADR-006). A **chave de API é segredo**: fica em claro
-no banco (precisamos dela para chamar o provider — não dá p/ hashear; aceitável na VM efêmera
-por participante, é DT), mas **nunca** é retornada ao frontend nem logada. A API só vê a versão
-**mascarada** (`has_key` + dica dos últimos dígitos).
+Cascade providers `{name, kind, base_url, model, enabled, order, api_key}` in SQLite
+(same file as orders/users — ADR-006). **API key is secret**: stored in plain (we need it to call
+provider — can't hash it; acceptable on ephemeral per-participant VM, is DT), but **never**
+returned to frontend or logged. API only sees **masked** version (`has_key` + hint of last digits).
 
-Esta é a implementação **local** da fonte de config. A etapa 4 (ConfigSource) e a F-021 (remota)
-plugam por trás de `llm._load_provider_configs` sem que os consumidores mudem.
+This is the **local** implementation of config source. Stage 4 (ConfigSource) and F-021 (remote)
+plug behind `llm._load_provider_configs` without consumers changing.
 """
 import json
 import os
@@ -18,12 +17,12 @@ from datetime import datetime, timezone
 from ..store.db import DB_PATH, connect
 from ..settings import settings
 
-_KINDS = ("openai", "anthropic", "bedrock")  # kinds suportados (ver llm._ADAPTERS)
+_KINDS = ("openai", "anthropic", "bedrock")  # supported kinds (see llm._ADAPTERS)
 _PERSIST_FILENAME = "llm_providers.json"
 
 
 def init_db() -> None:
-    """create_all no boot: tabela de provedores de LLM se não existir."""
+    """create_all on boot: LLM providers table if doesn't exist."""
     with connect() as conn:
         conn.execute(
             """CREATE TABLE IF NOT EXISTS llm_providers (
@@ -32,9 +31,9 @@ def init_db() -> None:
                 kind        TEXT NOT NULL DEFAULT 'openai',  -- openai | anthropic
                 base_url    TEXT NOT NULL DEFAULT '',
                 model       TEXT NOT NULL,
-                api_key     TEXT NOT NULL DEFAULT '',        -- SEGREDO: nunca exposto ao front
+                api_key     TEXT NOT NULL DEFAULT '',        -- SECRET: never exposed to front
                 enabled     INTEGER NOT NULL DEFAULT 1,
-                ord         INTEGER NOT NULL DEFAULT 0,       -- ordem na cascata (menor = antes)
+                ord         INTEGER NOT NULL DEFAULT 0,       -- cascade order (smaller = before)
                 created_at  TEXT NOT NULL
             )"""
         )
@@ -48,17 +47,17 @@ def _new_id() -> str:
     return "LP-" + uuid.uuid4().hex[:6].upper()
 
 
-# --- máscara (o que vai p/ o frontend) --------------------------------------
+# --- mask (what goes to frontend) ------------------------------------------
 
 def _key_hint(api_key: str) -> str | None:
-    """Dica não-reversível da chave: só os últimos 4 dígitos. None se não há chave."""
+    """Non-reversible key hint: only last 4 digits. None if no key."""
     if not api_key:
         return None
     return "••••" + api_key[-4:] if len(api_key) >= 4 else "••••"
 
 
 def _mask(row: sqlite3.Row) -> dict:
-    """Representação pública (SEM a chave): o front nunca recebe `api_key`."""
+    """Public representation (WITHOUT key): front never receives `api_key`."""
     return {
         "id": row["id"],
         "name": row["name"],
@@ -72,11 +71,11 @@ def _mask(row: sqlite3.Row) -> dict:
     }
 
 
-# --- leitura p/ a cascata (interna; inclui a chave) -------------------------
+# --- read for cascade (internal; includes key) ----------------------------
 
 def list_enabled_with_keys() -> list[dict]:
-    """Provedores HABILITADOS em ordem, COM a chave — consumido por `llm.get_llm`.
-    Tolerante a tabela ausente (run_demo/standalone sem init_db) → lista vazia (só stub)."""
+    """ENABLED providers in order, WITH key — consumed by `llm.get_llm`.
+    Tolerant to missing table (run_demo/standalone without init_db) → empty list (stub only)."""
     try:
         with connect() as conn:
             rows = conn.execute(
@@ -89,7 +88,7 @@ def list_enabled_with_keys() -> list[dict]:
 
 
 def get_provider_with_key(provider_id: str) -> dict | None:
-    """Provider COM chave (uso interno — ex.: endpoint de Test). Nunca vai ao front cru."""
+    """Provider WITH key (internal use — e.g., Test endpoint). Never goes to front raw."""
     with connect() as conn:
         row = conn.execute("SELECT * FROM llm_providers WHERE id = ?", (provider_id,)).fetchone()
     if row is None:
@@ -98,7 +97,7 @@ def get_provider_with_key(provider_id: str) -> dict | None:
             "model": row["model"], "api_key": row["api_key"]}
 
 
-# --- CRUD (a API só devolve a versão mascarada) -----------------------------
+# --- CRUD (API only returns masked version) --------------------------------
 
 def list_providers() -> list[dict]:
     with connect() as conn:
@@ -116,7 +115,7 @@ def create_provider(name: str, kind: str, base_url: str, model: str,
                     api_key: str = "", enabled: bool = True, order: int | None = None) -> dict:
     kind = kind if kind in _KINDS else "openai"
     pid = _new_id()
-    if order is None:  # acrescenta no fim da cascata
+    if order is None:  # append at end of cascade
         with connect() as conn:
             row = conn.execute("SELECT COALESCE(MAX(ord), -1) + 1 AS nxt FROM llm_providers").fetchone()
             order = row["nxt"]
@@ -132,8 +131,8 @@ def create_provider(name: str, kind: str, base_url: str, model: str,
 
 def update_provider(provider_id: str, *, name=None, kind=None, base_url=None,
                     model=None, api_key=None, enabled=None, order=None) -> dict | None:
-    """Atualização parcial. `api_key` é **write-only**: só troca se vier não-vazio
-    (vazio/None mantém a chave atual → o front nunca precisa reenviar o segredo)."""
+    """Partial update. `api_key` is **write-only**: only changes if non-empty
+    (empty/None keeps current key → front never needs to resend secret)."""
     sets, vals = [], []
     if name is not None: sets.append("name = ?"); vals.append(name.strip())
     if kind is not None: sets.append("kind = ?"); vals.append(kind if kind in _KINDS else "openai")
@@ -141,7 +140,7 @@ def update_provider(provider_id: str, *, name=None, kind=None, base_url=None,
     if model is not None: sets.append("model = ?"); vals.append(model.strip())
     if enabled is not None: sets.append("enabled = ?"); vals.append(1 if enabled else 0)
     if order is not None: sets.append("ord = ?"); vals.append(int(order))
-    if api_key:  # só substitui quando há nova chave (write-only)
+    if api_key:  # only replace when there's new key (write-only)
         sets.append("api_key = ?"); vals.append(api_key)
     if not sets:
         return _get_masked(provider_id)
@@ -160,17 +159,17 @@ def delete_provider(provider_id: str) -> bool:
 
 
 def reorder(ids: list[str]) -> list[dict]:
-    """Reordena a cascata pela ordem dos ids recebidos (índice → `ord`)."""
+    """Reorder cascade by order of received ids (index → `ord`)."""
     with connect() as conn:
         for i, pid in enumerate(ids):
             conn.execute("UPDATE llm_providers SET ord = ? WHERE id = ?", (i, pid))
     return list_providers()
 
 
-# --- persistência entre fresh-states (F-REAL-ENV-1) -------------------------
+# --- persistence across fresh-states (F-REAL-ENV-1) -----------------------
 
 def persist_dir() -> str:
-    """Diretório host/container p/ backup de providers (`VEGA_PERSIST_DIR` ou `.vega-persist`)."""
+    """Host/container directory for provider backup (`VEGA_PERSIST_DIR` or `.vega-persist`)."""
     root = settings.vega_persist_dir.strip()
     if not root:
         root = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), ".vega-persist")
@@ -194,7 +193,7 @@ def _read_provider_rows() -> list[dict]:
 
 
 def export_providers_backup() -> int:
-    """Grava providers atuais em JSON — chamado por fresh-state antes de apagar o SQLite."""
+    """Save current providers to JSON — called by fresh-state before deleting SQLite."""
     rows = _read_provider_rows()
     path = persist_file_path()
     with open(path, "w", encoding="utf-8") as fh:
@@ -204,7 +203,7 @@ def export_providers_backup() -> int:
 
 
 def restore_providers_backup() -> int:
-    """Restaura providers do JSON se a tabela estiver vazia (pós fresh-state)."""
+    """Restore providers from JSON if table is empty (post fresh-state)."""
     path = persist_file_path()
     if not os.path.isfile(path):
         return 0
@@ -246,10 +245,10 @@ def restore_providers_backup() -> int:
     return restored
 
 
-# --- bootstrap da cascata a partir do `.env`/SO (F-BACKEND-3, Etapa B) ------
+# --- cascade bootstrap from `.env`/SO (F-BACKEND-3, Stage B) ----------------
 
-# Aliases aceitos em `LLM_PROVIDER_PRIORITY` (CLAUDE = ANTHROPIC). Cada alias mapeia para UM
-# provider conhecido pelo nome estável abaixo — é o contrato que o Ansible e o Admin compartilham.
+# Aliases accepted in `LLM_PROVIDER_PRIORITY` (CLAUDE = ANTHROPIC). Each alias maps to ONE
+# provider known by stable name below — it's the contract Ansible and Admin share.
 _CASCADE_SPECS: dict[str, dict] = {
     "OPENAI": {
         "env_field": "openai_api_key",
@@ -281,7 +280,7 @@ _CASCADE_SPECS: dict[str, dict] = {
 
 _DEFAULT_PRIORITY: tuple[str, ...] = ("BEDROCK", "OPENAI", "ANTHROPIC", "OLLAMA")
 
-# Só os specs cloud — congelado p/ `tests/test_env_example_contract.py` (campos de token).
+# Only cloud specs — frozen for `tests/test_env_example_contract.py` (token fields).
 _ENV_SEED_SPECS: tuple[dict, ...] = tuple(
     spec for alias, spec in _CASCADE_SPECS.items() if alias != "OLLAMA"
 )
@@ -352,17 +351,17 @@ def seed_ollama_default() -> None:
 
 
 def seed_providers_from_env() -> dict[str, int]:
-    """Monta a cascata de LLM a cada boot a partir do `.env`/SO.
+    """Build LLM cascade at each boot from `.env`/SO.
 
-    `LLM_PROVIDER_PRIORITY` define a ordem (ex.: `BEDROCK,OPENAI,ANTHROPIC,OLLAMA`). Para cada
-    alias, se o provider estiver configurado (token cloud presente ou `OLLAMA_BASE_URL` para o
-    Ollama), cadastra/atualiza a linha e aplica `ord` sequencial — providers sem credencial são
-    pulados até cair no fallback local.
+    `LLM_PROVIDER_PRIORITY` defines order (e.g., `BEDROCK,OPENAI,ANTHROPIC,OLLAMA`). For each
+    alias, if provider is configured (cloud token present or `OLLAMA_BASE_URL` for Ollama),
+    creates/updates row and applies sequential `ord` — providers without credential are
+    skipped until fallback local.
 
-    Idempotência **por nome**. **Env vence** chave, ordem e enabled a cada restart; **UI vence**
-    model e base_url (exceto Bedrock, cuja região vem de `AWS_DEFAULT_REGION` no create).
+    Idempotent **by name**. **Env wins** key, order, and enabled each restart; **UI wins**
+    model and base_url (except Bedrock, whose region comes from `AWS_DEFAULT_REGION` on create).
 
-    Retorna contadores p/ o log de boot (`_bootstrap` em `api.py`).
+    Returns counters for boot log (`_bootstrap` in `api.py`).
     """
     created = 0
     updated = 0

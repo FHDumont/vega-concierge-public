@@ -1,4 +1,4 @@
-// Fecha o painel flutuante quando a resposta pede login ou checkout (F-WORKSHOP-UC-CARDS).
+// Closes the floating panel when the reply asks for login or checkout (F-WORKSHOP-UC-CARDS).
 import type { AnswerLayout } from "@/components/AnswerLayout";
 import type { ChatResult } from "@/lib/api";
 

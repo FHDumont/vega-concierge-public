@@ -1,4 +1,4 @@
-"""Pedidos: criação, histórico, detalhe e as features de IA presas a um pedido."""
+"""Orders: creation, history, detail, and AI features tied to an order."""
 from fastapi import APIRouter, Header, HTTPException
 from ..ai_agents.fraud_explanation import explain_fraud_hold
 from ..ai_agents.notification_copy import compose_notification_text
@@ -8,16 +8,16 @@ from ..store import checkout, orders
 from ..schemas import CreateOrderRequest
 from ._common import _optional_user_id
 
-# Sem `prefix`: cada rota carrega o path completo, igualzinho ao que estava em `api.py`.
+# No `prefix`: each route carries the full path, just like it was in `api.py`.
 router = APIRouter()
 
 
 @router.post("/api/orders")
 async def create_order(req: CreateOrderRequest, authorization: str | None = Header(default=None),
                        x_vega_session: str | None = Header(default=None)):
-    # Liga ao usuário da sessão se logado (F-008); convidado segue com user_id=None.
-    # O fechamento (pipeline/estoque/gateway → PAID/FAILED) vive em checkout.aplace_order
-    # (extraído na F-017 p/ o simulador reusar o MESMO caminho).
+    # Links to session user if logged in (F-008); guest continues with user_id=None.
+    # Checkout (pipeline/stock/gateway → PAID/FAILED) lives in checkout.aplace_order
+    # (extracted in F-017 for simulator to reuse the SAME path).
     user_id = _optional_user_id(authorization)
     with ai_request_scope(feature="fulfillment", session_id=x_vega_session, user_id=user_id) as config:
         return await checkout.aplace_order(
@@ -27,7 +27,7 @@ async def create_order(req: CreateOrderRequest, authorization: str | None = Head
 
 @router.get("/api/orders")
 def list_orders(authorization: str | None = Header(default=None)):
-    # Histórico do usuário logado (F-008): só os próprios pedidos. Exige sessão.
+    # Logged-in user's history (F-008): only own orders. Requires session.
     user_id = _optional_user_id(authorization)
     if user_id is None:
         raise HTTPException(status_code=401, detail="not authenticated")
@@ -39,19 +39,19 @@ def get_order(order_id: str, authorization: str | None = Header(default=None)):
     order = orders.get_order(order_id)
     if order is None:
         raise HTTPException(status_code=404, detail="order not found")
-    # F-019: com sessão (Loja/Conta), o usuário só vê a PRÓPRIA ordem — 404 p/ não vazar
-    # existência de pedido alheio. Sem token segue público (Admin/convidado — mesma régua
-    # dos controles de workshop, VM por participante).
+    # F-019: with session (Store/Account), user only sees OWN order — 404 to not leak
+    # existence of others' orders. Without token stays public (Admin/guest — same rules
+    # as workshop controls, VM per participant).
     user_id = _optional_user_id(authorization)
     if user_id is not None and orders.order_owner(order_id) != user_id:
         raise HTTPException(status_code=404, detail="order not found")
     return order
 
 
-# --- IA-Notificação (F-031) -------------------------------------------------
-# Copy gerada de e-mail p/ o evento atual do pedido (confirmação/enviado) — reaproveita a
-# notificação simulada (F-005). Exibida como "notification preview" na confirmação do checkout
-# e no detalhe do pedido. Passa pelo controle de custo (F-022). Mesma autorização do
+# --- AI-Notification (F-031) -------------------------------------------------
+# Generated email copy for the current order event (confirmed/shipped) — reuses
+# simulated notification (F-005). Displayed as "notification preview" on checkout confirmation
+# and order detail. Passes through cost control (F-022). Same authorization as
 # GET /api/orders/{id}.
 
 @router.post("/api/orders/{order_id}/notification")
@@ -71,9 +71,9 @@ def order_notification(order_id: str, authorization: str | None = Header(default
 @router.post("/api/orders/{order_id}/refund")
 async def order_refund(order_id: str, authorization: str | None = Header(default=None),
                        x_vega_session: str | None = Header(default=None)):
-    # Returns/Refund Coordinator (F-029): cadeia profunda agente→agente→tool a partir de um pedido
-    # DELIVERED → marca REFUNDED quando aprovado. Mesma autorização do GET /api/orders/{id} (F-019).
-    # 409 se o pedido não é DELIVERED.
+    # Returns/Refund Coordinator (F-029): deep agent→agent→tool chain from a DELIVERED order
+    # → marks REFUNDED when approved. Same authorization as GET /api/orders/{id} (F-019).
+    # 409 if order is not DELIVERED.
     order = orders.get_order(order_id)
     if order is None:
         raise HTTPException(status_code=404, detail="order not found")

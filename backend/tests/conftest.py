@@ -1,21 +1,21 @@
-"""Fixtures da suíte (F-BACKEND-1). Tudo offline: sem provider configurado a cascata cai no
-stub determinístico-em-estrutura, então nenhum teste sem marker toca a rede."""
+"""Suite fixtures (F-BACKEND-1). Everything offline: with no provider configured the cascade
+falls back to the structurally-deterministic stub, so no test without a marker touches the network."""
 from __future__ import annotations
 
 import os
 import tempfile
 
-# Precisa valer ANTES de importar `app.*` — `app.settings` resolve a config no import, e os
-# módulos leem os valores dela também no import (mesma ordem dos antigos `run_*.py`).
+# Must be set BEFORE importing `app.*` — `app.settings` resolves config at import time, and the
+# modules also read its values at import time (same ordering as the old `run_*.py` scripts).
 os.environ.setdefault("DEPLOYMENT_ENVIRONMENT", "user-42")
-# Sem arquivo de env: a suíte roda só com ambiente do SO + defaults, para não herdar as
-# credenciais do `.env` de desenvolvimento da máquina (que a colocariam online).
+# No env file: the suite runs only on OS environment + defaults, so it doesn't inherit the
+# dev machine's `.env` credentials (which would put it online).
 os.environ.setdefault("VEGA_ENV_FILE", "")
-# DB de teste isolado do `vega.db` real do dev (DT-036) — mesmo motivo de módulo-level das duas
-# vars acima: `app/store/db.py` congela `DB_PATH = settings.orders_db` no import, tarde demais
-# pra uma fixture. `setdefault` mantém a porta aberta pra um `ORDERS_DB` explícito do ambiente.
-# Efeito colateral desejado: `llm/llm_config.py` deriva `.vega-persist` do `dirname(DB_PATH)`,
-# então o diretório de persistência do dev também para de ser tocado pela suíte.
+# Test DB isolated from the dev's real `vega.db` (DT-036) — same module-level reasoning as the
+# two vars above: `app/store/db.py` freezes `DB_PATH = settings.orders_db` at import time, too
+# late for a fixture. `setdefault` still leaves room for an explicit `ORDERS_DB` from the environment.
+# Desired side effect: `llm/llm_config.py` derives `.vega-persist` from `dirname(DB_PATH)`,
+# so the dev's persistence directory also stops being touched by the suite.
 os.environ.setdefault("ORDERS_DB", os.path.join(tempfile.mkdtemp(), "vega.db"))
 
 import pytest
@@ -25,8 +25,8 @@ from app.problems import FLAGS, ProblemFlags
 
 @pytest.fixture(autouse=True)
 def reset_problem_flags():
-    """FLAGS é um singleton global (1 usuário por VM). Como os testes ligam toggles, devolve o
-    estado original depois de cada um — senão um teste vaza problema injetado no seguinte."""
+    """FLAGS is a global singleton (1 user per VM). Since tests toggle it, restore the
+    original state after each one — otherwise a test leaks an injected problem into the next."""
     saved = FLAGS.to_dict()
     yield FLAGS
     for name, value in saved.items():
@@ -35,7 +35,7 @@ def reset_problem_flags():
 
 @pytest.fixture(autouse=True)
 def _isolate_api_rate_limit(monkeypatch):
-    """Suíte offline não herda buckets HTTP/LLM entre testes; `test_api_rate_limit` re-liga HTTP explicitamente."""
+    """Offline suite doesn't inherit HTTP/LLM buckets between tests; `test_api_rate_limit` re-enables HTTP explicitly."""
     from app import rate_limit
     from app.llm import llm_cache
     from app.settings import settings
@@ -50,7 +50,7 @@ def _isolate_api_rate_limit(monkeypatch):
 
 @pytest.fixture
 def clean_cache():
-    """Zera o cache/limiter de LLM (F-022) antes e depois — ordem de teste não muda hit/miss."""
+    """Resets the LLM cache/limiter (F-022) before and after — test order doesn't change hit/miss."""
     from app.llm import llm_cache
 
     llm_cache.reset_state()
@@ -60,7 +60,7 @@ def clean_cache():
 
 @pytest.fixture
 def api_client():
-    """TestClient da app real. Os bootstraps de import-time já rodaram no `import app.api`."""
+    """TestClient for the real app. The import-time bootstraps already ran in `import app.api`."""
     from fastapi.testclient import TestClient
 
     from app.api import app
@@ -70,5 +70,5 @@ def api_client():
 
 
 def default_flags() -> dict:
-    """Valores default de ProblemFlags — útil pra asserção de contrato de `/api/problems`."""
+    """Default values of ProblemFlags — useful for asserting the `/api/problems` contract."""
     return ProblemFlags().to_dict()

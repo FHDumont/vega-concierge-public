@@ -1,7 +1,7 @@
-"""Amazon Bedrock na cascata (F-BEDROCK-1) — ex `test_bedrock_smoke.py`.
+"""Amazon Bedrock in the cascade (F-BEDROCK-1) — formerly `test_bedrock_smoke.py`.
 
-O grosso é offline (monta adapter/model, presets, CRUD SQLite). O teste que fala com a AWS de
-verdade é `-m live` e exige `BEDROCK_API_KEY`.
+Most of it is offline (builds adapter/model, presets, SQLite CRUD). The test that actually
+talks to AWS is `-m live` and requires `BEDROCK_API_KEY`.
 """
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import os
 
 import pytest
 
-# `test_provider` renomeado no import: com o nome original o pytest o coletaria como teste.
+# `test_provider` renamed on import: with the original name pytest would collect it as a test.
 from app.llm.llm import build_adapter
 from app.llm.llm_providers import list_type_presets
 from app.llm.llm import test_provider as call_test_provider
@@ -55,6 +55,6 @@ def test_bedrock_provider_survives_a_sqlite_round_trip():
 def test_bedrock_live_call():
     api_key = os.getenv("BEDROCK_API_KEY", "")
     if not api_key:
-        pytest.skip("BEDROCK_API_KEY não definida")
+        pytest.skip("BEDROCK_API_KEY not set")
     result = call_test_provider({**CFG, "api_key": api_key})
     assert result.get("ok"), result

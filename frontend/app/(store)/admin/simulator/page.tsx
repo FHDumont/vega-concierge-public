@@ -1,15 +1,15 @@
 "use client";
-// SIMULADOR AVANÇADO — tela própria do dono (F-018, ADR-014). Fora do route group
-// (store); reusa o chrome do Admin (ns-adm-*) + classes ns-sim-*. Form de config rica
-// + controles Start/Pause/Stop + painel AO VIVO (poll de /api/simulator/status).
-// É a ferramenta de tráfego (gera carga real chamando a API).
+// ADVANCED SIMULATOR — its own owner-only screen (F-018, ADR-014). Outside the (store)
+// route group; reuses the Admin chrome (ns-adm-*) + ns-sim-* classes. Rich config form
+// + Start/Pause/Stop controls + LIVE panel (polls /api/simulator/status).
+// It's the traffic-generation tool (generates real load by calling the API).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SimConfig, SimStatus, simStart, simStop, simPause, simStatus, getRum } from "@/lib/api";
 import FlagGuard from "@/components/FlagGuard";
 import { WORKSHOP_SIMULATOR_ENABLED } from "@/lib/workshop-config";
 
-// Categorias/tiers/problemas espelham o backend (simulator.py).
+// Categories/tiers/problems mirror the backend (simulator.py).
 const CATEGORIES = ["Audio", "Wearables", "Home", "Gifts"] as const;
 const TIERS = ["STANDARD", "GOLD", "PLATINUM"] as const;
 const PROBLEMS: { key: string; label: string }[] = [
@@ -18,21 +18,21 @@ const PROBLEMS: { key: string; label: string }[] = [
   { key: "inventory_outage", label: "Inventory outage" },
   { key: "fraud_false_positive", label: "Fraud false positive" },
 ];
-// Presets de velocidade (multiplicador dos sleeps): demo rápido ↔ realista.
+// Speed presets (sleep multiplier): fast demo ↔ realistic.
 const SPEEDS: { label: string; value: number }[] = [
   { label: "Demo (fast)", value: 0.15 },
   { label: "Brisk", value: 0.4 },
   { label: "Realistic", value: 1 },
 ];
 
-// Form = SimConfig com defaults espelhando SimConfig do backend.
-// Modo de tráfego (F-039): API in-process (rápido, sem RUM) vs Browser real (Playwright,
-// mais pesado, gera sessões de navegador p/ o RUM). Teto de N menor no modo browser.
+// Form = SimConfig with defaults mirroring the backend's SimConfig.
+// Traffic mode (F-039): in-process API (fast, no RUM) vs real Browser (Playwright,
+// heavier, generates browser sessions for RUM). Lower N cap in browser mode.
 const MODES: { value: SimConfig["mode"]; label: string; hint: string }[] = [
   { value: "api", label: "API", hint: "In-process — fast, no real browser." },
   { value: "browser", label: "Browser", hint: "Headless Chromium drives the UI — RUM-ready, heavier." },
 ];
-const BROWSER_MAX_CONCURRENCY = 12; // espelha _BROWSER_MAX_CONCURRENCY no backend
+const BROWSER_MAX_CONCURRENCY = 12; // mirrors _BROWSER_MAX_CONCURRENCY on the backend
 
 const DEFAULTS: SimConfig = {
   mode: "api",
@@ -50,13 +50,13 @@ const DEFAULTS: SimConfig = {
   max_lines: 3, max_qty: 2,
 };
 
-// Config persistida no navegador: volta ao último valor configurado ao recarregar.
+// Config persisted in the browser: returns to the last configured value on reload.
 const STORE_KEY = "vega.sim.config";
 function saveCfg(c: SimConfig) {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(c));
   } catch {
-    /* localStorage indisponível (modo privado) — segue sem persistir */
+    /* localStorage unavailable (private mode) — carries on without persisting */
   }
 }
 
@@ -67,8 +67,8 @@ function fmtUptime(s: number): string {
   return m > 0 ? `${m}m ${String(sec).padStart(2, "0")}s` : `${sec}s`;
 }
 
-// F-033: barrado p/ participantes quando a flag `simulator` está OFF (o owner passa — ADR-021).
-// WORKSHOP_SIMULATOR_ENABLED=false oculta a superfície nesta versão do workshop (incl. owner).
+// F-033: blocked for participants when the `simulator` flag is OFF (the owner still gets through — ADR-021).
+// WORKSHOP_SIMULATOR_ENABLED=false hides the surface in this workshop version (incl. owner).
 function SimulatorWorkshopGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   useEffect(() => {
@@ -91,7 +91,7 @@ export default function SimulatorPage() {
 function Simulator() {
   const [cfg, setCfg] = useState<SimConfig>(DEFAULTS);
   const [status, setStatus] = useState<SimStatus | null>(null);
-  const [rumOn, setRumOn] = useState<boolean | null>(null); // F-040-RUM: status p/ o modo browser
+  const [rumOn, setRumOn] = useState<boolean | null>(null); // F-040-RUM: status for browser mode
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -104,11 +104,11 @@ function Simulator() {
     try {
       setStatus(await simStatus());
     } catch {
-      /* server pode estar reiniciando; mantém o último estado */
+      /* server may be restarting; keeps the last state */
     }
   }, []);
 
-  // Poll do status a cada 1s (painel ao vivo). Lê o estado real mesmo se outra aba mexeu.
+  // Poll the status every 1s (live panel). Reads the real state even if another tab changed it.
   useEffect(() => {
     poll();
     timer.current = setInterval(poll, 1000);
@@ -117,7 +117,7 @@ function Simulator() {
     };
   }, [poll]);
 
-  // Restaura a última config salva ao montar (sobrepõe os defaults; campos novos ficam no default).
+  // Restores the last saved config on mount (overrides the defaults; new fields stay at their default).
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORE_KEY);
@@ -127,12 +127,12 @@ function Simulator() {
     }
   }, []);
 
-  // Status do Splunk RUM (F-040-RUM): o modo browser só gera RUM se o owner ligou o snippet.
+  // Splunk RUM status (F-040-RUM): browser mode only generates RUM if the owner enabled the snippet.
   useEffect(() => {
     getRum().then((r) => setRumOn(r.enabled)).catch(() => setRumOn(null));
   }, []);
 
-  // Mutators salvam a cada edição (persiste no navegador).
+  // Mutators save on every edit (persists in the browser).
   function set<K extends keyof SimConfig>(key: K, value: SimConfig[K]) {
     setCfg((c) => {
       const next = { ...c, [key]: value };
@@ -226,7 +226,7 @@ function Simulator() {
         </div>
 
         <div className="ns-adm-main ns-sim-main">
-          {/* --- painel AO VIVO --- */}
+          {/* --- LIVE panel --- */}
           <LivePanel status={status} fmtUptime={fmtUptime} />
 
           {/* --- config --- */}
@@ -244,7 +244,7 @@ function Simulator() {
   );
 }
 
-// --- painel ao vivo ---------------------------------------------------------
+// --- live panel ---------------------------------------------------------------
 function LivePanel({ status, fmtUptime }: { status: SimStatus | null; fmtUptime: (s: number) => string }) {
   const s = status;
   const sessions = s?.sessions ?? [];
@@ -334,7 +334,7 @@ function Kpi({ label, value, accent }: { label: string; value: string; accent?: 
   );
 }
 
-// --- formulário de config ---------------------------------------------------
+// --- config form ---------------------------------------------------------------
 function ConfigForm({
   cfg, active, rumOn, set, setMix, toggleProblem,
 }: {
@@ -447,7 +447,7 @@ function ConfigForm({
   );
 }
 
-// --- campos reutilizáveis ---------------------------------------------------
+// --- reusable fields -------------------------------------------------------
 function Num({ label, value, min, max, onChange, hint }: {
   label: string; value: number; min: number; max: number; onChange: (v: number) => void; hint?: string;
 }) {

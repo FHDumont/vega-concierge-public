@@ -1,23 +1,23 @@
-# Vega Concierge — workshop stack (1 VM por participante)
-# `name` fixo e IGUAL ao de compose.plain.yml: sem ele o projeto virava o nome do diretório
-# (`vega-concierge`) e dev.sh convivia com o stack de up.sh — dois pgvector, dois volumes, e o
-# postgres de um segurando :5434 do outro.
+# Vega Concierge — workshop stack (1 VM per attendee)
+# `name` fixed and IDENTICAL to compose.plain.yml's: without it the project would default to
+# the directory name (`vega-concierge`) and dev.sh would coexist with up.sh's stack — two
+# pgvector instances, two volumes, and one's postgres holding :5434 from the other.
 name: vega
 services:
   backend:
     build: ./backend
-    # Contrato único de config por VM (F-BACKEND-3, Etapa B): o `.env` da raiz é a fonte
-    # canônica, injetada aqui via `env_file` — o mesmo arquivo que `scripts/*.sh` e o Ansible
-    # escrevem. `environment:` abaixo é só o que precisa de valor DIFERENTE dentro do
-    # container (`environment:` vence `env_file`, então esses overrides ficam imunes ao que
-    # estiver no `.env`).
+    # Single per-VM config contract (F-BACKEND-3, Stage B): the root `.env` is the
+    # canonical source, injected here via `env_file` — the same file that `scripts/*.sh` and
+    # Ansible write to. `environment:` below is only for values that need to be DIFFERENT
+    # inside the container (`environment:` wins over `env_file`, so these overrides stay
+    # immune to whatever is in `.env`).
     env_file:
       - path: .env
         required: false
     environment:
-      - ORDERS_DB=/data/vega.db  # SQLite em volume nomeado (DT-006): sobrevive a recriação
+      - ORDERS_DB=/data/vega.db  # SQLite on a named volume (DT-006): survives container recreation
       - VEGA_PERSIST_DIR=/persist
-      # RAG (ADR-031): URL interna @postgres — host/setup_vectordb usa localhost no .env.
+      # RAG (ADR-031): internal URL @postgres — host/setup_vectordb uses localhost in .env.
       - RAG_DATABASE_URL=postgresql+psycopg://${RAG_DB_USER:-vega}:${RAG_DB_PASSWORD:-vega}@postgres:5432/${RAG_DB_NAME:-vega_rag}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - RAG_ENABLED=${RAG_ENABLED:-1}
@@ -31,17 +31,17 @@ services:
   frontend:
     build: ./frontend
     environment:
-      # Separado (ADR-024): o navegador fala direto com a API. Em dev o browser está no HOST → usa a
-      # porta publicada do backend (localhost:8000). API_INTERNAL_URL é p/ o SSR alcançar o backend
-      # por DNS de compose (`backend:8000`).
+      # Separate (ADR-024): the browser talks directly to the API. In dev the browser is on the HOST →
+      # uses the backend's published port (localhost:8000). API_INTERNAL_URL is for SSR to reach
+      # the backend via compose DNS (`backend:8000`).
       - PUBLIC_API_BASE=${PUBLIC_API_BASE:-http://localhost:8000}
       - API_INTERNAL_URL=${API_INTERNAL_URL:-http://backend:8000}
     ports: ["3000:3000"]
     depends_on: [backend]
 
-  # pgvector — embeddings reais pro RAG (ADR-031). Profile `rag`: NÃO entra no stack default,
-  # porque o retriever keyword em processo já atende sem banco nenhum. Guarda só vetores; o
-  # estado transacional continua no SQLite (ADR-008).
+  # pgvector — real embeddings for RAG (ADR-031). Profile `rag`: does NOT join the default stack,
+  # because the in-process keyword retriever already works with no database at all. Stores only
+  # vectors; transactional state stays in SQLite (ADR-008).
   postgres:
     profiles: [rag]
     image: pgvector/pgvector:pg16
@@ -49,7 +49,7 @@ services:
       - POSTGRES_USER=${RAG_DB_USER:-vega}
       - POSTGRES_PASSWORD=${RAG_DB_PASSWORD:-vega}
       - POSTGRES_DB=${RAG_DB_NAME:-vega_rag}
-    # Dev local: publica loopback p/ setup_vectordb no host (dev.sh). Produção: sem ports (compose.plain.yml).
+    # Local dev: publishes loopback for setup_vectordb on the host (dev.sh). Production: no ports (compose.plain.yml).
     ports: ["127.0.0.1:${RAG_DB_PORT:-5434}:5432"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${RAG_DB_USER:-vega} -d ${RAG_DB_NAME:-vega_rag}"]
@@ -61,5 +61,5 @@ services:
       - vega-vectors:/var/lib/postgresql/data
 
 volumes:
-  vega-db:  # persistência do SQLite de pedidos entre recriações de container (DT-006)
-  vega-vectors:  # embeddings do pgvector (profile `rag`)
+  vega-db:  # persistence for the orders SQLite across container recreations (DT-006)
+  vega-vectors:  # pgvector embeddings (profile `rag`)

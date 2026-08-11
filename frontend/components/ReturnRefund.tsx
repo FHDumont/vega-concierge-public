@@ -1,8 +1,8 @@
 "use client";
-// Returns/Refund Coordinator (F-029) — ponto de entrada na Conta, num pedido DELIVERED. Dispara
-// a cadeia agêntica complexa (eligibility→policy→calc→abuse→process) que marca o pedido REFUNDED
-// quando aprovado. Mostra só os passos + veredito. Indicador global AiThinking (F-028) enquanto
-// roda. Estilizado por paletas.
+// Returns/Refund Coordinator (F-029) — entry point on the Account page, on a DELIVERED order. Triggers
+// the complex agentic chain (eligibility→policy→calc→abuse→process) that marks the order REFUNDED
+// when approved. Shows only the steps + verdict. Global AiThinking indicator (F-028) while it
+// runs. Styled via palettes.
 import { useState } from "react";
 import { Order, RefundResult, requestRefund } from "@/lib/api";
 import AiThinking from "./AiThinking";

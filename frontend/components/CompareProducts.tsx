@@ -1,6 +1,6 @@
 "use client";
-// Compare 2 produtos (F-029) — ponto de entrada na página de produto. O cliente escolhe outro
-// produto e a IA orquestra a comparação. Mostra veredito estruturado (facts + bullets) como no chat.
+// Compare 2 products (F-029) — entry point on the product page. The customer picks another
+// product and the AI orchestrates the comparison. Shows a structured verdict (facts + bullets) like in chat.
 import { useEffect, useState } from "react";
 import { AnswerLayoutBlock, AnswerLayout, hasLayoutContent } from "@/components/AnswerLayout";
 import { CompareResult, Product, compareProducts, getCatalog } from "@/lib/api";

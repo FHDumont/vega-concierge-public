@@ -1,17 +1,18 @@
-"""Agent Control (`obs/galileo_control.py`) no caminho de PRODUÇÃO — F-WORKSHOP-STAB-4.
+"""Agent Control (`obs/galileo_control.py`) on the PRODUCTION path — F-WORKSHOP-STAB-4.
 
-Por que este arquivo existe: a suíte roda com `galileo_control.is_active() == False` (sem
-credencial, sem `init_once`), então **todo** teste anterior exercitava só o atalho
-`controlled_feature_invoke` → `invoke_fn()`. O caminho real de produção — o step decorado com
-`@control` — nunca era tocado, e foi exatamente lá que morava o defeito medido no Console: o
-`@control` do agent_control roda o step dentro de `asyncio.run(...)`
-(`agent_control/control_decorators.py:862`), e **escrita** em ContextVar dentro de um contexto
-novo não propaga de volta. O resultado do LLM voltava `None` pro chamador, que caía no fallback
-e invocava o LLM uma SEGUNDA vez — dobro de custo e a subárvore inteira duplicada no trace.
+Why this file exists: the suite runs with `galileo_control.is_active() == False` (no
+credential, no `init_once`), so **every** prior test only exercised the shortcut
+`controlled_feature_invoke` → `invoke_fn()`. The real production path — the step decorated with
+`@control` — was never touched, and that's exactly where the defect measured in the Console
+lived: the agent_control's `@control` runs the step inside `asyncio.run(...)`
+(`agent_control/control_decorators.py:862`), and a ContextVar **write** inside a new context
+does not propagate back out. The LLM result came back `None` to the caller, which fell into the
+fallback and invoked the LLM a SECOND time — double the cost and the entire subtree duplicated
+in the trace.
 
-Os testes abaixo injetam um `agent_control` falso com a MESMA forma do real (só o `asyncio.run`
-importa aqui) e deixam o `_ensure_decorated_steps()` real construir os steps: o que está sob
-teste é o código de produção, não uma cópia dele.
+The tests below inject a fake `agent_control` with the SAME shape as the real one (only
+`asyncio.run` matters here) and let the real `_ensure_decorated_steps()` build the steps: what's
+under test is the production code, not a copy of it.
 """
 from __future__ import annotations
 
@@ -26,7 +27,7 @@ from app.obs import galileo_control
 
 
 def _fake_agent_control_module():
-    """`agent_control` mínimo com a forma que importa: `@control` síncrono = `asyncio.run(...)`."""
+    """Minimal `agent_control` with the shape that matters: sync `@control` = `asyncio.run(...)`."""
     module = types.ModuleType("agent_control")
 
     def control(policy=None, step_name=None):
@@ -57,7 +58,7 @@ def _fake_agent_control_module():
 
 @pytest.fixture
 def active_control(monkeypatch):
-    """`galileo_control` ativo, com os steps REAIS construídos sobre o `@control` falso."""
+    """`galileo_control` active, with the REAL steps built on top of the fake `@control`."""
     monkeypatch.setitem(sys.modules, "agent_control", _fake_agent_control_module())
     monkeypatch.setattr(galileo_control, "_decorated", False)
     monkeypatch.setattr(galileo_control, "is_active", lambda: True)
@@ -75,8 +76,8 @@ def _counting_invoke(calls: list[str], text: str = "resposta do modelo"):
 
 @pytest.mark.parametrize("feature", sorted(galileo_control.CONTROL_FEATURES_PRE))
 def test_pre_feature_invokes_the_llm_exactly_once(active_control, feature):
-    """Regressão do defeito medido no Console: a subárvore da feature aparecia DUAS vezes no
-    trace porque o resultado não atravessava o `asyncio.run` do `@control`."""
+    """Regression for the defect measured in the Console: the feature's subtree appeared TWICE in
+    the trace because the result did not cross the `@control`'s `asyncio.run`."""
     calls: list[str] = []
     invoke_fn = _counting_invoke(calls)
 
@@ -84,7 +85,7 @@ def test_pre_feature_invokes_the_llm_exactly_once(active_control, feature):
         feature, "pergunta do comprador", invoke_fn, chain_invoke=lambda _p: invoke_fn(),
     )
 
-    assert calls == ["invoke"], f"LLM invocado {len(calls)}× (esperado 1)"
+    assert calls == ["invoke"], f"LLM invoked {len(calls)}x (expected 1)"
     assert text == "resposta do modelo"
     assert r.text == "resposta do modelo"
     assert status == "miss"
@@ -99,14 +100,15 @@ def test_post_feature_invokes_the_llm_exactly_once(active_control, feature):
         feature, "prompt da copy", invoke_fn, chain_invoke=lambda _p: invoke_fn(),
     )
 
-    assert calls == ["invoke"], f"LLM invocado {len(calls)}× (esperado 1)"
+    assert calls == ["invoke"], f"LLM invoked {len(calls)}x (expected 1)"
     assert text == "resposta do modelo"
     assert status == "miss"
 
 
 def test_result_sink_crosses_the_asyncio_run_boundary(active_control):
-    """O mecanismo, isolado: `set()` num ContextVar não volta do `asyncio.run`; a mutação de um
-    container que já existia no contexto de fora, sim. É disso que o fix depende."""
+    """The mechanism, isolated: a `set()` on a ContextVar does not come back out of
+    `asyncio.run`; mutating a container that already existed in the outer context does. That's
+    what the fix depends on."""
     import contextvars
 
     value_var: contextvars.ContextVar = contextvars.ContextVar("v", default=None)
@@ -121,12 +123,12 @@ def test_result_sink_crosses_the_asyncio_run_boundary(active_control):
     sink_var.set(sink)
     asyncio.run(_inner())
 
-    assert value_var.get() is None, "premissa do fix quebrou: ContextVar.set() propagou"
+    assert value_var.get() is None, "fix premise broke: ContextVar.set() propagated"
     assert sink == {"mantido": True}
 
 
 def test_inactive_control_still_invokes_once(monkeypatch):
-    """Atalho de quando o Agent Control está desligado (a suíte inteira roda assim)."""
+    """Shortcut for when Agent Control is turned off (the whole suite runs this way)."""
     monkeypatch.setattr(galileo_control, "is_active", lambda: False)
     calls: list[str] = []
     invoke_fn = _counting_invoke(calls)
@@ -152,7 +154,7 @@ def test_uncontrolled_feature_takes_the_shortcut(active_control):
 
 
 def test_pre_block_returns_the_safe_text_without_invoking_the_llm(active_control, monkeypatch):
-    """Block em feature pre: o step levanta ControlViolationError e o LLM não roda."""
+    """Block on a pre feature: the step raises ControlViolationError and the LLM doesn't run."""
     violation = sys.modules["agent_control"].ControlViolationError
 
     def _boom(_prompt):
@@ -167,13 +169,13 @@ def test_pre_block_returns_the_safe_text_without_invoking_the_llm(active_control
         chain_invoke=lambda _p: invoke_fn(),
     )
 
-    assert calls == [], "LLM não pode rodar quando o Block dispara"
+    assert calls == [], "LLM must not run when the Block fires"
     assert status == "control_block"
     assert "catalog" in text.lower()
 
 
 async def test_run_control_step_works_inside_running_event_loop(active_control):
-    """Regressão UC-3/UC-4: ``@control`` via ``run_control_step`` não estoura no loop do FastAPI."""
+    """Regression UC-3/UC-4: ``@control`` via ``run_control_step`` doesn't blow up FastAPI's loop."""
     calls: list[str] = []
 
     def _sync_step() -> str:

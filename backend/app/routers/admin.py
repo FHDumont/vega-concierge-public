@@ -1,29 +1,29 @@
-"""Admin de NEGÓCIO (sem auth, régua dos controles de workshop) — vendas, produtos e seed."""
+"""Business Admin (no auth, governs workshop controls) — sales, products, and seed."""
 from fastapi import APIRouter, Header
 from ..ai_agents import insights
 from ..runnable_config import ai_request_scope
 from ..store import admin, orders
 from ..store.tools import CATALOG, reset_stock, restore_catalog
 
-# Sem `prefix`: cada rota carrega o path completo, igualzinho ao que estava em `api.py`.
+# No `prefix`: each route carries the full path, just like it was in `api.py`.
 router = APIRouter()
 
 
-# --- Admin (camada de NEGÓCIO — dono; F-014) --------------------------------
-# Endpoints aditivos de agregação/admin (não mudam o contrato existente). Vê TODOS
-# os pedidos (diferente do GET /api/orders, escopado pela sessão). Não exigem auth —
-# consistente com os controles de workshop (/api/problems), numa VM por participante.
-# O detalhe da ordem reusa GET /api/orders/{id} (público).
+# --- Admin (business layer — owner; F-014) --------------------------------
+# Additive endpoints for aggregation/admin (don't change existing contract). Sees ALL
+# orders (different from GET /api/orders, scoped by session). Don't require auth —
+# consistent with workshop controls (/api/problems), one VM per participant.
+# Order details reuse GET /api/orders/{id} (public).
 
 @router.get("/api/admin/summary")
 def admin_summary():
     return orders.sales_summary()
 
 
-# IA-Admin (F-024): insights de vendas + anomalias + reposição a partir de dados AGREGADOS
-# (não dumps crus → custo controlado por cache/max_tokens). Passa pelo controle de custo (F-022).
-# Honra os toggles. Mesma régua dos demais /api/admin/* (sem auth — controles de workshop, VM
-# por participante).
+# AI-Admin (F-024): sales insights + anomalies + replenishment from AGGREGATED data
+# (no raw dumps → cost controlled by cache/max_tokens). Passes through cost control (F-022).
+# Honors toggles. Same rules as other /api/admin/* (no auth — workshop controls, VM
+# per participant).
 @router.get("/api/admin/insights")
 def admin_insights(x_vega_session: str | None = Header(default=None)):
     with ai_request_scope(feature="admin_insights", session_id=x_vega_session) as config:
@@ -32,7 +32,7 @@ def admin_insights(x_vega_session: str | None = Header(default=None)):
 
 @router.get("/api/admin/orders")
 def admin_orders():
-    return orders.list_orders()  # todos os pedidos, mais recentes primeiro
+    return orders.list_orders()  # all orders, most recent first
 
 
 @router.get("/api/admin/products")
@@ -44,12 +44,12 @@ def admin_products():
 
 @router.post("/api/admin/seed")
 def admin_seed():
-    return {"seeded": admin.seed_sample_orders()}  # popula pedidos de exemplo (demo)
+    return {"seeded": admin.seed_sample_orders()}  # populates sample orders (demo)
 
 
 @router.delete("/api/admin/orders")
 def admin_clear():
-    # Clear Sales (F-027/F-GALILEO-7): apaga pedidos, repõe estoque e soft-deletes do catálogo.
+    # Clear Sales (F-027/F-GALILEO-7): deletes orders, replenishes stock and soft-deletes catalog.
     cleared = orders.clear_all()
     return {
         "cleared": cleared,

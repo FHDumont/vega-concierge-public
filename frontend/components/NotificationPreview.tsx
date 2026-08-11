@@ -1,9 +1,9 @@
 "use client";
-// IA-Notificação (F-031): copy gerada de e-mail p/ o evento do pedido (confirmação/enviado),
-// reaproveitando a notificação simulada (F-005). Exibida como uma "notification preview" estilo
-// e-mail na confirmação do checkout e no detalhe do pedido. Mostra só o conteúdo gerado.
-// Backend resolve a ordem (grounding real) e honra os toggles; offline → fallback gracioso.
-// Estilizado pelas paletas.
+// Notification AI (F-031): email copy generated for the order event (confirmed/shipped),
+// reusing the simulated notification (F-005). Shown as an email-style "notification preview"
+// on checkout confirmation and on the order detail page. Shows only the generated content.
+// Backend resolves the order (real grounding) and honors the toggles; offline → graceful fallback.
+// Styled via the palettes.
 import { useEffect, useState } from "react";
 import { NotificationCopy, orderNotification } from "@/lib/api";
 import { dedupedFetch } from "@/lib/requestDedup";
@@ -27,7 +27,7 @@ export default function NotificationPreview({ orderId }: { orderId: string }) {
     };
   }, [orderId]);
 
-  if (failed) return null; // silencioso: a notificação é um extra (o status já está visível)
+  if (failed) return null; // silent: the notification is an extra (status is already visible)
 
   return (
     <div className="ns-notify" aria-label="Order notification preview">

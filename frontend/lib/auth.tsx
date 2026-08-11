@@ -1,7 +1,7 @@
 "use client";
-// Estado de sessão do cliente (F-008): usuário logado + token. O token persiste em
-// localStorage e é injetado no client de API (setAuthToken) para as chamadas autenticadas
-// (pedidos/histórico/me). Auth de DEMO — ver ADR-011 / DT-010.
+// Client-side session state (F-008): logged-in user + token. The token persists in
+// localStorage and is injected into the API client (setAuthToken) for authenticated
+// calls (orders/history/me). DEMO auth — see ADR-011 / DT-010.
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import {
   AuthResult,
@@ -16,12 +16,12 @@ import {
 
 type AuthContextValue = {
   user: User | null;
-  ready: boolean; // sessão já resolvida (evita flicker antes de checar o token salvo)
+  ready: boolean; // session already resolved (avoids flicker before checking the saved token)
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
-  saveAddress: (address: string) => Promise<void>; // salva/edita o endereço do perfil (F-011)
+  saveAddress: (address: string) => Promise<void>; // saves/edits the profile address (F-011)
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -32,13 +32,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
 
-  // Restaura a sessão a partir do token salvo (revalida no backend; descarta se expirou).
+  // Restores the session from the saved token (revalidates against the backend; discards if expired).
   useEffect(() => {
     let token: string | null = null;
     try {
       token = localStorage.getItem(TOKEN_KEY);
     } catch {
-      /* storage indisponível */
+      /* storage unavailable */
     }
     if (!token) {
       setReady(true);
@@ -48,10 +48,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     getMe()
       .then((u) => {
         if (u) setUser(u);
-        else clearToken(); // token inválido (ex.: backend reiniciou — sessões em memória)
+        else clearToken(); // invalid token (e.g. backend restarted — in-memory sessions)
       })
       .catch(() => {
-        /* backend fora do ar — mantém deslogado, sem quebrar a loja */
+        /* backend unreachable — stays logged out, without breaking the shop */
       })
       .finally(() => setReady(true));
   }, []);
@@ -61,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       localStorage.setItem(TOKEN_KEY, result.token);
     } catch {
-      /* storage indisponível — sessão vale só nesta aba */
+      /* storage unavailable — session only valid in this tab */
     }
     setUser(result.user);
   }
@@ -86,13 +86,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await apiLogout().catch(() => {});
     clearToken();
   }
-  // Recarrega o usuário (ex.: após um pedido, p/ refletir gasto/tier atualizados).
+  // Reloads the user (e.g. after an order, to reflect updated spend/tier).
   async function refresh() {
     const u = await getMe().catch(() => null);
     if (u) setUser(u);
     else clearToken();
   }
-  // Salva o endereço no perfil e reflete o usuário atualizado no estado (F-011).
+  // Saves the address to the profile and reflects the updated user in state (F-011).
   async function saveAddress(address: string) {
     setUser(await apiUpdateAddress(address));
   }

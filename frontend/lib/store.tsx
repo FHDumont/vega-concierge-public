@@ -1,7 +1,7 @@
 "use client";
-// Estado de cliente da Loja compartilhado entre rotas (home e /product/[sku]).
-// Cart persiste em localStorage para que "add to cart" funcione a partir da página
-// de detalhe e reflita no contador do header em qualquer rota.
+// Client-side Shop state shared across routes (home and /product/[sku]).
+// Cart persists in localStorage so "add to cart" works from the detail
+// page and reflects in the header counter on any route.
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { Product } from "./api";
 import { CartItem, Category } from "./shop";
@@ -10,7 +10,7 @@ type ShopContextValue = {
   search: string;
   setSearch: (v: string) => void;
 
-  // Filtro de categoria compartilhado com a nav horizontal do header (F-009). "All" = sem filtro.
+  // Category filter shared with the header's horizontal nav (F-009). "All" = no filter.
   category: Category;
   setCategory: (c: Category) => void;
 
@@ -39,13 +39,13 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   const [cartOpen, setCartOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
-  // Carrega do localStorage após montar (evita mismatch de hidratação SSR).
+  // Loads from localStorage after mount (avoids SSR hydration mismatch).
   useEffect(() => {
     try {
       const c = localStorage.getItem(CART_KEY);
       if (c) setCart(JSON.parse(c));
     } catch {
-      /* storage indisponível/corrompido — começa vazio */
+      /* storage unavailable/corrupted — starts empty */
     }
     setHydrated(true);
   }, []);
@@ -72,8 +72,8 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         .filter((i) => i.qty > 0),
     );
   }
-  // Define a quantidade absoluta de um item (usado pelo stepper Number do carrinho).
-  // qty <= 0 remove o item.
+  // Sets the absolute quantity of an item (used by the cart's Number stepper).
+  // qty <= 0 removes the item.
   function setQty(sku: string, qty: number) {
     setCart((prev) =>
       qty <= 0

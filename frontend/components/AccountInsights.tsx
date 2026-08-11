@@ -1,5 +1,5 @@
 "use client";
-// IA-Conta (F-031): insights do histórico de compras — opt-in via botão (F-WORKSHOP-SURFACE-1).
+// Account AI (F-031): purchase history insights — opt-in via button (F-WORKSHOP-SURFACE-1).
 import { useState } from "react";
 import { AccountInsights as Insights, accountInsights } from "@/lib/api";
 import AiThinking from "./AiThinking";

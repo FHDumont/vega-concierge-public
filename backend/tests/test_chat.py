@@ -1,4 +1,4 @@
-"""Roteamento de intent do `POST /api/chat` sob stub — ex `run_chat_demo.py`
+"""Intent routing of `POST /api/chat` under stub — formerly `run_chat_demo.py`
 (F-050-CHAT, F-051, F-052, F-053, F-054)."""
 from __future__ import annotations
 
@@ -14,9 +14,10 @@ from tests.spans import SpanSpy, has
 
 @pytest.fixture(autouse=True)
 def _orders_table():
-    """DT-036: com o DB de teste isolado a tabela `orders` não vem pré-criada (o `lifespan` real
-    que roda `orders.init_db()` nunca é acionado aqui — o módulo chama `arun_chat_workflow`
-    direto). Stats/policies leem `orders.list_orders()`; sem a tabela a query estoura."""
+    """DT-036: with the isolated test DB, the `orders` table doesn't come pre-created (the real
+    `lifespan`, which runs `orders.init_db()`, is never triggered here — the module calls
+    `arun_chat_workflow` directly). Stats/policies read `orders.list_orders()`; without the
+    table the query blows up."""
     orders.init_db()
 
 
@@ -49,10 +50,10 @@ def _haystacks(final: dict) -> list[str]:
 
 def assert_in_reply(final: dict, needle: str) -> None:
     assert any(needle.lower() in h.lower() for h in _haystacks(final)), \
-        f"{needle!r} ausente em {_haystacks(final)}"
+        f"{needle!r} missing from {_haystacks(final)}"
 
 
-# --- intents sem contexto -----------------------------------------------------
+# --- intents without context ---------------------------------------------------
 
 @pytest.mark.parametrize("message,expected", [
     ("What are the policies of Vega?", "general"),
@@ -74,7 +75,7 @@ async def test_message_routes_to_expected_intent(message, expected):
     "search for wireless headphones",
 ])
 async def test_message_gets_answered(message):
-    # Estes não fixam intent (o roteamento sob stub varia); o contrato é responder algo.
+    # These don't pin down intent (routing under stub varies); the contract is answering something.
     final = await run_chat([{"role": "user", "content": message}])
     assert final.get("answer"), final
 
@@ -103,7 +104,7 @@ async def test_most_expensive_stats_keeps_fact_layout():
     assert any("expensive" in (f.get("label") or "").lower() for f in facts), facts
 
 
-# --- intents com contexto de produto ------------------------------------------
+# --- intents with product context -----------------------------------------------
 
 @pytest.mark.parametrize("message", [
     "Does it have noise cancellation?",
@@ -182,7 +183,7 @@ async def test_stats_survives_the_hallucination_toggle(reset_problem_flags):
     assert final.get("intent") == "stats"
 
 
-# --- stats da conta (exigem o usuário de demo com histórico) -------------------
+# --- account stats (require the demo user with history) -------------------------
 
 def _demo_user_id() -> str | None:
     orders.init_db()
@@ -196,7 +197,7 @@ def _demo_user_id() -> str | None:
 
 
 def _ensure_demo_history(user_id: str) -> None:
-    """Repõe pedidos pagos de demo se o histórico foi zerado (ou só tem FAILED)."""
+    """Restocks paid demo orders if the history was cleared (or only has FAILED)."""
     if any(o["status"] in ("PAID", "SHIPPED", "DELIVERED")
            for o in orders.list_orders_for_user(user_id)):
         return
@@ -213,7 +214,7 @@ def _ensure_demo_history(user_id: str) -> None:
 def demo_user_id() -> str:
     user_id = _demo_user_id()
     if not user_id:
-        pytest.skip("usuário de demo indisponível")
+        pytest.skip("demo user unavailable")
     return user_id
 
 
@@ -237,7 +238,7 @@ async def test_account_order_count_question_quotes_the_real_count(demo_user_id):
     assert_in_reply(final, str(count))
 
 
-# --- returns (exige um pedido DELIVERED) --------------------------------------
+# --- returns (requires a DELIVERED order) ----------------------------------------
 
 @pytest.fixture
 def delivered_order_id() -> str:
@@ -245,7 +246,7 @@ def delivered_order_id() -> str:
     for order in orders.list_orders():
         if order["status"] == "DELIVERED":
             return order["id"]
-    pytest.skip("nenhum pedido DELIVERED disponível")
+    pytest.skip("no DELIVERED order available")
 
 
 async def test_refund_request_reaches_the_returns_flow(delivered_order_id):

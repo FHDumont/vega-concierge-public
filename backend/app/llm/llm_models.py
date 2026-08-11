@@ -1,8 +1,8 @@
-"""Choke point LangChain para LLM (F-OBS-PREP-1 / ADR-027).
+"""LangChain choke point for LLM (F-OBS-PREP-1 / ADR-027).
 
-Resolve config por agente → `ChatOpenAI` / `ChatAnthropic` / stub offline. Caminho de agentes
-usa `invoke` (não `llm.complete`). Cascata de fallback espelha `get_llm_for` / `get_llm`.
-Sem imports de galileo/opentelemetry/openinference nesta fase.
+Resolves config per agent → `ChatOpenAI` / `ChatAnthropic` / offline stub. Agent path
+uses `invoke` (not `llm.complete`). Fallback cascade mirrors `get_llm_for` / `get_llm`.
+No imports of galileo/opentelemetry/openinference at this stage.
 """
 from __future__ import annotations
 
@@ -26,21 +26,21 @@ from .llm_providers import bedrock_region, provider_configs_for_agent
 from ..settings import settings
 from .stub import VegaStubChatModel, make_stub_chat_model
 
-# Prompt-cache do *provider* (Anthropic cache_control) — orthogonal ao cache F-022 de resposta.
-# Default off: lab multi-gateway; ligar só com Claude real. OpenAI cacheia prefixo automaticamente.
+# *Provider* prompt-cache (Anthropic cache_control) — orthogonal to F-022 response cache.
+# Default off: lab multi-gateway; enable only with real Claude. OpenAI caches prefix automatically.
 _PROVIDER_PROMPT_CACHE_ON = settings.llm_provider_prompt_cache
 
 
 def provider_prompt_cache_enabled() -> bool:
-    """True se LLM_PROVIDER_PROMPT_CACHE pede cache_control no system (só Anthropic)."""
+    """True if LLM_PROVIDER_PROMPT_CACHE requests cache_control in system (Anthropic only)."""
     return _PROVIDER_PROMPT_CACHE_ON
 
 
 def make_system_message(model: BaseChatModel, system: str) -> SystemMessage:
-    """SystemMessage; com flag on + family anthropic → content block com cache_control ephemeral.
+    """SystemMessage; with flag on + anthropic family → content block with cache_control ephemeral.
 
-    Não aplica a openai/stub/openai-compat (evita campos desconhecidos em gateways).
-    OpenAI oficial já faz prompt caching automático acima do limiar — só métricas (P4a)."""
+    Doesn't apply to openai/stub/openai-compat (avoids unknown fields in gateways).
+    Official OpenAI already does prompt caching automatically above threshold — just metrics (P4a)."""
     text = system or ""
     if provider_prompt_cache_enabled():
         _, family, _ = _model_identity(model)
@@ -53,9 +53,9 @@ def make_system_message(model: BaseChatModel, system: str) -> SystemMessage:
     return SystemMessage(content=text)
 
 
-# Falha de um provider na cascata: (provider, family, model, mensagem crua sanitizada).
-# `family` viaja junto p/ que o LLMResult de erro carregue a família REAL do provider que
-# falhou (anthropic/bedrock/openai), em vez de um default fixo.
+# Failure of a provider in cascade: (provider, family, model, sanitized raw message).
+# `family` travels with to let error LLMResult carry REAL family of failed provider
+# (anthropic/bedrock/openai), instead of fixed default.
 CascadeError = tuple[str, str, str, str]
 
 
@@ -65,10 +65,10 @@ def is_stub_output(text: str) -> bool:
 
 
 def format_llm_provider_error(errors: list[CascadeError]) -> str:
-    """Mensagem legível p/ o shopper quando a cascata de providers falhou antes do stub.
+    """Readable message for shopper when provider cascade failed before stub.
 
-    Agnóstica de provider: nomeia quem falhou e aponta o Admin. O mesmo texto serve p/ OpenAI,
-    Anthropic, Bedrock, Groq ou Ollama — nenhum provider tem instrução própria embutida aqui."""
+    Provider-agnostic: names who failed and points to Admin. Same text works for OpenAI,
+    Anthropic, Bedrock, Groq, or Ollama — no provider has its own instruction embedded here."""
     if not errors:
         return (
             "The AI assistant is temporarily unavailable. "
@@ -103,7 +103,7 @@ def format_llm_provider_error(errors: list[CascadeError]) -> str:
 
 
 def apply_cascade_stub_policy(text: str, errors: list[CascadeError]) -> str:
-    """Substitui eco stub (`[stub] sua pergunta…`) por erro legível quando providers reais falharam."""
+    """Replace stub echo (`[stub] your question…`) with readable error when real providers failed."""
     if errors and is_stub_output(text):
         return format_llm_provider_error(errors)
     return text
@@ -118,7 +118,7 @@ _LLM_UNAVAILABLE_PREFIXES = (
 
 
 def is_llm_unavailable_reply(text: str) -> bool:
-    """True quando a resposta é erro de provider/cascata — não deve renderizar artefatos de loja."""
+    """True when response is provider/cascade error — should not render store artifacts."""
     t = (text or "").strip()
     if is_stub_output(t):
         return True
@@ -131,7 +131,7 @@ def _record_cascade_error(errors: list[CascadeError], model: BaseChatModel, exc:
 
 
 def _sanitize_trace_text(text: str, *, max_len: int = 8000) -> str:
-    """Remove caracteres que quebram serialização/UI de traces (Splunk Agent Observability Console)."""
+    """Remove characters that break trace serialization/UI (Splunk Agent Observability Console)."""
     if not text:
         return ""
     cleaned = "".join(c if c.isprintable() or c in "\n\t" else " " for c in str(text))
@@ -183,8 +183,8 @@ def invoke_bind_tools_cascade(
     if response is None:
         if errors:
             response = AIMessage(content=format_llm_provider_error(errors))
-            # Falhou tudo: o último candidato é o stub, mas quem falhou foi o provider primário —
-            # é ele que precisa aparecer no Inspector/telemetria.
+            # All failed: last candidate is stub, but primary provider failed —
+            # it's what needs to appear in Inspector/telemetry.
             if models:
                 model_used = models[0]
         else:
@@ -208,7 +208,7 @@ async def ainvoke_bind_tools_cascade(
     run_name: str,
     verbose: bool = False,
 ) -> tuple[AIMessage, BaseChatModel, list[CascadeError]]:
-    """Async bind_tools cascade — mesma política que invoke_bind_tools_cascade."""
+    """Async bind_tools cascade — same policy as invoke_bind_tools_cascade."""
     models = resolve_chat_models(agent_name)
     errors: list[CascadeError] = []
     response: AIMessage | None = None
@@ -240,8 +240,8 @@ async def ainvoke_bind_tools_cascade(
     if response is None:
         if errors:
             response = AIMessage(content=format_llm_provider_error(errors))
-            # Falhou tudo: o último candidato é o stub, mas quem falhou foi o provider primário —
-            # é ele que precisa aparecer no Inspector/telemetria.
+            # All failed: last candidate is stub, but primary provider failed —
+            # it's what needs to appear in Inspector/telemetry.
             if models:
                 model_used = models[0]
         else:
@@ -255,7 +255,7 @@ async def ainvoke_bind_tools_cascade(
 
 
 class VegaChatAnthropic(ChatAnthropic):
-    """ChatAnthropic com trust store do OS — langchain-anthropic 1.4.x não aceita http_client no ctor."""
+    """ChatAnthropic with OS trust store — langchain-anthropic 1.4.x doesn't accept http_client in ctor."""
 
     @cached_property
     def _client(self) -> anthropic.Client:
@@ -504,7 +504,7 @@ def _extract_usage(response: AIMessage) -> tuple[int, int, str, int]:
 
 
 def _with_run_name(bound: Any, model: BaseChatModel, run_name: str | None = None) -> Any:
-    """Mitiga perda de `name` após `bind` / `bind_tools` — padrão golden-demo."""
+    """Mitigates loss of `name` after `bind` / `bind_tools` — golden-demo pattern."""
     label = run_name or getattr(model, "name", None)
     if label:
         return bound.with_config({"run_name": label, "name": label})
@@ -559,7 +559,7 @@ def invoke_chat_cascade(
     verbose: bool = False,
     config=None,
 ) -> LLMResult:
-    """Cascata observável: ChatOpenAI/Anthropic/Bedrock → stub, com nome real do modelo no span."""
+    """Observable cascade: ChatOpenAI/Anthropic/Bedrock → stub, with real model name in span."""
     models = resolve_chat_models(agent_name)
     errors: list[CascadeError] = []
     last_err: Exception | None = None
@@ -605,7 +605,7 @@ def invoke_chat_cascade(
                     prompt_cache_tokens=result.prompt_cache_tokens,
                 )
             return result
-        except Exception as exc:  # noqa: BLE001 — tenta o próximo provider da cascata
+        except Exception as exc:  # noqa: BLE001 — try next cascade provider
             last_err = exc
             _record_cascade_error(errors, candidate, exc)
             continue

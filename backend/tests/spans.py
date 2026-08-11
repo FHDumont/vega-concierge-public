@@ -1,5 +1,5 @@
-"""Espião de callbacks LangChain — captura os rótulos que o `GalileoAsyncCallback` consumiria,
-sem rede. Extraído dos smokes `run_span_names_demo.py`/`run_tools_demo.py` (F-BACKEND-1)."""
+"""LangChain callback spy — captures the labels that `GalileoAsyncCallback` would consume,
+without network. Extracted from the `run_span_names_demo.py`/`run_tools_demo.py` smokes (F-BACKEND-1)."""
 from __future__ import annotations
 
 from langchain_core.callbacks import BaseCallbackHandler
@@ -38,10 +38,10 @@ def serialized_model_id(serialized: dict | None) -> str:
 
 
 class SpanSpy(BaseCallbackHandler):
-    """Captura rótulos visíveis de LLM spans, chains (incl. nós LangGraph), tools e retrievers.
+    """Captures visible labels from LLM spans, chains (incl. LangGraph nodes), tools, and retrievers.
 
-    O span de retriever é o ponto frágil da F-GALILEO-1: ele só aparece se o `config` chegar do
-    tool ao retriever, e isso é fácil de quebrar sem perceber."""
+    The retriever span is the fragile point of F-GALILEO-1: it only shows up if `config` reaches
+    the retriever from the tool, and that's easy to break without noticing."""
 
     def __init__(self) -> None:
         self.llm_names: list[str] = []
@@ -89,7 +89,7 @@ class SpanSpy(BaseCallbackHandler):
     def on_retriever_end(self, documents, **kwargs):  # noqa: ANN001
         self.retriever_outputs.append(documents)
 
-    # --- consultas ---------------------------------------------------------
+    # --- queries -------------------------------------------------------
 
     def metadata_for(self, name_substr: str) -> dict | None:
         needle = name_substr.lower()
@@ -105,6 +105,6 @@ def has(substr: str, names: list[str]) -> bool:
 
 
 def is_title_case_llm_name(name: str) -> bool:
-    """True se parece Title Case multi-palavra (espaço + maiúscula) — padrão legado F-GALILEO-4."""
+    """True if it looks like multi-word Title Case (space + uppercase) — legacy F-GALILEO-4 pattern."""
     parts = (name or "").split()
     return len(parts) >= 2 and any(p[:1].isupper() for p in parts[1:] if p)

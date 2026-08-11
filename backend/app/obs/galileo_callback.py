@@ -43,36 +43,35 @@ def _workflow_name(kwargs: dict[str, Any], serialized: dict[str, Any] | None = N
 if GalileoAsyncCallback is not None:
 
     class VegaGalileoCallback(GalileoAsyncCallback):
-        """GalileoAsyncCallback + Trace UX do Vega (nunca altera a execução da loja).
+        """GalileoAsyncCallback + Vega Trace UX (never alters store execution).
 
-        Três coisas em cima do SDK:
+        Three things on top of SDK:
 
-        1. **Compactação de I/O** dos workflows LangGraph (raiz do trace só).
-        2. **Supressão + reparenting** de spans de plumbing (`galileo_span_policy`): o span
-           suprimido não é emitido e seus filhos são repintados no pai efetivo — o que promove
-           `[retriever]`/`[tool]` pra perto da raiz em vez de orfanizá-los (é exatamente isso que
-           a tag `langsmith:hidden` do SDK NÃO faz: ela esconde e quebra a subárvore).
-        3. **Trace vivo** (D.3): quando o `session_scope` já abriu o trace do request
-           (`start_new_trace=False`), a árvore do LangGraph é pendurada nele em vez de virar um
-           trace próprio no `commit()`, e a raiz — que nasce vazia — herda o input compacto do
-           primeiro workflow. É esse trace aberto que dá `current_parent()` ao Agent Control e
-           faz o span `[control]` existir.
+        1. **I/O compaction** of LangGraph workflows (trace root only).
+        2. **Suppression + reparenting** of plumbing spans (`galileo_span_policy`): suppressed span
+           is not emitted and its children are repainted to effective parent — which promotes
+           `[retriever]`/`[tool]` near root instead of orphaning them (that's exactly what
+           SDK's `langsmith:hidden` tag does NOT do: it hides and breaks subtree).
+        3. **Live trace** (D.3): when `session_scope` already opened request trace
+           (`start_new_trace=False`), LangGraph tree is hung on it instead of becoming own
+           trace on `commit()`, and root — which is born empty — inherits compact input from
+           first workflow. It's this open trace that gives `current_parent()` to Agent Control and
+           makes `[control]` span exist.
 
-        `_dropped` é o mapa `run_id suprimido → run_id do pai efetivo`. Ele guarda a cadeia já
-        resolvida, então um pai suprimido cujo pai também foi suprimido resolve em um passo. A
-        instância do callback é por request (`galileo_obs.callbacks()`), então o mapa tem a vida
-        de um trace.
+        `_dropped` is map `suppressed run_id → effective parent run_id`. It stores already-resolved chain,
+        so suppressed parent whose parent was also suppressed resolves in one step. Callback
+        instance is per request (`galileo_obs.callbacks()`), so map has trace lifetime.
         """
 
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             super().__init__(*args, **kwargs)
             self._dropped: dict[UUID, UUID] = {}
 
-        # --- helpers de reparenting ------------------------------------------
+        # --- reparenting helpers -----------------------------------------
 
         @staticmethod
         def _convert(run_id: UUID | None) -> UUID | None:
-            """Mesma normalização de id que o SDK faz antes de indexar `_nodes` (UUID7 → UUID4)."""
+            """Same id normalization SDK does before indexing `_nodes` (UUID7 → UUID4)."""
             if run_id is None:
                 return None
             if convert_uuid_if_uuid7 is None:
@@ -80,18 +79,18 @@ if GalileoAsyncCallback is not None:
             return convert_uuid_if_uuid7(run_id) or run_id
 
         def _effective_parent(self, parent_run_id: UUID | None) -> UUID | None:
-            """Resolve a cadeia de pais suprimidos até o primeiro span realmente emitido."""
+            """Resolve chain of suppressed parents to first really-emitted span."""
             current = self._convert(parent_run_id)
             seen: set[UUID] = set()
             while current is not None and current in self._dropped:
-                if current in seen:  # defensivo: ciclo impossível, mas não trava o request
+                if current in seen:  # defensive: cycle impossible, but don't hang request
                     return None
                 seen.add(current)
                 current = self._dropped[current]
             return current
 
         def _node_name(self, run_id: UUID | None) -> str | None:
-            """Nome do span já emitido — `None` quando não há span (raiz/pai desconhecido)."""
+            """Name of already-emitted span — `None` when no span (root/unknown parent)."""
             if run_id is None:
                 return None
             node = self._handler.get_node(run_id)
@@ -100,10 +99,10 @@ if GalileoAsyncCallback is not None:
             return str(node.span_params.get("name") or "")
 
         def _reparent(self, parent_run_id: UUID | None) -> UUID | None:
-            """Pai a usar no `super()` — o original quando nada foi suprimido acima."""
+            """Parent to use in `super()` — original when nothing was suppressed above."""
             try:
                 return self._effective_parent(parent_run_id)
-            except Exception as exc:  # noqa: BLE001 — sem reparenting é melhor que sem trace
+            except Exception as exc:  # noqa: BLE001 — reparenting fails better than no trace
                 _logger.warning("trace reparenting skipped (%s)", exc)
                 return parent_run_id
 
@@ -117,25 +116,24 @@ if GalileoAsyncCallback is not None:
             node_type: str = "chain",
         ) -> bool:
             if parent_run_id is None or effective_parent is None:
-                return False  # raiz do trace (ou pai perdido): emitir sempre
+                return False  # trace root (or lost parent): always emit
             if not self._handler.get_nodes():
-                return False  # nada emitido ainda — este span vira a raiz
+                return False  # nothing emitted yet — this span becomes root
             name = GalileoCallback._get_node_name(node_type, serialized, kwargs)
             if not name:
                 name = _workflow_name(kwargs, serialized)
-            # Pai efetivo sem nó registrado → `None` → `suppress` devolve False (árvore já
-            # estranha, não é hora de podar).
+            # Effective parent with no registered node → `None` → `suppress` returns False (tree already
+            # strange, not time to prune).
             return suppress(name, self._node_name(effective_parent))
 
         def _merge_cache_metadata(
             self, run_id: UUID | None, metadata: dict[str, Any] | None,
         ) -> None:
-            """F-022 vira metadata (D.2): quando o tool span `check_response_cache` é suprimido,
-            a decisão de cache não pode simplesmente desaparecer do Console — ela é gravada no
-            span ancestral (`effective_parent`) como `response_cache`/`cache_hit`, com
-            model/provider/tokens quando disponíveis (hit). Só age quando o `metadata` ambiente
-            carrega `response_cache` — ou seja, só no caminho do F-022, não em qualquer supressão
-            de tool span."""
+            """F-022 becomes metadata (D.2): when tool span `check_response_cache` is suppressed,
+            cache decision can't simply disappear from Console — it's recorded in
+            ancestor span (`effective_parent`) as `response_cache`/`cache_hit`, with
+            model/provider/tokens when available (hit). Acts only when `metadata` environment
+            carries `response_cache` — i.e., only in F-022 path, not any tool span suppression."""
             if run_id is None or not isinstance(metadata, dict):
                 return
             cache_status = metadata.get("response_cache")
@@ -156,34 +154,34 @@ if GalileoAsyncCallback is not None:
                 merged = dict(existing) if isinstance(existing, dict) else {}
                 merged.update(extra)
                 node.span_params["metadata"] = merged
-            except Exception as exc:  # noqa: BLE001 — observabilidade nunca derruba a loja
+            except Exception as exc:  # noqa: BLE001 — observability never breaks store
                 _logger.warning("trace cache metadata merge skipped (%s)", exc)
 
-        # --- trace vivo (D.3) --------------------------------------------------
+        # --- live trace (D.3) ---------------------------------------------------
 
         def _live_trace(self) -> Any | None:
-            """Trace aberto pelo `session_scope` — `None` no modo batch.
+            """Trace opened by `session_scope` — `None` in batch mode.
 
-            No modo batch (`_start_new_trace=True`) quem cria a raiz é o `commit()` do próprio
-            SDK, e não há nada pra enriquecer aqui."""
+            In batch mode (`_start_new_trace=True`) SDK's `commit()` creates root,
+            and there's nothing to enrich here."""
             if getattr(self._handler, "_start_new_trace", True):
                 return None
             parent = self._handler._galileo_logger.current_parent()
             if parent is None or getattr(parent, "_parent", None) is not None:
-                return None  # não é a raiz do trace (span aberto no meio) — não mexer
+                return None  # not trace root (span opened mid-way) — don't touch
             return parent
 
         def _seed_live_trace_input(
             self, serialized: dict[str, Any] | None, inputs: dict[str, Any], kwargs: dict[str, Any],
         ) -> None:
-            """Empresta pra raiz do trace o input do primeiro workflow LangGraph do request.
+            """Lend trace root the input from first LangGraph workflow of request.
 
-            Com trace vivo a raiz do Console passa a ser o trace aberto pelo `session_scope`,
-            que nasce sem input (o request ainda não processou nada quando ele abre). O payload
-            só aparece no `on_chain_start` do grafo — compactado pelas mesmas regras do output
-            (`compact_trace_payload`), senão o estado inteiro do LangGraph volta pra raiz, que é
-            exatamente o que a compactação existe pra evitar. O output da raiz o SDK herda do
-            último filho no `conclude` (o próprio workflow, já compacto)."""
+            With live trace Console root becomes trace opened by `session_scope`,
+            born without input (request hasn't processed anything when it opens). Payload
+            only appears in graph's `on_chain_start` — compacted by same output rules
+            (`compact_trace_payload`), else entire LangGraph state goes to root, which is
+            exactly what compaction exists to avoid. Root output SDK inherits from
+            last child on `conclude` (workflow itself, already compact)."""
             trace = self._live_trace()
             if trace is None or getattr(trace, "input", None):
                 return
@@ -192,7 +190,7 @@ if GalileoAsyncCallback is not None:
                 name = _workflow_name(kwargs, serialized)
             trace.input = serialize_to_str(compact_trace_payload(inputs, name=name))
 
-        # --- chain ------------------------------------------------------------
+        # --- chain --------------------------------------------------------
 
         async def on_chain_start(
             self,
@@ -205,12 +203,12 @@ if GalileoAsyncCallback is not None:
             **kwargs: Any,
         ) -> Any:
             if parent_run_id is None:
-                # Raiz LangChain: a compactação de I/O continua ancorada aqui (`parent_run_id is
-                # None`), independente de existir ou não um trace vivo acima — o trace do
-                # `session_scope` não é um run do LangChain e nunca aparece como `parent_run_id`.
+                # LangChain root: I/O compaction stays anchored here (`parent_run_id is
+                # None`), regardless of live trace existing above — `session_scope` trace
+                # is not LangChain run and never appears as `parent_run_id`.
                 try:
                     self._seed_live_trace_input(serialized, inputs, kwargs)
-                except Exception as exc:  # noqa: BLE001 — raiz sem input é melhor que 500
+                except Exception as exc:  # noqa: BLE001 — root without input beats 500
                     _logger.warning("trace root input seeding skipped (%s)", exc)
             effective_parent = parent_run_id
             try:
@@ -218,10 +216,10 @@ if GalileoAsyncCallback is not None:
                 hidden = bool(tags) and _HIDDEN_TAG in (tags or [])
                 drop = hidden or self._should_drop(serialized, kwargs, parent_run_id, effective_parent)
                 if drop and effective_parent is not None:
-                    # Não emite; registra o pai efetivo pros filhos subirem um nível.
+                    # Doesn't emit; registers effective parent for children to climb one level.
                     self._dropped[self._convert(run_id) or run_id] = effective_parent
                     return None
-            except Exception as exc:  # noqa: BLE001 — fallback SEM supressão
+            except Exception as exc:  # noqa: BLE001 — fallback WITHOUT suppression
                 _logger.warning("trace span policy skipped on chain_start (%s)", exc)
                 effective_parent = parent_run_id
 
@@ -253,18 +251,18 @@ if GalileoAsyncCallback is not None:
             try:
                 if should_compact_chain_io(name, parent_run_id):
                     outputs = compact_trace_payload(outputs, name=name)
-            except Exception as exc:  # noqa: BLE001 — observability must not break the store
+            except Exception as exc:  # noqa: BLE001 — observability must not break store
                 _logger.warning("trace compact skipped on chain_end (%s)", exc)
             try:
-                # Span suprimido nunca virou nó: `end_node` só loga um debug e volta. Mantemos a
-                # chamada mesmo assim pra não divergir do ciclo de vida do SDK.
+                # Suppressed span never became node: `end_node` just logs debug and returns. We keep
+                # call anyway to not diverge from SDK lifecycle.
                 await super().on_chain_end(
                     outputs, run_id=run_id, parent_run_id=parent_run_id, **kwargs,
                 )
             except Exception as exc:  # noqa: BLE001
                 _logger.warning("galileo on_chain_end failed (%s)", exc)
 
-        # --- folhas: só reparenting (nunca supressão) -------------------------
+        # --- leaves: reparenting only (never suppression) -----------------------
 
         async def on_llm_start(
             self,
@@ -303,10 +301,10 @@ if GalileoAsyncCallback is not None:
             metadata: dict[str, Any] | None = None,
             **kwargs: Any,
         ) -> Any:
-            # Folha, mas D.2 abre uma exceção pro tool span `check_response_cache` (F-022): ele
-            # é puro plumbing de observabilidade (a decisão de cache não é negócio do shopper) e
-            # some do trace — a decisão sobrevive como metadata no pai efetivo (`_merge_cache_metadata`).
-            # Qualquer outro tool span continua só reparentando, nunca suprimindo.
+            # Leaf, but D.2 opens an exception for the tool span `check_response_cache` (F-022): it
+            # is pure observability plumbing (the cache decision is not the shopper's business) and
+            # disappears from the trace — the decision survives as metadata on the effective parent (`_merge_cache_metadata`).
+            # Any other tool span keeps only reparenting, never suppression.
             effective_parent = parent_run_id
             try:
                 effective_parent = self._effective_parent(parent_run_id)
@@ -318,7 +316,7 @@ if GalileoAsyncCallback is not None:
                     self._dropped[self._convert(run_id) or run_id] = effective_parent
                     self._merge_cache_metadata(effective_parent, metadata)
                     return None
-            except Exception as exc:  # noqa: BLE001 — fallback SEM supressão
+            except Exception as exc:  # noqa: BLE001 — fallback WITHOUT suppression
                 _logger.warning("trace span policy skipped on tool_start (%s)", exc)
                 effective_parent = parent_run_id
             await super().on_tool_start(

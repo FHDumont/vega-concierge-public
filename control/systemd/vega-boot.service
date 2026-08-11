@@ -1,11 +1,11 @@
-# Vega boot — stack Docker (fresh-state + pull + up) na AMI/clone (F-DEPLOY-PROD-1).
-# Control (vega-control/vega-ttyd) e workshop (vega-workshop) sobem em paralelo via multi-user.target.
+# Vega boot — Docker stack (fresh-state + pull + up) on the AMI/clone (F-DEPLOY-PROD-1).
+# Control (vega-control/vega-ttyd) and workshop (vega-workshop) come up in parallel via multi-user.target.
 [Unit]
 Description=Vega Concierge stack boot (fresh-state + pull + up)
-# Docker via pacote (docker.service) OU snap (snap.docker.dockerd.service) — unit ausente em After= é ignorada.
+# Docker via package (docker.service) OR snap (snap.docker.dockerd.service) — a missing unit in After= is ignored.
 After=docker.service snap.docker.dockerd.service network-online.target
 Wants=network-online.target
-# Ollama é soft — boot segue se a unit não existir na AMI.
+# Ollama is soft — boot proceeds if the unit doesn't exist on the AMI.
 After=ollama.service
 Wants=ollama.service
 
@@ -13,14 +13,14 @@ Wants=ollama.service
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=/opt/vega-concierge
-# Precedência (F-REAL-ENV-2): /etc/environment DEPOIS do .env — injeção por réplica (Ansible) vence o arquivo.
+# Precedence (F-REAL-ENV-2): /etc/environment AFTER .env — injection by the replica (Ansible) wins over the file.
 EnvironmentFile=-/opt/vega-concierge/.env
 EnvironmentFile=-/etc/environment
 Environment=NON_INTERACTIVE=1
 ExecStart=/opt/vega-concierge/scripts/boot-workshop.sh
-# oneshot: pull GHCR + health-wait de até 120s estouram o default de 90s.
+# oneshot: GHCR pull + health-wait up to 120s exceed the 90s default.
 TimeoutStartSec=900
-# Retry em falha transitória (rede, pull).
+# Retry on transient failure (network, pull).
 Restart=on-failure
 RestartSec=30
 

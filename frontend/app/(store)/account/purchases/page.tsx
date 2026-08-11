@@ -1,5 +1,5 @@
 "use client";
-// Histórico de compras — rota dedicada /account/purchases (F-NAV-1).
+// Purchase history — dedicated route /account/purchases (F-NAV-1).
 import { useCallback, useEffect, useState } from "react";
 import { Order, getOrders, getOrder } from "@/lib/api";
 import { formatMoney } from "@/lib/shop";

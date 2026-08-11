@@ -1,11 +1,11 @@
-"""Superfícies máquina-a-máquina — config pública de o11y, hub e enrollment."""
+"""Machine-to-machine surfaces — o11y public config, hub, and enrollment."""
 from fastapi import APIRouter, Header, HTTPException, Request
 from ..hub import enroll, hub
 from ..obs import galileo_obs
 from ..schemas import EnrollIn, EnrollPushIn
 from ._common import _token_from_header, _require_owner
 
-# Sem `prefix`: cada rota carrega o path completo, igualzinho ao que estava em `api.py`.
+# No `prefix`: each route carries the full path, just like it was in `api.py`.
 router = APIRouter()
 
 
@@ -14,11 +14,11 @@ def galileo_public_config():
     return galileo_obs.public_config()
 
 
-# --- Lado HUB: servir config a clientes (token-gated; F-026) -----------------
-# Endpoint MÁQUINA-A-MÁQUINA (NÃO owner-gated — clientes não têm sessão de owner):
-# autentica pelo TOKEN DE ENROLLMENT (`serve_token`), rastreia o cliente e entrega a config
-# da cascata. ATENÇÃO: o payload inclui as CHAVES de LLM (DT-013 — chaves trafegam na rede);
-# exigir token + HTTPS no lab. Anti-loop pela cadeia `X-Hub-Chain`.
+# --- HUB side: serve config to clients (token-gated; F-026) -----------------
+# MACHINE-TO-MACHINE endpoint (NOT owner-gated — clients don't have owner session):
+# authenticates by ENROLLMENT TOKEN (`serve_token`), tracks the client, and delivers cascade
+# config. WARNING: payload includes LLM KEYS (DT-013 — keys travel over network);
+# require token + HTTPS in lab. Anti-loop via `X-Hub-Chain` header.
 
 @router.get("/api/hub/config")
 def hub_serve(request: Request,
@@ -36,23 +36,23 @@ def hub_serve(request: Request,
 
 @router.get("/api/admin/hub/status")
 def hub_status(authorization: str | None = Header(default=None)):
-    # Tela de status de conexão: modo/alvo/saúde/last-sync + clientes (no hub).
+    # Connection status screen: mode/target/health/last-sync + clients (on hub).
     _require_owner(authorization)
     return hub.status()
 
 
 @router.post("/api/admin/hub/test-connection")
 def hub_test_connection(authorization: str | None = Header(default=None)):
-    # Pull sob demanda (se remote) + cascata efetiva mascarada — validação owner.
+    # On-demand pull (if remote) + masked effective cascade — owner validation.
     _require_owner(authorization)
     return hub.test_connection()
 
 
-# --- Enrollment push por IP (F-027, ADR-020) --------------------------------
-# CLIENTE: endpoint que ACEITA ser enrolado pelo hub (máquina-a-máquina). Gateado por
-# ENROLL_TOKEN (segredo do lab, env baked) — NÃO pela sessão de owner. Seta source=remote
-# apontando p/ o hub e puxa já. Sem ENROLL_TOKEN → 401 (standalone-first: loja solta não é
-# reconfigurável por rede). HUB: endpoint owner-only que empurra o enroll p/ uma lista de IPs.
+# --- Enrollment push by IP (F-027, ADR-020) --------------------------------
+# CLIENT: endpoint that ACCEPTS enrollment by the hub (machine-to-machine). Gated by
+# ENROLL_TOKEN (lab secret, env baked) — NOT by owner session. Sets source=remote
+# pointing to hub and pulls now. Without ENROLL_TOKEN → 401 (standalone-first: loose store not
+# reconfigurable over network). HUB: owner-only endpoint that pushes enrollment to IP list.
 
 @router.post("/api/admin/enroll")
 def admin_enroll(body: EnrollIn, authorization: str | None = Header(default=None)):

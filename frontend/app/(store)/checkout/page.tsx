@@ -1,10 +1,10 @@
 "use client";
-// Checkout em PÁGINA PRÓPRIA (F-011) — antes era continuação do carrinho slide-over.
-// Fluxo Details → Payment → Confirmation no design custom dirigido por paletas
-// (ADR-012/013). Envia o carrinho REAL (itens+qty) + cliente para POST /api/orders, que
-// cria/persiste o pedido e passa pelo pipeline (fraude/estoque) — os "problemas" quebram
-// o fluxo de forma visível, SEM dados técnicos na Loja. Pagamento simulado: o cartão NÃO é
-// enviado (sem gateway real). Estado de cliente vem do ShopProvider; sessão do AuthProvider.
+// Checkout on its OWN PAGE (F-011) — used to be a continuation of the cart slide-over.
+// Details → Payment → Confirmation flow in the custom design driven by palettes
+// (ADR-012/013). Sends the REAL cart (items+qty) + customer to POST /api/orders, which
+// creates/persists the order and goes through the pipeline (fraud/stock) — the "problems"
+// break the flow visibly, WITHOUT technical data in the Store. Simulated payment: the card
+// is NOT sent (no real gateway). Customer state comes from ShopProvider; session from AuthProvider.
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Customer, Order, createOrder, fraudExplain } from "@/lib/api";
@@ -19,11 +19,11 @@ type Stage = "details" | "payment" | "placing" | "confirmed" | "failed";
 
 const EMPTY_CUSTOMER: Customer = { name: "", email: "", address: "" };
 
-// Cartão fictício de demo (F-012) — pré-preenchido no passo Payment; nunca é enviado ao backend.
+// Fictitious demo card (F-012) — prefilled in the Payment step; never sent to the backend.
 const DEMO_CARD = { number: "4242 4242 4242 4242", expiry: "12/29", cvc: "123" };
 
 const STEPS = ["Details", "Payment", "Confirmation"] as const;
-// Mapeia cada etapa para o passo ativo na barra (Details → Payment → Confirmation).
+// Maps each stage to the active step in the bar (Details → Payment → Confirmation).
 const STEP_OF: Record<Stage, number> = {
   details: 0,
   payment: 1,
@@ -100,8 +100,8 @@ function Field({
   );
 }
 
-// IA-Checkout (F-024): explicação amigável quando o pedido é barrado por fraude. Só aparece
-// quando o backend sinaliza `fraud` (toggle fraud_false_positive) — senão a falha segue genérica.
+// AI-Checkout (F-024): friendly explanation when the order is blocked for fraud. Only appears
+// when the backend flags `fraud` (fraud_false_positive toggle) — otherwise the failure stays generic.
 function FraudExplain({ orderId }: { orderId: string }) {
   const [text, setText] = useState<string | null>(null);
 
@@ -133,12 +133,12 @@ export default function CheckoutPage() {
   const [card, setCard] = useState(DEMO_CARD);
   const [order, setOrder] = useState<Order | null>(null);
 
-  // Endereço (F-011): "saved" usa o endereço do perfil (não pede de novo); "new" pede e
-  // oferece salvar no perfil. `null` até a sessão resolver. Convidado/sem endereço → "new".
+  // Address (F-011): "saved" uses the profile's address (doesn't ask again); "new" asks and
+  // offers to save it to the profile. `null` until the session resolves. Guest/no address → "new".
   const [addressChoice, setAddressChoice] = useState<"saved" | "new" | null>(null);
   const [saveToProfile, setSaveToProfile] = useState(true);
 
-  // Pré-preenche nome/e-mail/endereço pelo usuário logado.
+  // Prefills name/email/address from the logged-in user.
   useEffect(() => {
     if (!ready || !user) return;
     const savedAddress = user.address.trim();
@@ -174,12 +174,12 @@ export default function CheckoutPage() {
       );
       setOrder(placed);
       if (placed.status === "PAID") {
-        // Salva o endereço no perfil se o cliente optou por isso (etapa "new", logado).
+        // Saves the address to the profile if the customer opted in ("new" stage, logged in).
         if (user && addressChoice === "new" && saveToProfile && customer.address.trim()) {
           await saveAddress(customer.address).catch(() => {});
         }
-        shop.clear(); // esvazia o carrinho ao confirmar
-        refresh(); // refletir gasto/tier atualizados
+        shop.clear(); // empty the cart on confirmation
+        refresh(); // reflect the updated spend/tier
         setStage("confirmed");
       } else {
         setStage("failed");
@@ -201,7 +201,7 @@ export default function CheckoutPage() {
     );
   }
 
-  // Carrinho vazio (e sem pedido confirmado): nada a pagar — convida a voltar à loja.
+  // Empty cart (and no confirmed order): nothing to pay — invites you back to the store.
   if (items.length === 0 && stage !== "confirmed") {
     return (
       <main className="ns-wrap ns-checkout">
@@ -257,7 +257,7 @@ export default function CheckoutPage() {
         </div>
       )}
 
-      {/* CONFIRMATION — pedido persistido (id real, itens, total, status com severidade) */}
+      {/* CONFIRMATION — persisted order (real id, items, total, status with severity) */}
       {stage === "confirmed" && order ? (
         <div className="ns-panelcard ns-checkout-done">
           <div className="ns-alert success">
@@ -286,7 +286,7 @@ export default function CheckoutPage() {
           </Link>
         </div>
       ) : stage === "failed" ? (
-        /* FAILED — pedido bloqueado (fraude/estoque) ou erro */
+        /* FAILED — order blocked (fraud/stock) or error */
         <div className="ns-panelcard ns-checkout-done">
           <CheckoutFailureMessage order={order} />
           {order?.failure_reason === "fraud_blocked" && order && <FraudExplain orderId={order.id} />}
@@ -300,7 +300,7 @@ export default function CheckoutPage() {
       ) : (
         <div className="ns-checkout-grid">
           <section className="ns-panelcard">
-            {/* DETAILS — dados do cliente */}
+            {/* DETAILS — customer data */}
             {stage === "details" && (
               <>
                 <h2 className="ns-card-title">Your details</h2>
@@ -308,7 +308,7 @@ export default function CheckoutPage() {
                 <Field label="Email" type="email" value={customer.email} onChange={(v) => setCustomer({ ...customer, email: v })} placeholder="jane@example.com" />
 
                 {addressChoice === "saved" && user ? (
-                  /* Endereço salvo no perfil: pré-preenchido, não pedimos de novo (F-011). */
+                  /* Address saved in the profile: prefilled, we don't ask again (F-011). */
                   <div className="ns-field">
                     <label className="ns-label">Shipping address</label>
                     <div className="ns-saved-address">
@@ -318,7 +318,7 @@ export default function CheckoutPage() {
                         className="ns-link"
                         onClick={() => {
                           setAddressChoice("new");
-                          setSaveToProfile(false); // usar outro endereço só desta vez por padrão
+                          setSaveToProfile(false); // use a different address just this once by default
                         }}
                       >
                         Use a different address
@@ -373,7 +373,7 @@ export default function CheckoutPage() {
               </>
             )}
 
-            {/* PAYMENT — pagamento simulado (cartão fake, não enviado) */}
+            {/* PAYMENT — simulated payment (fake card, not sent) */}
             {(stage === "payment" || stage === "placing") && (
               <>
                 <h2 className="ns-card-title">Payment</h2>
@@ -408,7 +408,7 @@ export default function CheckoutPage() {
             )}
           </section>
 
-          {/* Resumo do pedido (sticky no desktop) */}
+          {/* Order summary (sticky on desktop) */}
           <aside className="ns-panelcard ns-checkout-summary">
             <h2 className="ns-card-title">Order summary</h2>
             {items.map(({ product, qty }) => (

@@ -1,34 +1,34 @@
-"""Gateway de pagamento simulado — dependência EXTERNA fake (F-016).
+"""Simulated payment gateway — fake EXTERNAL dependency (F-016).
 
-Substitui o `time.sleep(0.4)` que fazia as vezes de "pagamento" no checkout. Tem
-latência e taxa de falha CONFIGURÁVEIS (env) e responde aos toggles do ProblemPanel
-(`payment_outage` força falha; `payment_latency` injeta latência alta) — no mesmo
-padrão dos demais problemas (a app quebra de forma visível). Lógica: PENDING→PAID/FAILED."""
+Replaces the `time.sleep(0.4)` that stood in for "payment" at checkout. Has
+CONFIGURABLE latency and failure rate (env) and responds to ProblemPanel toggles
+(`payment_outage` forces failure; `payment_latency` injects high latency) — same
+pattern as other problems (app breaks visibly). Logic: PENDING→PAID/FAILED."""
 import random
 import time
 
 from ..problems import FLAGS
 from ..settings import settings
 
-# Configuráveis por env (flag): latência base e taxa de falha do "gateway".
-# Default: ~400ms (espelha o antigo sleep) e 0% de falha → checkout confiável na demo;
-# as falhas vêm do toggle payment_outage (didático). PAYMENT_LATENCY_SPIKE_MS é o
-# acréscimo quando payment_latency está ON.
+# Configurable by env (flag): base latency and gateway failure rate.
+# Default: ~400ms (mirrors old sleep) and 0% failure → reliable checkout in demo;
+# failures come from payment_outage toggle (didactic). PAYMENT_LATENCY_SPIKE_MS is the
+# increment when payment_latency is ON.
 BASE_LATENCY_MS = settings.payment_latency_ms
 FAIL_RATE = settings.payment_fail_rate
 LATENCY_SPIKE_MS = settings.payment_latency_spike_ms
 
 
 def charge(order: dict) -> dict:
-    """Cobra o pedido no gateway externo simulado. Retorna `{paid, latency_ms, reason}`.
-    `paid=False` → o checkout marca o pedido FAILED. Respeita os toggles de problema."""
+    """Charges the order on the simulated external gateway. Returns `{paid, latency_ms, reason}`.
+    `paid=False` → checkout marks order FAILED. Respects problem toggles."""
     latency_ms = BASE_LATENCY_MS + random.uniform(0, 80)
     if FLAGS.payment_latency:
         latency_ms += LATENCY_SPIKE_MS
 
     time.sleep(latency_ms / 1000.0)
 
-    # payment_outage força falha; senão, taxa de falha aleatória (default 0).
+    # payment_outage forces failure; otherwise, random failure rate (default 0).
     if FLAGS.payment_outage:
         paid, reason = False, "payment gateway unavailable"
     elif random.random() < FAIL_RATE:

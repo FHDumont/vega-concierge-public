@@ -1,5 +1,5 @@
 "use client";
-// Limpa chips de contexto do chat ao sair da rota que os “dona” (PDP, conta, deep links).
+// Clears chat context chips when leaving the route that "owns" them (PDP, account, deep links).
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { useChat } from "@/lib/chat-context";
@@ -18,7 +18,7 @@ export default function ChatRouteScope() {
       return;
     }
 
-    // Home mantém contexto de deep link (?chat=1&sku= / &orderId=) após strip da URL.
+    // Home keeps the deep link context (?chat=1&sku= / &orderId=) after the URL is stripped.
     if (contextSku && !onHome) {
       clearContextSku(contextSku);
     }

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Instala os serviços de host do Vega (F-047 + F-DEPLOY-PROD-1) — watchdog via systemd.
-# Idempotente: venv do painel, copia units, habilita e (re)inicia no boot.
-# Requer: docker + compose, python3/venv, ttyd, hugo extended (workshop).
+# Installs Vega's host services (F-047 + F-DEPLOY-PROD-1) — watchdog via systemd.
+# Idempotent: panel venv, copies units, enables and (re)starts on boot.
+# Requires: docker + compose, python3/venv, ttyd, hugo extended (workshop).
 #
-# Uso (na VM, como root ou via sudo):
+# Usage (on the VM, as root or via sudo):
 #   sudo REPO_DIR=/opt/vega-concierge ./control/systemd/install.sh
 set -euo pipefail
 
@@ -11,17 +11,17 @@ REPO_DIR="${REPO_DIR:-/opt/vega-concierge}"
 CONTROL_DIR="$REPO_DIR/control"
 SYSTEMD_SRC="$CONTROL_DIR/systemd"
 
-echo "→ Vega host services: setup em $REPO_DIR"
+echo "→ Vega host services: setup at $REPO_DIR"
 
-# 1) venv do painel (FastAPI/uvicorn enxutos).
+# 1) panel venv (lean FastAPI/uvicorn).
 python3 -m venv "$CONTROL_DIR/.venv"
 "$CONTROL_DIR/.venv/bin/pip" install -q --upgrade pip
 "$CONTROL_DIR/.venv/bin/pip" install -q -r "$CONTROL_DIR/requirements.txt"
 
-# 2) boot script executável.
+# 2) make the boot script executable.
 chmod +x "$REPO_DIR/scripts/boot-workshop.sh"
 
-# 3) units → /etc/systemd/system (substituir REPO_DIR nos templates).
+# 3) units → /etc/systemd/system (substitute REPO_DIR in the templates).
 install_unit() {
   local src="$1"
   local dest="/etc/systemd/system/$(basename "$src")"
@@ -33,11 +33,11 @@ for unit in vega-boot.service vega-workshop.service vega-control.service vega-tt
   install_unit "$SYSTEMD_SRC/$unit"
 done
 
-# 4) recarrega, habilita no boot e (re)inicia.
+# 4) reload, enable on boot, and (re)start.
 systemctl daemon-reload
 systemctl enable --now vega-boot.service
 systemctl enable --now vega-workshop.service
 systemctl enable --now vega-control.service
 systemctl enable --now vega-ttyd.service
 
-echo "→ pronto. Loja :3000 · API :8000 · Ops :9000 · guia :1313 · terminal :7681"
+echo "→ done. Store :3000 · API :8000 · Ops :9000 · guide :1313 · terminal :7681"

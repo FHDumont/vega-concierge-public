@@ -1,8 +1,8 @@
 "use client";
-// Product card — design custom (ADR-012): placeholder em gradiente + emoji, rating,
-// severidade de estoque, preço e add-to-cart. Imagem + nome levam ao detalhe
-// (/product/[sku]); botões não navegam. Estilizado pelas variáveis de paleta
-// (globals.css › .ns-card). SEM @splunk/react-ui.
+// Product card — custom design (ADR-012): gradient placeholder + emoji, rating,
+// stock severity, price, and add-to-cart. Image + name lead to the detail page
+// (/product/[sku]); buttons don't navigate. Styled via the palette variables
+// (globals.css › .ns-card). NO @splunk/react-ui.
 import Link from "next/link";
 import { Product } from "@/lib/api";
 import { emojiOf, formatMoney, gradientOf, ratingOf, stockState } from "@/lib/shop";

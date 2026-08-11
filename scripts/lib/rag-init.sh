@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # Wait for Postgres (profile rag) and run setup_vectordb.py — idempotent index (F-RAG-LIVE).
 #
-# RAG_INIT_VIA=host   — dev.sh: Python no host, RAG_DATABASE_URL → localhost:RAG_DB_PORT (default 5434)
-# RAG_INIT_VIA=docker — up.sh prod: one-off no backend container, URL interna @postgres:5432 (sem porta publicada)
+# RAG_INIT_VIA=host   — dev.sh: Python on the host, RAG_DATABASE_URL → localhost:RAG_DB_PORT (default 5434)
+# RAG_INIT_VIA=docker — up.sh prod: one-off in the backend container, internal URL @postgres:5432 (no published port)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 COMPOSE_FILE="${COMPOSE_FILE:-$ROOT/docker-compose.yml}"
 RAG_INIT_VIA="${RAG_INIT_VIA:-host}"
 
-# SO vence .env (F-REAL-ENV-2) — up.sh chama este script como processo filho, então a carga
-# tem de preservar o ambiente herdado (ex.: OPENAI_API_KEY injetada pela réplica).
+# OS wins over .env (F-REAL-ENV-2) — up.sh calls this script as a child process, so the loading
+# has to preserve the inherited environment (e.g. OPENAI_API_KEY injected by the replica).
 # shellcheck disable=SC1091
 . "$ROOT/scripts/lib/env-load.sh"
 load_env_os_first
@@ -22,7 +22,7 @@ fi
 
 RAG_EMBEDDING_PROVIDER="${RAG_EMBEDDING_PROVIDER:-ollama}"
 if [ "$RAG_EMBEDDING_PROVIDER" = "openai" ] && [ -z "${OPENAI_API_KEY:-}" ]; then
-  echo "rag-init: OPENAI_API_KEY vazia — necessária p/ embeddings (RAG_EMBEDDING_PROVIDER=openai)" >&2
+  echo "rag-init: OPENAI_API_KEY empty — required for embeddings (RAG_EMBEDDING_PROVIDER=openai)" >&2
   exit 1
 fi
 
@@ -48,21 +48,21 @@ fi
 
 echo "→ rag-init: indexing corpora (via=${RAG_INIT_VIA})…"
 
-# Host-side index (dev.sh / up.sh --build): host.docker.internal só resolve DENTRO de containers.
-# .env.example usa host.docker.internal — correto p/ backend em Docker, errado p/ Python no host.
+# Host-side index (dev.sh / up.sh --build): host.docker.internal only resolves INSIDE containers.
+# .env.example uses host.docker.internal — correct for backend in Docker, wrong for Python on the host.
 if [ "$RAG_INIT_VIA" = "host" ]; then
   case "${OLLAMA_BASE_URL:-}" in
     *host.docker.internal*)
       OLLAMA_BASE_URL="http://127.0.0.1:11434"
       export OLLAMA_BASE_URL
-      echo "→ rag-init: OLLAMA_BASE_URL ajustado p/ host → ${OLLAMA_BASE_URL}"
+      echo "→ rag-init: OLLAMA_BASE_URL adjusted for host → ${OLLAMA_BASE_URL}"
       ;;
   esac
   case "${RAG_DATABASE_URL:-}" in
     *@postgres:*)
       RAG_DATABASE_URL="postgresql+psycopg://${RAG_DB_USER}:${RAG_DB_PASSWORD}@127.0.0.1:${RAG_DB_PORT}/${RAG_DB_NAME}"
       export RAG_DATABASE_URL
-      echo "→ rag-init: RAG_DATABASE_URL ajustado p/ host → ${RAG_DATABASE_URL}"
+      echo "→ rag-init: RAG_DATABASE_URL adjusted for host → ${RAG_DATABASE_URL}"
       ;;
   esac
 fi
@@ -71,10 +71,10 @@ if [ "$RAG_INIT_VIA" = "docker" ]; then
   internal_url="postgresql+psycopg://${RAG_DB_USER}:${RAG_DB_PASSWORD}@postgres:5432/${RAG_DB_NAME}"
   ollama_url="http://host.docker.internal:11434"
 
-  # up.sh roda `up -d` antes do rag-init — exec no backend herda extra_hosts do compose.plain.yml.
-  # Evita `compose run` (one-off sem extra_hosts em alguns runtimes) e ignora OLLAMA errado no .env.
+  # up.sh runs `up -d` before rag-init — exec into the backend inherits extra_hosts from compose.plain.yml.
+  # Avoids `compose run` (one-off without extra_hosts on some runtimes) and ignores a wrong OLLAMA in .env.
   if ! docker compose -f "$COMPOSE_FILE" --profile rag ps --status running -q backend 2>/dev/null | grep -q .; then
-    echo "rag-init: backend container não está running — suba o stack antes (up.sh faz up -d primeiro)." >&2
+    echo "rag-init: backend container is not running — bring the stack up first (up.sh runs up -d first)." >&2
     exit 1
   fi
 

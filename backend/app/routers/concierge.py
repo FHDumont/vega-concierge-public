@@ -1,4 +1,4 @@
-"""Os dois fluxos agênticos de conversa — `/api/run` (recomendação) e `/api/chat`."""
+"""The two agentic conversation flows — `/api/run` (recommendation) and `/api/chat`."""
 import logging
 from fastapi import APIRouter, Header
 from ..ai_agents import security
@@ -12,7 +12,7 @@ from ._common import _optional_user_id, is_gift_recommend_demo_question
 
 log = logging.getLogger(__name__)
 
-# Sem `prefix`: cada rota carrega o path completo, igualzinho ao que estava em `api.py`.
+# No `prefix`: each route carries the full path, just like it was in `api.py`.
 router = APIRouter()
 
 
@@ -30,9 +30,9 @@ async def run(req: RunRequest, authorization: str | None = Header(default=None),
     return {
         "messages": final.get("trace", []),
         "quality": final.get("quality"),
-        "recommended": final.get("selected"),  # produto escolhido pelo agente (vitrine)
-        "answer": final.get("answer"),          # recomendação composta pelo LLM, exibida (F-025)
-        "language": final.get("language"),      # idioma detectado/usado na resposta (F-025)
+        "recommended": final.get("selected"),  # product chosen by agent (storefront)
+        "answer": final.get("answer"),          # recommendation composed by LLM, displayed (F-025)
+        "language": final.get("language"),      # language detected/used in response (F-025)
         "order": final.get("order"),
         "error": error,
     }

@@ -1,6 +1,6 @@
 "use client";
-// Client boundary da loja: carrinho + chat + chrome. Vive num módulo "use client" explícito
-// para que páginas como /checkout compartilhem o mesmo ShopContext durante SSR/HMR (Next 16).
+// Store client boundary: cart + chat + chrome. Lives in an explicit "use client" module
+// so pages like /checkout share the same ShopContext during SSR/HMR (Next 16).
 import { ShopProvider } from "@/lib/store";
 import { ChatProvider } from "@/lib/chat-context";
 import { WorkshopProblemsProvider } from "@/lib/workshop-problems";

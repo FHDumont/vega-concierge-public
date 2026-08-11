@@ -1,9 +1,9 @@
 "use client";
-// CONFIG — tela do DONO (owner-only) p/ os provedores de LLM da cascata (F-020, ADR-015).
-// Gateada por papel: só `role === "OWNER"` vê a tela (e o link na barra de camada). Os
-// endpoints já são gated no backend (401/403) — esta é a camada de UX. As CHAVES são
-// segredos: a UI nunca recebe a chave (só `has_key`/`key_hint`); o campo de chave é
-// write-only (em branco mantém a salva). Botão "Test" por provider faz uma chamada real.
+// CONFIG — OWNER-only screen for the LLM cascade providers (F-020, ADR-015).
+// Role-gated: only `role === "OWNER"` sees the screen (and the link in the layer bar). The
+// endpoints are already gated on the backend (401/403) — this is the UX layer. KEYS are
+// secrets: the UI never receives the key (only `has_key`/`key_hint`); the key field is
+// write-only (left blank keeps the saved one). The "Test" button per provider makes a real call.
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import {
@@ -11,19 +11,19 @@ import {
   getProviders, createProvider, updateProvider, deleteProvider, reorderProviders, testProvider, getLLMTypes, getHubSource,
 } from "@/lib/api";
 
-// Fallback dos Types caso o catálogo do backend não carregue (a UI segue usável offline).
+// Fallback for the Types in case the backend catalog fails to load (the UI stays usable offline).
 const FALLBACK_TYPES: LLMTypePreset[] = [
   { type: "custom", label: "Custom", kind: "openai", base_url: "", models: [] },
 ];
-// Para o Type "custom" o owner escolhe o kind (openai-compatível ou Anthropic).
+// For the "custom" Type the owner picks the kind (openai-compatible or Anthropic).
 const KINDS: { value: ProviderKind; label: string }[] = [
   { value: "openai", label: "OpenAI-compatible" },
   { value: "anthropic", label: "Anthropic (Claude)" },
   { value: "bedrock", label: "Amazon Bedrock" },
 ];
 
-// Infere o Type de um provider salvo (a tabela guarda kind/base_url, não o Type): casa pela
-// base_url do preset; senão "custom". Usado ao abrir o form de edição.
+// Infers the Type of a saved provider (the table stores kind/base_url, not the Type): matches
+// by the preset's base_url; otherwise "custom". Used when opening the edit form.
 function inferType(types: LLMTypePreset[], p: { base_url: string; kind: ProviderKind }): string {
   const hit = types.find((t) => t.type !== "custom" && t.base_url === p.base_url && t.kind === p.kind);
   return hit?.type ?? "custom";
@@ -40,7 +40,7 @@ export default function ConfigPage() {
   return <ConfigManager />;
 }
 
-// Estado/borda fora da permissão: mantém o chrome da tela, sem expor nada.
+// State/edge outside of permission: keeps the screen chrome, without exposing anything.
 function Gate({ title, msg, cta }: { title: string; msg: string; cta?: boolean }) {
   return (
     <>
@@ -67,7 +67,7 @@ function Gate({ title, msg, cta }: { title: string; msg: string; cta?: boolean }
 function ConfigManager() {
   const [providers, setProviders] = useState<LLMProvider[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState<string | "new" | null>(null); // id em edição, "new", ou nada
+  const [editing, setEditing] = useState<string | "new" | null>(null); // id being edited, "new", or none
   const [tests, setTests] = useState<Record<string, ProviderTest | "loading">>({});
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -200,15 +200,15 @@ function ConfigManager() {
               )
             )
           )}
-          {/* Stub é sempre o último recurso da cascata (standalone offline) — informativo. */}
+          {/* Stub is always the cascade's last resort (offline standalone) — informational. */}
           {providers && providers.length > 0 && (
             <div className="ns-cfg-stub">↳ Offline stub — always last, so the app never goes silent.</div>
           )}
         </div>
 
-        {/* A config POR AGENTE saiu desta tela (F-027): agora vive no editor visual de agentes
-            (/admin/agents) — clicar num nó do diagrama abre/edita a config. Aqui ficam só os
-            provedores/cascata de LLM. */}
+        {/* PER-AGENT config left this screen (F-027): it now lives in the visual agent editor
+            (/admin/agents) — clicking a node in the diagram opens/edits the config. Only the
+            LLM providers/cascade stay here. */}
         <p className="ns-adm-note" style={{ marginTop: 18 }}>
           Looking for per-agent settings (model, role, system prompt)? They now live in the{" "}
           <a className="ns-cfg-link" href="/admin/agents">Agents</a> editor — click an agent in the diagram.
@@ -218,10 +218,10 @@ function ConfigManager() {
   );
 }
 
-// (A seção de Connection/Hub virou tela própria — `app/admin/connection/page.tsx` — no split
-// de UX F-026; a seção de Agents virou o editor visual `app/admin/agents/page.tsx` — F-027.)
+// (The Connection/Hub section became its own screen — `app/admin/connection/page.tsx` — in the
+// F-026 UX split; the Agents section became the visual editor `app/admin/agents/page.tsx` — F-027.)
 
-// --- linha de provider ------------------------------------------------------
+// --- provider row -------------------------------------------------------------
 function ProviderRow({
   p, index, total, busy, test, confirmDel, remoteSource,
   onMove, onToggle, onTest, onEdit, onAskDelete, onCancelDelete, onDelete,
@@ -287,7 +287,7 @@ function ProviderRow({
   );
 }
 
-// --- formulário de criar/editar ---------------------------------------------
+// --- create/edit form -----------------------------------------------------
 function ProviderForm({
   initial, editingExisting, keyHint, types, busy, onCancel, onSave,
 }: {
@@ -295,7 +295,7 @@ function ProviderForm({
   types: LLMTypePreset[]; busy: boolean; onCancel: () => void; onSave: (input: ProviderInput) => void;
 }) {
   const [f, setF] = useState<ProviderInput>(initial);
-  // Type guia o prefill (kind + base_url + modelos sugeridos). Ao editar, inferido do salvo.
+  // Type drives the prefill (kind + base_url + suggested models). When editing, it's inferred from the saved value.
   const [type, setType] = useState<string>(() => inferType(types, initial));
   const preset = types.find((t) => t.type === type);
   const isCustom = type === "custom" || !preset;
@@ -306,8 +306,8 @@ function ProviderForm({
     setF((prev) => ({ ...prev, [k]: v }));
   }
 
-  // Trocar o Type prefilla kind + base_url e (se o modelo estiver vazio) o 1º modelo sugerido.
-  // Tudo segue editável; "custom" deixa base_url/modelos livres e expõe o seletor de kind.
+  // Switching the Type prefills kind + base_url and (if the model field is empty) the 1st suggested model.
+  // Everything stays editable; "custom" leaves base_url/models free and exposes the kind selector.
   function pickType(t: string) {
     setType(t);
     const ps = types.find((x) => x.type === t);

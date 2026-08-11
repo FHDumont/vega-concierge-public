@@ -1,4 +1,4 @@
-// Dispara requisições reais da Loja para gerar traces Splunk Agent Observability — F-GALILEO-6.
+// Fires real Shop requests to generate Splunk Agent Observability traces — F-GALILEO-6.
 import {
   askProduct,
   applyProblemPreset,

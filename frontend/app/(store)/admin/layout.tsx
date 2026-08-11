@@ -1,4 +1,4 @@
-// Admin dentro do route group (store): header da loja + sidebar AppNav quando logado.
+// Admin inside the (store) route group: store header + AppNav sidebar when logged in.
 import PortalShell from "@/components/PortalShell";
 import FlagGuard from "@/components/FlagGuard";
 

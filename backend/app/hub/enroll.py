@@ -1,24 +1,24 @@
-"""Enrollment push por IP (F-027, ADR-020) — força várias lojas a virar CLIENTES deste hub.
+"""Enrollment push by IP (F-027, ADR-020) — forces multiple stores to BECOME CLIENTS of this hub.
 
-Cenário: o owner do hub tem N lojas (cada uma já roda esta mesma app) e quer apontá-las todas
-p/ a config dele de uma vez, sem entrar loja-a-loja. A F-026 deu o modelo hub/cliente (uma loja
-escolhe `source=remote` e puxa do hub); aqui o hub **empurra** essa escolha por IP.
+Scenario: hub owner has N stores (each already runs this same app) and wants to point them all
+to their config at once, without entering store-by-store. F-026 gave hub/client model (one store
+chooses `source=remote` and pulls from hub); here the hub **pushes** that choice by IP.
 
-Duas pontas:
+Two sides:
 
-- **Lado CLIENTE — `apply_enroll` (chamado pelo endpoint `POST /api/admin/enroll`):** seta os
-  settings locais p/ `source=remote` apontando p/ o hub (URL + token de enrollment p/ puxar),
-  aplica a fonte a quente e faz um pull imediato. O endpoint é **token-gated por um SEGREDO
-  COMPARTILHADO DO LAB** (`ENROLL_TOKEN`, env baked na AMI) — NÃO é a sessão de owner (a chamada
-  vem máquina-a-máquina, do hub). Sem `ENROLL_TOKEN` configurado → o endpoint recusa (401):
-  standalone-first (uma loja solta nunca é re-configurável por rede). Compare em tempo constante.
+- **CLIENT side — `apply_enroll` (called by `POST /api/admin/enroll` endpoint):** sets
+  local settings to `source=remote` pointing to hub (URL + enrollment token to pull),
+  applies source hot and does immediate pull. Endpoint is **token-gated by a SHARED LAB SECRET**
+  (`ENROLL_TOKEN`, env baked in AMI) — NOT owner session (call is machine-to-machine, from hub).
+  Without `ENROLL_TOKEN` configured → endpoint refuses (401): standalone-first (loose store never
+  reconfigurable over network). Compare in constant time.
 
-- **Lado HUB — `push` (chamado pelo endpoint owner-only `POST /api/admin/hub/enroll-push`):**
-  p/ cada IP/host da lista, chama o `enroll` do alvo com `Authorization: Bearer <enroll_secret>`
-  + `{hub_url, enrollment_token}`. Resultado **por IP** (ok/falha/timeout) p/ a UI.
+- **HUB side — `push` (called by owner-only `POST /api/admin/hub/enroll-push` endpoint):**
+  for each IP/host in list, calls target's `enroll` with `Authorization: Bearer <enroll_secret>`
+  + `{hub_url, enrollment_token}`. Result **per IP** (ok/fail/timeout) for UI.
 
-Mecanismo = **API** (cada loja já roda a app). SSH fica como plano B (não implementado — F-028+).
-Sem deps novas: urllib (stdlib), espelhando `config_source.RemoteConfigSource`.
+Mechanism = **API** (each store already runs app). SSH stays as plan B (not implemented — F-028+).
+No new deps: urllib (stdlib), mirroring `config_source.RemoteConfigSource`.
 """
 import hmac
 import json
@@ -28,17 +28,17 @@ import urllib.request
 from . import hub, hub_settings
 from ..settings import settings
 
-_PUSH_TIMEOUT_S = 6  # curto: alvo fora do ar → timeout/falha por IP, não trava o lote
+_PUSH_TIMEOUT_S = 6  # short: target down → timeout/fail per IP, doesn't stall batch
 
 
 def enroll_secret() -> str:
-    """Segredo compartilhado que gateia o endpoint de enroll (env baked no lab). '' = desligado."""
+    """Shared secret that gates enroll endpoint (env baked in lab). '' = disabled."""
     return settings.enroll_token.strip()
 
 
 def verify_enroll_token(token: str | None) -> bool:
-    """True se o token bate com `ENROLL_TOKEN` (tempo constante). Sem secret configurado → False
-    (o endpoint recusa — a loja não aceita ser re-configurada por rede até o lab definir o token)."""
+    """True if token matches `ENROLL_TOKEN` (constant time). No secret configured → False
+    (endpoint refuses — store won't accept being reconfigured over network until lab sets token)."""
     secret = enroll_secret()
     if not secret or not token:
         return False
@@ -46,37 +46,37 @@ def verify_enroll_token(token: str | None) -> bool:
 
 
 def apply_enroll(hub_url: str, enrollment_token: str, pull_interval_s: int | None) -> dict:
-    """Aplica o enrollment NESTA loja: vira cliente do hub (source=remote) e puxa já. Idempotente."""
+    """Applies enrollment to THIS store: becomes hub client (source=remote) and pulls now. Idempotent."""
     patch: dict = {"source": "remote", "hub_url": hub_url.strip()}
     if enrollment_token:
-        patch["enrollment_token"] = enrollment_token  # write-only (segredo)
+        patch["enrollment_token"] = enrollment_token  # write-only (secret)
     if pull_interval_s is not None:
         patch["pull_interval_s"] = pull_interval_s
     hub_settings.update_settings(**patch)
-    hub.apply_source()       # reinstala a ConfigSource ativa (a quente)
-    sync = hub.sync_now()    # pull imediato → feedback de saúde já na resposta
+    hub.apply_source()       # reinstalls active ConfigSource (hot)
+    sync = hub.sync_now()    # immediate pull → health feedback already in response
     st = hub.status()
     return {"enrolled": True, "env": st["env"], "mode": st["mode"], "sync": sync}
 
 
 def _enroll_url(ip: str) -> str:
-    """Normaliza um IP/host da lista p/ a URL do endpoint de enroll do alvo.
-    Aceita `1.2.3.4`, `1.2.3.4:8000`, `host`, `http://host:8000` (com ou sem path)."""
+    """Normalizes IP/host from list to target's enroll endpoint URL.
+    Accepts `1.2.3.4`, `1.2.3.4:8000`, `host`, `http://host:8000` (with or without path)."""
     host = ip.strip()
     if not host.startswith(("http://", "https://")):
         host = "http://" + host
-    # path explícito já aponta o endpoint? respeita; senão monta /api/admin/enroll.
+    # explicit path already points to endpoint? respect it; otherwise build /api/admin/enroll.
     after_scheme = host.split("://", 1)[1]
     if "/" in after_scheme:
-        return host  # owner deu o caminho completo
+        return host  # owner gave full path
     authority = after_scheme
     if ":" not in authority:
-        host += ":8000"  # porta padrão da app no lab (docker)
+        host += ":8000"  # default app port in lab (docker)
     return host.rstrip("/") + "/api/admin/enroll"
 
 
 def _push_one(ip: str, enroll_token: str, body: dict) -> dict:
-    """POST de enroll p/ UM alvo. Devolve `{ip, ok, status?, env?, mode?, error?}` (nunca levanta)."""
+    """Enroll POST to ONE target. Returns `{ip, ok, status?, env?, mode?, error?}` (never raises)."""
     url = _enroll_url(ip)
     data = json.dumps(body).encode()
     req = urllib.request.Request(
@@ -106,7 +106,7 @@ def _push_one(ip: str, enroll_token: str, body: dict) -> dict:
 
 def push(ips: list[str], hub_url: str, enroll_token: str,
          enrollment_token: str, pull_interval_s: int | None = None) -> dict:
-    """Empurra o enrollment p/ cada IP. Sequencial (N pequeno, controles do owner). Resultado por IP."""
+    """Pushes enrollment to each IP. Sequential (N small, owner controls). Result per IP."""
     body = {"hub_url": hub_url.strip(), "enrollment_token": enrollment_token}
     if pull_interval_s is not None:
         body["pull_interval_s"] = pull_interval_s

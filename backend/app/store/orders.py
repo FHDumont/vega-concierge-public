@@ -1,13 +1,13 @@
-"""Domínio de Order + persistência em SQLite (ADR-006).
+"""Order domain + SQLite persistence (ADR-006).
 
-Escolha: `sqlite3` da stdlib (sem nova dependência — orçamento 2vCPU/4GB, AMI enxuta).
-Arquivo local efêmero por VM; `init_db()` faz o `create_all` no boot. Em compose o
-path vai p/ um volume nomeado via `ORDERS_DB` (DT-006).
-itens e customer são guardados como JSON (catálogo é pequeno; sem normalizar).
+Choice: `sqlite3` from stdlib (no new dependency — 2vCPU/4GB budget, lean AMI).
+Ephemeral local file per VM; `init_db()` does `create_all` at boot. In compose
+path goes to a named volume via `ORDERS_DB` (DT-006).
+Items and customer stored as JSON (catalog is small; no normalization).
 
-Ciclo de vida (F-005, ADR-008): status PAID→SHIPPED→DELIVERED é COMPUTADO por tempo
-decorrido desde o PAID (determinístico, sem thread de background) e MATERIALIZADO de
-forma lazy no histórico a cada leitura. `history` guarda cada transição com timestamp."""
+Lifecycle (F-005, ADR-008): status PAID→SHIPPED→DELIVERED is COMPUTED by elapsed time
+from PAID (deterministic, no background thread) and MATERIALIZED lazily in history on each read.
+`history` records each transition with timestamp."""
 import json
 import sqlite3
 import uuid
@@ -16,14 +16,14 @@ from datetime import datetime, timezone, timedelta
 from .db import connect
 from ..settings import settings
 
-# Offsets do ciclo de vida (segundos desde o PAID). Curtos p/ caber no workshop; via env.
+# Lifecycle offsets (seconds from PAID). Short to fit in workshop; via env.
 SHIP_AFTER_S = settings.order_ship_after_s
 DELIVER_AFTER_S = settings.order_deliver_after_s
 
 
 def init_db() -> None:
-    """create_all no boot: cria a tabela de pedidos se não existir.
-    Migração leve: adiciona `history` (F-005) e `user_id` (F-008) em BDs antigos."""
+    """create_all at boot: creates orders table if not present.
+    Light migration: adds `history` (F-005) and `user_id` (F-008) to old databases."""
     with connect() as conn:
         conn.execute(
             """CREATE TABLE IF NOT EXISTS orders (
@@ -33,8 +33,8 @@ def init_db() -> None:
                 total       REAL NOT NULL,
                 status      TEXT NOT NULL,   -- PENDING | PAID | SHIPPED | DELIVERED | FAILED
                 created_at  TEXT NOT NULL,   -- ISO-8601 UTC
-                history     TEXT NOT NULL DEFAULT '[]',  -- JSON: [{status, at}] (transições)
-                user_id     TEXT             -- dono do pedido (F-008); NULL = pedido de convidado
+                history     TEXT NOT NULL DEFAULT '[]',  -- JSON: [{status, at}] (transitions)
+                user_id     TEXT             -- order owner (F-008); NULL = guest order
             )"""
         )
         cols = [r["name"] for r in conn.execute("PRAGMA table_info(orders)").fetchall()]
@@ -71,7 +71,7 @@ def _row_to_order(row: sqlite3.Row) -> dict:
 
 
 def _ts_of(order: dict, status: str) -> datetime | None:
-    """Timestamp (UTC) em que o pedido entrou em `status`, do histórico."""
+    """Timestamp (UTC) when order entered `status`, from history."""
     for h in order["history"]:
         if h["status"] == status:
             return datetime.fromisoformat(h["at"])
@@ -79,9 +79,9 @@ def _ts_of(order: dict, status: str) -> datetime | None:
 
 
 def _advance_lifecycle(order: dict) -> dict:
-    """Computa PAID→SHIPPED→DELIVERED por tempo decorrido desde o PAID e materializa
-    as transições no histórico (determinístico: timestamps derivam de paid_at+offset).
-    Persiste só quando há avanço. FAILED/PENDING não avançam."""
+    """Computes PAID→SHIPPED→DELIVERED by elapsed time from PAID and materializes
+    transitions in history (deterministic: timestamps derive from paid_at+offset).
+    Persists only when there's advance. FAILED/PENDING don't advance."""
     if order["status"] not in ("PAID", "SHIPPED"):
         return order
     paid_at = _ts_of(order, "PAID")
@@ -109,10 +109,10 @@ def _advance_lifecycle(order: dict) -> dict:
 
 def create_order(items: list[dict], customer: dict, total: float, status: str,
                  user_id: str | None = None, created_at: str | None = None) -> dict:
-    """Cria e persiste um pedido com id único. Total é recomputado pelo chamador.
-    `user_id` liga o pedido ao usuário logado (F-008); None = pedido de convidado.
-    `created_at` permite datar o pedido no passado (seed do usuário de teste, F-010);
-    None usa o instante atual."""
+    """Creates and persists order with unique id. Total is recomputed by caller.
+    `user_id` links order to logged-in user (F-008); None = guest order.
+    `created_at` allows backdating order (test user seed, F-010);
+    None uses current instant."""
     now = created_at or _now_iso()
     order = {
         "id": _new_id(),
@@ -133,7 +133,7 @@ def create_order(items: list[dict], customer: dict, total: float, status: str,
 
 
 def transition(order_id: str, status: str, *, failure_reason: str | None = None) -> dict | None:
-    """Avança o status e registra a transição com timestamp no histórico."""
+    """Advances status and records transition with timestamp in history."""
     order = get_order(order_id, advance=False)
     if order is None:
         return None
@@ -168,7 +168,7 @@ def list_orders() -> list[dict]:
 
 
 def list_orders_for_user(user_id: str) -> list[dict]:
-    """Pedidos de um usuário (histórico de compras, F-008), mais recentes primeiro."""
+    """User's orders (purchase history, F-008), newest first."""
     with connect() as conn:
         rows = conn.execute(
             "SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC", (user_id,)
@@ -177,19 +177,19 @@ def list_orders_for_user(user_id: str) -> list[dict]:
 
 
 def order_owner(order_id: str) -> str | None:
-    """user_id dono do pedido (F-019, autorização do detalhe no histórico);
-    None = pedido de convidado ou inexistente. `user_id` é interno (não vai no shape Order)."""
+    """user_id owning order (F-019, history detail authorization);
+    None = guest order or non-existent. `user_id` is internal (doesn't go in Order shape)."""
     with connect() as conn:
         row = conn.execute("SELECT user_id FROM orders WHERE id = ?", (order_id,)).fetchone()
     return row["user_id"] if row else None
 
 
-# Status que contam como gasto efetivo (pedido pago em diante). PENDING/FAILED não contam.
+# Statuses that count as effective spending (order paid onward). PENDING/FAILED don't count.
 _SPENT_STATUSES = ("PAID", "SHIPPED", "DELIVERED")
 
 
 def spend_for_user(user_id: str) -> float:
-    """Gasto acumulado do usuário (soma dos pedidos pagos) — base do tier (F-008)."""
+    """User's cumulative spend (sum of paid orders) — tier base (F-008)."""
     placeholders = ",".join("?" * len(_SPENT_STATUSES))
     with connect() as conn:
         row = conn.execute(
@@ -200,27 +200,27 @@ def spend_for_user(user_id: str) -> float:
     return float(row["spent"])
 
 
-# --- agregação p/ o Admin (F-014) -------------------------------------------
-# Camada de NEGÓCIO (não a Loja): o dono vê todos os pedidos. Reusa list_orders()
-# (já materializa o ciclo de vida na leitura — ADR-008), então os contadores
-# refletem os status já avançados (SHIPPED/DELIVERED).
+# --- aggregation for Admin (F-014) -------------------------------------------
+# BUSINESS layer (not Store): owner sees all orders. Reuses list_orders()
+# (already materializes lifecycle on read — ADR-008), so counters
+# reflect already-advanced statuses (SHIPPED/DELIVERED).
 _ALL_STATUSES = ("PENDING", "PAID", "SHIPPED", "DELIVERED", "FAILED", "REFUNDED")
 
 
 def sales_summary() -> dict:
-    """Resumo de vendas: total de pedidos, faturamento, ticket médio e contagem por status.
+    """Sales summary: total orders, revenue, avg ticket, and status counts.
 
-    Reembolsos (F-030): um pedido REFUNDED (cadeia Returns/Refund F-029) já saiu de
-    `_SPENT_STATUSES`, então `revenue` (= líquido) NÃO o conta. Para clareza expomos
-    as três faces (decisão da spec: mostrar bruto, reembolsos e líquido):
-      - `gross_revenue` = vendas que um dia foram efetivas (pagas+ E reembolsadas);
-      - `refunded_amount` = soma dos pedidos REFUNDED (reembolso = total integral, F-029);
-      - `net_revenue` = bruto − reembolsos = `revenue` (mesma régua do gasto/tier).
-    `avg_ticket` = revenue líquido / nº de pedidos pagos."""
+    Refunds (F-030): a REFUNDED order (Returns/Refund chain F-029) already left
+    `_SPENT_STATUSES`, so `revenue` (= net) does NOT count it. For clarity we expose
+    three faces (spec decision: show gross, refunds, and net):
+      - `gross_revenue` = sales that were once effective (paid+ AND refunded);
+      - `refunded_amount` = sum of REFUNDED orders (refund = full total, F-029);
+      - `net_revenue` = gross − refunds = `revenue` (same measure as spend/tier).
+    `avg_ticket` = net revenue / number of paid orders."""
     all_orders = list_orders()
     paid = [o for o in all_orders if o["status"] in _SPENT_STATUSES]
     refunded = [o for o in all_orders if o["status"] == "REFUNDED"]
-    revenue = round(sum(o["total"] for o in paid), 2)          # líquido
+    revenue = round(sum(o["total"] for o in paid), 2)          # net
     refunded_amount = round(sum(o["total"] for o in refunded), 2)
     gross_revenue = round(revenue + refunded_amount, 2)
     avg_ticket = round(revenue / len(paid), 2) if paid else 0.0
@@ -230,7 +230,7 @@ def sales_summary() -> dict:
     return {
         "orders": len(all_orders),
         "paid_orders": len(paid),
-        "revenue": revenue,            # = net_revenue (mantido p/ compat)
+        "revenue": revenue,            # = net_revenue (kept for compat)
         "net_revenue": revenue,
         "gross_revenue": gross_revenue,
         "refunded_amount": refunded_amount,
@@ -241,9 +241,9 @@ def sales_summary() -> dict:
 
 
 def clear_all() -> int:
-    """Apaga TODOS os pedidos (resetar vendas entre turmas — F-014). Retorna quantos
-    foram apagados. Destrutivo: a confirmação fica na UI. Não re-semeia o usuário de
-    DEMO (o seed roda só no boot) — o histórico dele zera até um novo seed/compra."""
+    """Deletes ALL orders (reset sales between batches — F-014). Returns how many
+    were deleted. Destructive: confirmation is in UI. Doesn't re-seed DEMO user
+    (seed runs only at boot) — their history zeroes until next seed/purchase."""
     with connect() as conn:
         n = conn.execute("SELECT COUNT(*) AS n FROM orders").fetchone()["n"]
         conn.execute("DELETE FROM orders")

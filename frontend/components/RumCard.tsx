@@ -1,8 +1,8 @@
 "use client";
-// Splunk RUM (Browser Agent) — card do DONO na tela de Connection (F-040-RUM). O owner cola o
-// snippet BRUTO do manual do Splunk e liga o toggle; o frontend injeta no <head> (server-render
-// em app/layout.tsx) p/ TODAS as sessões de navegador (visitantes reais + simulador modo Browser
-// F-039). Off por default. Owner-gated pela tela que o hospeda (backend é a fronteira real).
+// Splunk RUM (Browser Agent) — OWNER card on the Connection screen (F-040-RUM). The owner pastes
+// the RAW snippet from the Splunk manual and flips the toggle; the frontend injects it into <head> (server-render
+// in app/layout.tsx) for ALL browser sessions (real visitors + Browser-mode simulator
+// F-039). Off by default. Owner-gated by the screen that hosts it (the backend is the real boundary).
 import { useCallback, useEffect, useState } from "react";
 import { RumConfig, getRumAdmin, setRum } from "@/lib/api";
 

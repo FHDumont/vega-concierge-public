@@ -1,15 +1,15 @@
-"""Helpers de request compartilhados entre routers — sessão de demo e gate de OWNER.
+"""Request helpers shared between routers — demo session and OWNER gate.
 
-Auth de demo (F-008, ADR-011): sessão por bearer token em `Authorization` (sem cookie — CORS
-é "*"). Token→user vive em memória (DT-010).
+Demo auth (F-008, ADR-011): session by bearer token in `Authorization` (no cookie — CORS
+is "*"). Token→user lives in memory (DT-010).
 """
 from fastapi import HTTPException
 from ..store import orders, users
 
 
-# --- Auth de demo (F-008, ADR-011) ------------------------------------------
-# Sessão por bearer token em `Authorization` (sem cookie — CORS é "*"). Token→user
-# vive em memória (DT-010). Helpers leem o header opcional e resolvem o usuário.
+# --- Demo auth (F-008, ADR-011) ------------------------------------------
+# Session by bearer token in `Authorization` (no cookie — CORS is "*"). Token→user
+# lives in memory (DT-010). Helpers read the optional header and resolve the user.
 
 def _token_from_header(authorization: str | None) -> str | None:
     if not authorization:
@@ -21,14 +21,14 @@ def _token_from_header(authorization: str | None) -> str | None:
 
 
 def _optional_user_id(authorization: str | None) -> str | None:
-    """user_id da sessão se houver token válido; None caso contrário (convidado)."""
+    """Session user_id if valid token; None otherwise (guest)."""
     token = _token_from_header(authorization)
     return users.session_user_id(token) if token else None
 
 
 def _require_owner(authorization: str | None) -> str:
-    """Gate dos endpoints de config de LLM (F-020): exige sessão de um usuário OWNER.
-    401 sem sessão válida; 403 se logado mas sem papel OWNER. Retorna o user_id do owner."""
+    """Gate for LLM config endpoints (F-020): requires session from an OWNER user.
+    401 without valid session; 403 if logged in but without OWNER role. Returns the owner's user_id."""
     user_id = _optional_user_id(authorization)
     if user_id is None:
         raise HTTPException(status_code=401, detail="not authenticated")
@@ -50,7 +50,7 @@ def is_gift_recommend_demo_question(text: str) -> bool:
 
 
 def _me_payload(user_id: str) -> dict:
-    """Usuário público + tier recomputado pelo gasto; materializa o tier na coluna."""
+    """Public user + tier recomputed by spending; materializes the tier in the column."""
     user = users.get_user(user_id)
     if user is None:
         raise HTTPException(status_code=401, detail="invalid session")

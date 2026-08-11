@@ -1,6 +1,6 @@
 "use client";
-// Chrome da Loja (header + carrinho slide-over) presente em todas as rotas de loja.
-// Lê o estado de cliente do ShopProvider. Buscar fora da home navega para "/".
+// Store chrome (header + cart slide-over) present on all store routes.
+// Reads customer state from the ShopProvider. Searching outside the home page navigates to "/".
 import { usePathname, useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Cart from "@/components/Cart";

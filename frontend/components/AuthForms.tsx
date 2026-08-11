@@ -1,5 +1,5 @@
 "use client";
-// Login/registro compartilhado (F-008) — conta e gate de checkout.
+// Shared login/register (F-008) — account and checkout gate.
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";

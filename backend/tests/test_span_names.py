@@ -89,7 +89,7 @@ async def test_chat_account_stats_emits_account_tool_llm_and_aggregate_span():
     spy, base = _config("chat")
     config = {**base, "metadata": {**(base.get("metadata") or {}), "user_id": user_id}}
     result = await arun_chat_workflow(
-        [{"role": "user", "content": "Quanto já gastei?"}], config=config,
+        [{"role": "user", "content": "How much have I spent so far?"}], config=config,
     )
     assert result["intent"] == "stats"
     assert has("chat.answer_store_statistics", spy.chain_names), spy.chain_names

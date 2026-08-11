@@ -1,5 +1,5 @@
 "use client";
-// Workshop use cases — painel UC + Splunk Agent Observability (F-NAV-1, movido p/ /use-cases no header).
+// Workshop use cases — UC panel + Splunk Agent Observability (F-NAV-1, moved to /use-cases in the header).
 import { useEffect, useState } from "react";
 import {
   getProblems,

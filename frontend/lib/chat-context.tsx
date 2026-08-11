@@ -1,5 +1,5 @@
 "use client";
-// Chat flutuante global — estado, sessionStorage e openChat() p/ deep links (F-051).
+// Global floating chat — state, sessionStorage, and openChat() for deep links (F-051).
 import {
   createContext,
   useCallback,
@@ -133,7 +133,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const openChat = useCallback((opts?: OpenChatOpts) => {
     if (opts?.seed) {
-      // Nova conversa — evita empilhar seed demo (ex. banda Concierge) no histórico persistido.
+      // New conversation — avoids stacking a demo seed (e.g. Concierge band) onto the persisted history.
       setTurns([]);
       setContextSku("");
       setContextOrderId("");
@@ -145,7 +145,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setInput(opts.seed);
       pendingSeed.current = opts.seed;
     }
-    // seed e contexto podem vir juntos (ex. "Ask via chat" num pedido DELIVERED).
+    // seed and context can arrive together (e.g. "Ask via chat" on a DELIVERED order).
     if (opts?.sku) setContextSku(opts.sku);
     if (opts?.orderId) setContextOrderId(opts.orderId);
     setOpen(true);
@@ -228,7 +228,7 @@ export function useChat() {
   return ctx;
 }
 
-/** Solta sku/orderId do chat quando o componente-página desmonta (ex. sair do PDP ou do detalhe). */
+/** Releases sku/orderId from the chat when the page component unmounts (e.g. leaving the PDP or the detail page). */
 export type ChatPageScope = { sku?: string; orderId?: string };
 
 export function useChatPageScope(scope: ChatPageScope) {

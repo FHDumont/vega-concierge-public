@@ -1,5 +1,5 @@
-# Workshop guide (Hugo) — serve na VM em :1313 (F-DEPLOY-PROD-1).
-# Requer hugo extended no PATH (instalado na AMI golden).
+# Workshop guide (Hugo) — served on the VM at :1313 (F-DEPLOY-PROD-1).
+# Requires hugo extended on the PATH (installed on the golden AMI).
 [Unit]
 Description=Vega workshop guide (Hugo)
 After=network-online.target
@@ -8,7 +8,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/vega-concierge/workshop
-# Precedência (F-REAL-ENV-2): /etc/environment DEPOIS do .env — injeção por réplica (Ansible) vence o arquivo.
+# Precedence (F-REAL-ENV-2): /etc/environment AFTER .env — injection by the replica (Ansible) wins over the file.
 EnvironmentFile=-/opt/vega-concierge/.env
 EnvironmentFile=-/etc/environment
 ExecStart=/usr/bin/hugo server --bind 0.0.0.0 --port 1313 --baseURL http://127.0.0.1:1313/

@@ -1,26 +1,26 @@
-"""Política pura de supressão/reparenting de spans (F-BACKEND-3, Etapa D.1).
+"""Pure span suppression/reparenting policy (F-BACKEND-3, Stage D.1).
 
-O trace do workshop tem que **caber numa tela**: hoje o chat exporta ~22 spans e o fulfillment
-~27, com plumbing do LangGraph/LCEL (roteadores de aresta condicional, `RunnableSequence`,
-wrappers de RAG, aninhamentos 3-4× do mesmo nome) empurrando `[retriever]`/`[tool]` pra 4-5
-níveis de profundidade — longe do padrão dos exemplos de referência.
+Workshop trace must **fit on screen**: today chat exports ~22 spans and fulfillment
+~27, with LangGraph/LCEL plumbing (conditional edge routers, `RunnableSequence`,
+RAG wrappers, 3-4× nesting of same name) pushing `[retriever]`/`[tool]` to 4-5
+levels deep — far from reference example patterns.
 
-Este módulo decide **só** isso: dado o nome do span e o nome do pai já emitido, o span entra no
-trace ou não. Quem aplica a decisão (e faz o reparenting dos filhos do span suprimido) é o
-`VegaGalileoCallback`. Sem I/O, sem SDK, sem estado — dá pra congelar em teste.
+This module decides **only** this: given span name and already-emitted parent name, does span
+enter trace or not. Who applies decision (and reparents children of suppressed span) is
+`VegaGalileoCallback`. No I/O, no SDK, no state — can freeze in test.
 
-Duas garantias inegociáveis:
+Two non-negotiable guarantees:
 
-1. **Denylist dos UCs.** Os spans que os use cases 1-5 do workshop mandam o participante abrir no
-   Console (`docs/reference/workshop-use-cases.md`) **nunca** são supríveis, aconteça o que
-   acontecer com as regras genéricas. Um trace bonito que perdeu o `check_inventory` da UC-2 é um
-   workshop quebrado.
-2. **Falha = sem supressão.** Qualquer exceção aqui devolve `False` (emite o span). Observabilidade
-   não derruba a loja, e nem sequer degrada o trace: no pior caso ele volta a ser o de antes.
+1. **UC denylist.** Spans that UC 1-5 of workshop tell participant to open in
+   Console (`docs/reference/workshop-use-cases.md`) are **never** suppressible, no matter what
+   generic rules say. Pretty trace that lost UC-2's `check_inventory` is broken
+   workshop.
+2. **Fail = no suppression.** Any exception here returns `False` (emits span). Observability
+   doesn't break store, and doesn't even degrade trace: worst case it goes back to before.
 
-Tag `langsmith:hidden` NÃO substitui isto: no galileo==2.6.0 ela esconde o span mas **orfaniza** a
-subárvore (o filho aponta pra um pai que nunca entrou na árvore e some do commit), então só serve
-pra folha. Daí a supressão ser feita aqui, com reparenting explícito no callback.
+`langsmith:hidden` tag does NOT substitute this: in galileo==2.6.0 it hides span but **orphans**
+subtree (child points to parent that never entered tree and disappears on commit), so only works
+for leaf. Hence suppression done here, with explicit reparenting in callback.
 """
 from __future__ import annotations
 
@@ -29,14 +29,14 @@ import logging
 _logger = logging.getLogger(__name__)
 
 
-# --- denylist congelada -------------------------------------------------------
+# --- frozen denylist -------------------------------------------------------
 
-# Fonte: `docs/reference/workshop-use-cases.md` (spans primários das UC-1..UC-5 e os step names
-# do apêndice de Agent Control) + os rótulos correspondentes em `app/galileo_span.py`. Cobre tanto
-# o nome do nó do grafo (`returns.check_refund_eligibility`) quanto o da tool (`check_refund_eligibility`),
-# porque a checagem também olha o último segmento pontuado.
+# Source: `docs/reference/workshop-use-cases.md` (primary spans of UC-1..UC-5 and Agent Control
+# appendix step names) + corresponding labels in `app/galileo_span.py`. Covers both
+# graph node name (`returns.check_refund_eligibility`) and tool name (`check_refund_eligibility`),
+# because check also looks at last dotted segment.
 PROTECTED_SPAN_NAMES: frozenset[str] = frozenset({
-    # UC-1 — preço inventado
+    # UC-1 — invented price
     "product_qa",
     "answer_product_question",
     # UC-2 — token waste (gift recommendation)
@@ -56,64 +56,64 @@ PROTECTED_SPAN_NAMES: frozenset[str] = frozenset({
     "check_inventory",
     "confirm_cart_stock",
     "verify_cart_inventory_and_price",
-    # UC-3 — refund negado por engano
+    # UC-3 — refund wrongly denied
     "returns.finalize",
     "coordinate_refund_request",
     "check_refund_eligibility",
     "screen_refund_abuse",
     "process_refund",
     "assess_refund_eligibility",
-    # UC-4 — prompt injection (mutação destrutiva e vazamento de PII no caminho do shopper)
+    # UC-4 — prompt injection (destructive mutation and PII leak on the shopper's path)
     "delete_product",
     "list_recent_customers",
     "search",
     "semantic_product_search",
-    # UC-5 — PII na cópia da notificação
+    # UC-5 — PII in notification copy
     "notification_copy",
     "compose_notification_text",
     "send_order_notification",
-    # Fraude/pagamento — spans de negócio do checkout citados nas UC-2/UC-3
+    # Fraud/payment — checkout business spans referenced in UC-2/UC-3
     "decide_fraud_allow_or_block",
     "charge_payment",
 })
 
-# --- regras de supressão ------------------------------------------------------
+# --- suppression rules -------------------------------------------------------
 
-# Nomes crus de classe LCEL — o Console mostra a classe, não o passo de negócio.
+# Raw LCEL class names — Console shows class, not business step.
 _RAW_LCEL_NAMES: frozenset[str] = frozenset({
     "ChatPromptTemplate",
     "StrOutputParser",
 })
 _RAW_LCEL_PREFIXES: tuple[str, ...] = ("Runnable",)
 
-# Plumbing de grafo e wrappers de preparação — último segmento do nome pontuado.
+# Graph plumbing and preparation wrappers — last segment of dotted name.
 _SUPPRESSED_SEGMENTS: frozenset[str] = frozenset({
-    "tools_condition",             # aresta condicional do ReAct
+    "tools_condition",             # ReAct conditional edge
     "prepare_messages",            # `feature.<step>.prepare_messages`
     "replay_cached_response",      # `feature.<step>.replay_cached_response`
-    # F-022 vira metadata no span ancestral (D.2) em vez de span próprio — cobre tanto o
-    # wrapper LCEL (`feature.<step>.check_response_cache`) quanto a tool crua invocada dentro
-    # dele; o `VegaGalileoCallback` grava `cache_hit`/`response_cache` no pai efetivo antes de
-    # suprimir (ver `_merge_cache_metadata`).
+    # F-022 becomes metadata in ancestor span (D.2) instead of own span — covers both
+    # LCEL wrapper (`feature.<step>.check_response_cache`) and raw tool invoked inside;
+    # `VegaGalileoCallback` records `cache_hit`/`response_cache` on effective parent before
+    # suppressing (see `_merge_cache_metadata`).
     "check_response_cache",
-    # Wrappers estruturais do grafo `fulfillment` (D.4 — medição ao vivo: 19 nós, meta ≤14).
-    # Nenhum destes é uma decisão de negócio nem aparece em `docs/reference/workshop-use-cases.md`;
-    # são glue/bookkeeping em torno dos nós protegidos (check_inventory, decide_fraud_allow_or_block,
-    # confirm_cart_stock, charge_payment, send_order_notification), que continuam intactos.
-    "run_checkout_tools",          # `ToolNode` puro do ReAct — as tool calls (get_price/
-                                    # check_inventory) promovem pro pai efetivo, não somem.
-    "resolve_checkout_quote",      # normaliza inventory/quote do histórico de mensagens; quando
-                                    # aciona o fallback de SKU errado, a tool chamada de novo
-                                    # ainda aparece (reparentada), só a etiqueta do wrapper some.
-    "decrement_catalog_stock",     # bookkeeping pós-pagamento, sem branch de negócio.
-    "persist_order_status",        # grava o status final; a decisão que o gerou (fraude/estoque/
-                                    # pagamento) já está visível nos nós protegidos correspondentes.
+    # Structural wrappers of `fulfillment` graph (D.4 — live measurement: 19 nodes, goal ≤14).
+    # None of these is a business decision nor appears in `docs/reference/workshop-use-cases.md`;
+    # glue/bookkeeping around protected nodes (check_inventory, decide_fraud_allow_or_block,
+    # confirm_cart_stock, charge_payment, send_order_notification), which stay intact.
+    "run_checkout_tools",          # Pure ReAct `ToolNode` — tool calls (get_price/
+                                    # check_inventory) promote to effective parent, don't disappear.
+    "resolve_checkout_quote",      # normalizes inventory/quote from message history; when
+                                    # triggers wrong-SKU fallback, tool called again
+                                    # still appears (reparented), just wrapper label vanishes.
+    "decrement_catalog_stock",     # post-payment bookkeeping, no business branch.
+    "persist_order_status",        # saves final status; decision that created it (fraud/stock/
+                                    # payment) already visible in corresponding protected nodes.
 })
 
 _ROUTE_PREFIXES: tuple[str, ...] = ("route_after_", "_route_after_")
-# `chat_pick_next_specialist` e o gêmeo `concierge_pick_next_specialist` — a spec nomeia o do
-# chat, mas é a mesma aresta condicional; o sufixo pega os dois (e o próximo grafo que copiar
-# o padrão) sem virar caça a nome literal.
+# `chat_pick_next_specialist` and twin `concierge_pick_next_specialist` — spec names chat one,
+# but same conditional edge; suffix catches both (and next graph copying pattern)
+# without hunting literal names.
 _ROUTE_SUFFIXES: tuple[str, ...] = ("_pick_next_specialist",)
 
 
@@ -122,15 +122,15 @@ def _last_segment(name: str) -> str:
 
 
 def is_protected(name: str | None) -> bool:
-    """True quando o span é um dos que os UCs do workshop precisam ver no Console."""
+    """True when span is one workshop UCs need to see in Console."""
     try:
         raw = (name or "").strip()
         if not raw:
             return False
         return raw in PROTECTED_SPAN_NAMES or _last_segment(raw) in PROTECTED_SPAN_NAMES
-    except Exception as exc:  # noqa: BLE001 — política nunca levanta
-        _logger.warning("span policy: is_protected falhou para %r (%s)", name, exc)
-        return True  # na dúvida, protege
+    except Exception as exc:  # noqa: BLE001 — policy never raises
+        _logger.warning("span policy: is_protected failed for %r (%s)", name, exc)
+        return True  # when in doubt, protect
 
 
 def _is_raw_lcel(name: str) -> bool:
@@ -144,9 +144,9 @@ def _is_graph_plumbing(segment: str) -> bool:
 
 
 def _is_context_wrapper(segment: str) -> bool:
-    """`feature.merge_*_context` / `feature.retrieve_*_for_context` — só embrulham o retriever.
+    """`feature.merge_*_context` / `feature.retrieve_*_for_context` — only wrap retriever.
 
-    Suprimi-los é o que promove o span `[retriever]` pra perto da raiz.
+    Suppressing them is what promotes `[retriever]` span near root.
     """
     if segment.startswith("merge_") and segment.endswith("_context"):
         return True
@@ -154,10 +154,10 @@ def _is_context_wrapper(segment: str) -> bool:
 
 
 def suppress(name: str | None, parent_name: str | None = None) -> bool:
-    """Decide se o span `name`, filho do span já emitido `parent_name`, deve sair do trace.
+    """Decide if span `name`, child of already-emitted span `parent_name`, should leave trace.
 
-    `parent_name is None` = raiz do trace (ou pai efetivo desconhecido): **nunca** suprime — sem
-    raiz o SDK não tem onde pendurar a árvore e o trace inteiro se perde.
+    `parent_name is None` = trace root (or unknown effective parent): **never** suppress — without
+    root SDK has nowhere to hang tree and entire trace is lost.
     """
     try:
         raw = (name or "").strip()
@@ -175,18 +175,18 @@ def suppress(name: str | None, parent_name: str | None = None) -> bool:
             return True
         if _is_context_wrapper(segment):
             return True
-        # Aninhamento idêntico ao pai (o LCEL repete o mesmo `run_name` 3-4× em profundidade):
-        # o primeiro da cadeia sobrevive, os de baixo somem. D.4 estende a comparação pro ÚLTIMO
-        # SEGMENTO do nome: `feature.answer_store_policy` sob `chat.answer_store_policy` é o
-        # mesmo passo de negócio com prefixo de namespace diferente (grafo vs. LCEL da feature) —
-        # sem isso o retriever fica a 3 níveis da raiz (meta é ≤2). Nomes protegidos já saíram
-        # antes (`is_protected` acima), então isto nunca reduz um nó dos UCs 1-5.
+        # Identical nesting to parent (LCEL repeats same `run_name` 3-4× in depth):
+        # first in chain survives, ones below vanish. D.4 extends comparison to the LAST
+        # SEGMENT of the name: `feature.answer_store_policy` under `chat.answer_store_policy` is the
+        # same business step with a different namespace prefix (graph vs. the feature's LCEL) —
+        # without this the retriever ends up 3 levels from the root (goal is ≤2). Protected names already
+        # left before (`is_protected` above), so this never reduces a node from UCs 1-5.
         if not parent_name:
             return False
         parent_raw = parent_name.strip()
         if raw == parent_raw:
             return True
         return bool(segment) and segment == _last_segment(parent_raw)
-    except Exception as exc:  # noqa: BLE001 — fallback SEM supressão
-        _logger.warning("span policy: suppress falhou para %r (%s)", name, exc)
+    except Exception as exc:  # noqa: BLE001 — fallback WITHOUT suppression
+        _logger.warning("span policy: suppress failed for %r (%s)", name, exc)
         return False

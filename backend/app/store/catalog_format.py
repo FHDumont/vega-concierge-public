@@ -1,11 +1,11 @@
-"""Formatação compartilhada de catálogo, vendas e conta (F-BACKEND-1).
+"""Shared formatting for catalog, sales, and account (F-BACKEND-1).
 
-Existe para quebrar o ciclo `ai_features` ↔ `response_layout`: os dois precisavam destes mesmos
-helpers, e `response_layout` só conseguia alcançá-los com import adiado dentro das funções.
-(A F-BACKEND-2 fatiou `ai_features` em `app/features/*`; o guarda vale p/ todas as fatias.)
+Exists to break the cycle `ai_features` ↔ `response_layout`: both needed these same
+helpers, and `response_layout` could only reach them via deferred imports inside functions.
+(F-BACKEND-2 sliced `ai_features` into `app/features/*`; the guard applies to all slices.)
 
-Aqui só entra formatação PURA — dict de fatos em texto. Nada que consulte catálogo, pedidos ou
-LLM: isso continua nas fatias de `app/features/`.
+Only PURE formatting enters here — dict of facts to text. Nothing that queries catalog, orders, or
+LLM: that stays in the `app/features/` slices.
 """
 from __future__ import annotations
 

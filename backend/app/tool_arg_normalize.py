@@ -11,9 +11,9 @@ _SKU_PATTERN = re.compile(r"NS-\d{3}", re.I)
 def format_tool_error(error: Exception) -> str:
     """Short JSON for ToolNode residual errors — no stack trace in span output.
 
-    Sem `"tool"` no payload: o nome já está no span e no `ToolMessage.name` — LangGraph chama o
-    handler só com a exceção (infere o tipo tratado pela anotação do 1º parâmetro), então um
-    `tool=` explícito nunca chegava a ser passado, e o campo sempre saía `"unknown"`."""
+    Without `"tool"` in payload: the name is already in the span and `ToolMessage.name` — LangGraph calls the
+    handler with just the exception (infers the handled type by the annotation of the 1st parameter), so an
+    explicit `tool=` never got passed, and the field always came out as `"unknown"`."""
     message = str(error).strip()
     if len(message) > 200:
         message = message[:197] + "..."
@@ -52,10 +52,10 @@ def _coerce_budget(value: Any) -> float | None:
 
 
 def normalize_sku_arg(raw: dict) -> tuple[str | None, dict | None]:
-    """Acha um SKU em qualquer campo do payload; erro estruturado quando não há nenhum.
+    """Finds a SKU in any field of the payload; structured error when there's none.
 
-    Base compartilhada por `get_price` e `check_inventory` — as duas tools que o modelo escolhe
-    sozinho e que precisam de um SKU e só."""
+    Shared base for `get_price` and `check_inventory` — the two tools the model chooses
+    on its own and that need only a SKU."""
     sku = raw.get("sku")
     if not isinstance(sku, str) or not _SKU_PATTERN.fullmatch(sku or ""):
         sku = _extract_sku(sku) if sku else None
@@ -70,11 +70,11 @@ def normalize_sku_arg(raw: dict) -> tuple[str | None, dict | None]:
 
 
 def normalize_check_inventory_args(raw: dict) -> tuple[dict | None, dict | None]:
-    """`check_inventory` chamada sem `sku` (ou com o SKU enterrado noutro campo).
+    """`check_inventory` called without `sku` (or with SKU buried in another field).
 
-    Sem isto o `args_schema` estrito estoura `ValidationError` e o trace do checkout ganha um
-    span vermelho com URL do pydantic no meio do happy path — foi o que a navegação ao vivo
-    pegou. `get_price` já tinha esse reparo desde a F-TRACE-UX-1; esta ficou de fora."""
+    Without this the strict `args_schema` throws `ValidationError` and the checkout trace gains a
+    red span with pydantic URL in the middle of the happy path — that's what live navigation found.
+    `get_price` already had this fix since F-TRACE-UX-1; this one was left out."""
     sku, err = normalize_sku_arg(raw)
     if err:
         return None, err
@@ -108,7 +108,7 @@ def normalize_get_price_args(raw: dict) -> tuple[dict | None, dict | None]:
                 if sku:
                     break
 
-    # `sku` pode ter chegado como lista (`{"sku": ["NS-004"]}`) — `fullmatch` estouraria TypeError.
+    # `sku` may have come as a list (`{"sku": ["NS-004"]}`) — `fullmatch` would throw TypeError.
     if not isinstance(sku, str) or not _SKU_PATTERN.fullmatch(sku):
         sku = _extract_sku(sku)
     if not sku:
@@ -125,11 +125,11 @@ def normalize_get_price_args(raw: dict) -> tuple[dict | None, dict | None]:
 
 
 def normalize_search_policies_args(raw: dict) -> tuple[str | None, dict | None]:
-    """Primeira string não-vazia entre `question`/`query`/`q`/`text`/`input`.
+    """First non-empty string among `question`/`query`/`q`/`text`/`input`.
 
-    Sem nenhuma → erro estruturado, nunca uma pergunta default: um default dispararia um
-    retriever span (`rag.retrieve_policies`) com resultado sem sentido, e a UC-1 se apoia
-    nesse span pra existir de verdade.
+    Without any → structured error, never a default question: a default would fire a
+    retriever span (`rag.retrieve_policies`) with meaningless result, and UC-1 relies
+    on that span to really exist.
     """
     for key in ("question", "query", "q", "text", "input"):
         val = raw.get(key)
@@ -143,10 +143,10 @@ def normalize_search_policies_args(raw: dict) -> tuple[str | None, dict | None]:
 
 
 def normalize_policy_lookup_args(raw: dict) -> tuple[str | None, dict | None]:
-    """`policy_lookup` só usa `status` (`app/store/tools.py:214-221`) — `order_id`/`total` são
-    ignorados pelo cálculo, então são aceitos ausentes sem erro. `status` é o único campo
-    obrigatório e NÃO é inventável: um default `"DELIVERED"` seria o bug do #72 (stub sem
-    `HumanMessage` inventando pedido entregue) promovido a produção.
+    """`policy_lookup` only uses `status` (`app/store/tools.py:214-221`) — `order_id`/`total` are
+    ignored by the calculation, so they're accepted missing without error. `status` is the only
+    required field and is NOT inventable: a default `"DELIVERED"` would be bug #72 (stub without
+    `HumanMessage` inventing delivered order) promoted to production.
     """
     status = raw.get("status")
     if isinstance(status, str) and status.strip():
@@ -159,9 +159,9 @@ def normalize_policy_lookup_args(raw: dict) -> tuple[str | None, dict | None]:
 
 
 def normalize_refund_calc_args(raw: dict) -> tuple[float | None, dict | None]:
-    """`refund_calc` só usa `total` (`app/store/tools.py:219-221`). Recuperável de string
-    (`"R$179,00"`, `"$179"`) no molde de `_coerce_budget`; nunca um default `0.0` — é
-    literalmente o modo de falha do #72 (`refund_amount: 0` chegando ao usuário).
+    """`refund_calc` only uses `total` (`app/store/tools.py:219-221`). Recoverable from string
+    (`"R$179,00"`, `"$179"`) in the style of `_coerce_budget`; never a default `0.0` — it's
+    literally bug #72's failure mode (`refund_amount: 0` reaching the user).
     """
     total = _coerce_budget(raw.get("total"))
     if total is None:

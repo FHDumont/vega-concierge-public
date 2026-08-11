@@ -1,8 +1,8 @@
-"""Camada de controle de custo de LLM (F-022) — ex `run_cost_demo.py`.
+"""LLM cost control layer (F-022) — formerly `run_cost_demo.py`.
 
-Sem rede (só o stub, standalone): cache miss→hit, single-flight, rate-limit, max_tokens e o
-status `cache` devolvido por `feature_complete`. Com `LLM_CACHE_ENABLED=0` o módulo opera em
-modo sempre-miss — os testes que dependem de hit são pulados nesse caso.
+No network (stub only, standalone): cache miss->hit, single-flight, rate-limit, max_tokens and the
+`cache` status returned by `feature_complete`. With `LLM_CACHE_ENABLED=0` the module operates in
+always-miss mode — tests that depend on a hit are skipped in that case.
 """
 from __future__ import annotations
 
@@ -17,15 +17,15 @@ from app.llm.llm import get_llm
 
 cache_on = pytest.mark.skipif(
     not llm_cache.cache_globally_enabled(),
-    reason="LLM_CACHE_ENABLED=0 — sem hit/single-flight pra observar",
+    reason="LLM_CACHE_ENABLED=0 — no hit/single-flight to observe",
 )
 
 
 @cache_on
 def test_identical_prompt_normalizes_to_a_cache_hit(clean_cache):
-    llm = get_llm()  # sem provider configurado → stub
-    r1, s1 = clean_cache.complete_cached(llm, "demo", "sys", "qual o melhor fone?")
-    r2, s2 = clean_cache.complete_cached(llm, "demo", "sys", "Qual o melhor   FONE?")
+    llm = get_llm()  # no provider configured -> stub
+    r1, s1 = clean_cache.complete_cached(llm, "demo", "sys", "what's the best headphone?")
+    r2, s2 = clean_cache.complete_cached(llm, "demo", "sys", "What's the best   HEADPHONE?")
     assert (s1, s2) == ("miss", "hit")
     assert r1.text == r2.text
     assert len(clean_cache._cache) == 1
@@ -37,7 +37,7 @@ def test_single_flight_dedupes_concurrent_identical_calls(clean_cache):
     lock = threading.Lock()
 
     def worker():
-        _, status = clean_cache.complete_cached(get_llm(), "sf", "sys", "mesma pergunta")
+        _, status = clean_cache.complete_cached(get_llm(), "sf", "sys", "same question")
         with lock:
             results.append(status)
 
@@ -54,16 +54,16 @@ def test_single_flight_dedupes_concurrent_identical_calls(clean_cache):
 @cache_on
 def test_cache_key_includes_system_max_tokens_and_verbose(clean_cache):
     llm = get_llm()
-    r_a, s_a = clean_cache.complete_cached(llm, "k", "sys-A", "mesma pergunta", max_tokens=50)
-    _, s_b = clean_cache.complete_cached(llm, "k", "sys-B", "mesma pergunta", max_tokens=50)
-    r_c, s_c = clean_cache.complete_cached(llm, "k", "sys-A", "mesma pergunta", max_tokens=50)
-    _, s_d = clean_cache.complete_cached(llm, "k", "sys-A", "mesma pergunta", max_tokens=100)
-    _, s_e = clean_cache.complete_cached(llm, "k", "sys-A", "mesma pergunta", max_tokens=50, verbose=True)
+    r_a, s_a = clean_cache.complete_cached(llm, "k", "sys-A", "same question", max_tokens=50)
+    _, s_b = clean_cache.complete_cached(llm, "k", "sys-B", "same question", max_tokens=50)
+    r_c, s_c = clean_cache.complete_cached(llm, "k", "sys-A", "same question", max_tokens=50)
+    _, s_d = clean_cache.complete_cached(llm, "k", "sys-A", "same question", max_tokens=100)
+    _, s_e = clean_cache.complete_cached(llm, "k", "sys-A", "same question", max_tokens=50, verbose=True)
 
-    assert (s_a, s_b) == ("miss", "miss"), "system diferente tem que ser chave diferente"
+    assert (s_a, s_b) == ("miss", "miss"), "different system must be a different key"
     assert s_c == "hit" and r_a.text == r_c.text
-    assert s_d == "miss", "max_tokens diferente tem que ser chave diferente"
-    assert s_e == "miss", "verbose diferente tem que ser chave diferente"
+    assert s_d == "miss", "different max_tokens must be a different key"
+    assert s_e == "miss", "different verbose must be a different key"
     assert len(clean_cache._cache) == 4
 
 
@@ -88,7 +88,7 @@ def test_updating_an_agent_prompt_invalidates_the_cache(clean_cache):
 
 
 @pytest.mark.skipif(
-    llm_cache.cache_globally_enabled(), reason="só vale com LLM_CACHE_ENABLED=0",
+    llm_cache.cache_globally_enabled(), reason="only valid with LLM_CACHE_ENABLED=0",
 )
 def test_disabled_cache_always_misses(clean_cache):
     llm = get_llm()

@@ -1,5 +1,5 @@
 "use client";
-// Widget flutuante WhatsApp-style — painel multi-turn global (F-051).
+// WhatsApp-style floating widget — global multi-turn panel (F-051).
 import { useShop } from "@/lib/store";
 import { useChat } from "@/lib/chat-context";
 import ChatThread from "@/components/ChatThread";

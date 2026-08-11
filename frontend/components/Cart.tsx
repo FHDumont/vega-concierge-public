@@ -1,8 +1,8 @@
 "use client";
-// Carrinho (slide-over) — visualização rápida do carrinho no design custom dirigido por
-// paletas (ADR-012/013). Desde a F-011 o CHECKOUT vive em página própria (/checkout): o
-// botão "Checkout" navega para lá (este painel não conduz mais o fluxo de pagamento).
-// Estilizado pelas variáveis de paleta (globals.css › .ns-panel etc.). SEM @splunk/react-ui.
+// Cart (slide-over) — quick cart view in the custom, palette-driven design
+// (ADR-012/013). Since F-011, CHECKOUT lives on its own page (/checkout): the
+// "Checkout" button navigates there (this panel no longer drives the payment flow).
+// Styled via the palette variables (globals.css › .ns-panel etc.). NO @splunk/react-ui.
 import { Product } from "@/lib/api";
 import { CartItem, emojiOf, formatMoney, gradientOf } from "@/lib/shop";
 import CartCrossSell from "./CartCrossSell";
@@ -21,8 +21,8 @@ export default function Cart({
   onClose: () => void;
   onSetQty: (sku: string, qty: number) => void;
   onRemove: (sku: string) => void;
-  onAdd: (p: Product) => void; // adiciona uma sugestão de cross-sell (F-023)
-  onCheckout: () => void; // navega para /checkout (F-011) e fecha o painel
+  onAdd: (p: Product) => void; // adds a cross-sell suggestion (F-023)
+  onCheckout: () => void; // navigates to /checkout (F-011) and closes the panel
 }) {
   const total = items.reduce((s, i) => s + i.product.price * i.qty, 0);
   const count = items.reduce((s, i) => s + i.qty, 0);

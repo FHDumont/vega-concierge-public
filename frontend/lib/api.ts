@@ -1,13 +1,13 @@
-// API base — resolvido por AMBIENTE (F-041, ADR-024 › separado):
-// • NAVEGADOR: base PÚBLICO da API (origem própria, subdomínio `api.vega.<dom>`) lido de
-//   `window.__API_BASE`, INJETADO em runtime pelo server-render (ver app/layout.tsx). NÃO usamos
-//   `NEXT_PUBLIC_*` nem rewrite porque AMBOS são "baked" no `next build` (inlined / routes-manifest)
-//   → quebrariam o multi-host. A injeção em runtime mantém 1 imagem servindo qualquer HOMELAB_DOMAIN.
-// • SERVIDOR (SSR): não há `window` → fala com o backend interno direto (API_INTERNAL_URL, runtime;
-//   default dev = localhost:8000; no compose = http://backend:8000).
+// API base — resolved per ENVIRONMENT (F-041, ADR-024 › separated):
+// • BROWSER: PUBLIC API base (own origin, `api.vega.<dom>` subdomain) read from
+//   `window.__API_BASE`, INJECTED at runtime by the server-render (see app/layout.tsx). We do NOT use
+//   `NEXT_PUBLIC_*` or rewrite because BOTH are "baked" at `next build` (inlined / routes-manifest)
+//   → they'd break the multi-host setup. Runtime injection keeps 1 image serving any HOMELAB_DOMAIN.
+// • SERVER (SSR): no `window` → talks to the internal backend directly (API_INTERNAL_URL, runtime;
+//   dev default = localhost:8000; in compose = http://backend:8000).
 declare global {
   interface Window {
-    // Base público da API injetado em runtime pelo server-render (app/layout.tsx).
+    // Public API base injected at runtime by the server-render (app/layout.tsx).
     __API_BASE?: string;
   }
 }
@@ -17,7 +17,7 @@ const BASE =
     ? process.env.API_INTERNAL_URL || "http://localhost:8000"
     : window.__API_BASE || "";
 
-/** HTTP 429 da API — mensagem amigável + Retry-After (F-WORKSHOP-GUARD). */
+/** API HTTP 429 — friendly message + Retry-After (F-WORKSHOP-GUARD). */
 export class ApiRateLimitError extends Error {
   readonly retryAfterSeconds: number;
 
@@ -47,7 +47,7 @@ async function throwIfRateLimited(r: Response): Promise<void> {
   throw new ApiRateLimitError(detail, retryAfterSeconds);
 }
 
-/** Fetch central — propaga 429 sem retry automático. */
+/** Central fetch — propagates 429 without automatic retry. */
 async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const r = await fetch(input, init);
   await throwIfRateLimited(r);
@@ -62,8 +62,8 @@ export type RunResult = {
   messages: string[];
   quality: { grounded: boolean; accuracy: number } | null;
   recommended: Product | null;
-  answer: string | null; // recomendação composta pelo LLM, fundamentada no produto real (F-025)
-  language: string | null; // idioma detectado/usado na resposta (F-025)
+  answer: string | null; // recommendation composed by the LLM, grounded in the real product (F-025)
+  language: string | null; // language detected/used in the response (F-025)
   order: { order_id: string; status: string } | null;
   error: string | null;
 };
@@ -71,7 +71,7 @@ export type Problems = {
   active_scenario?: string;
 } & Record<string, boolean | string | undefined>;
 
-// Pedido persistido (F-003). Espelha o domínio Order do backend (SQLite).
+// Persisted order (F-003). Mirrors the backend's Order domain (SQLite).
 export type OrderItem = { sku: string; name: string; qty: number; price: number };
 export type Customer = { name: string; email: string; address: string };
 export type OrderStatus = "PENDING" | "PAID" | "SHIPPED" | "DELIVERED" | "FAILED" | "REFUNDED";
@@ -83,21 +83,21 @@ export type Order = {
   total: number;
   status: OrderStatus;
   created_at: string;
-  history?: OrderTransition[]; // transições do ciclo de vida (F-005)
+  history?: OrderTransition[]; // lifecycle transitions (F-005)
   failure_reason?: string; // checkout FAILED — inventory, fraud, payment (workshop UX)
 };
 
-// Conta de usuário (F-008). `tier` é computado pelo gasto acumulado no backend;
-// `spend` é o total acumulado (BRL) usado para exibir o progresso de tier.
+// User account (F-008). `tier` is computed from accumulated spend on the backend;
+// `spend` is the accumulated total (BRL) used to display tier progress.
 export type Tier = "STANDARD" | "GOLD" | "PLATINUM";
-// `role` (F-020): STANDARD | OWNER. OWNER gateia a config de LLM (tela escondida p/ os demais).
+// `role` (F-020): STANDARD | OWNER. OWNER gates the LLM config (screen hidden from everyone else).
 export type Role = "STANDARD" | "OWNER";
-// `address` (F-011): endereço salvo no perfil; pré-preenche o checkout (vazio = sem endereço).
+// `address` (F-011): address saved on the profile; pre-fills checkout (empty = no address).
 export type User = { id: string; name: string; email: string; tier: Tier; role: Role; spend: number; address: string };
 export type AuthResult = { token: string; user: User };
 
-// Token da sessão (bearer) mantido em memória; o AuthProvider o sincroniza com o
-// localStorage e o injeta aqui (ADR-011 — sem cookie por causa do CORS "*").
+// Session token (bearer) kept in memory; the AuthProvider syncs it with
+// localStorage and injects it here (ADR-011 — no cookie because of CORS "*").
 let authToken: string | null = null;
 export function setAuthToken(token: string | null) {
   authToken = token;
@@ -106,11 +106,11 @@ function authHeaders(): Record<string, string> {
   return authToken ? { authorization: `Bearer ${authToken}` } : {};
 }
 
-// --- Sessão de comprador (F-GALILEO-1, expiry F-GALILEO-8) ------------------
-// UUID por navegador, persistido no localStorage e enviado em `X-Vega-Session` nas chamadas de
-// IA. Costura os vários requests de uma visita numa sessão só no Splunk Agent Observability — é o que habilita as
-// métricas de nó de sessão do Console. Expira após inatividade (default 5 min, configurável via
-// VEGA_SESSION_IDLE_MINUTES) ou manualmente (botão "New session" no BTS). Não é autenticação.
+// --- Shopper session (F-GALILEO-1, expiry F-GALILEO-8) ------------------
+// Per-browser UUID, persisted in localStorage and sent in `X-Vega-Session` on AI
+// calls. Stitches a visit's several requests into a single session in Splunk Agent Observability — this is what
+// enables the Console's session-node metrics. Expires after inactivity (default 5 min, configurable via
+// VEGA_SESSION_IDLE_MINUTES) or manually ("New session" button in BTS). Not authentication.
 const SESSION_KEY = "vega_shopper_session";
 const SESSION_AT_KEY = "vega_shopper_session_at";
 let shopperSessionId: string | null = null;
@@ -119,8 +119,8 @@ let sessionConfigLoaded = false;
 let sessionConfigPromise: Promise<void> | null = null;
 
 function newUuid(): string {
-  // `crypto.randomUUID` só existe em secure context, e o workshop roda em http://<IP-da-VM>
-  // (ADR-025) — daí o fallback.
+  // `crypto.randomUUID` only exists in a secure context, and the workshop runs on http://<VM-IP>
+  // (ADR-025) — hence the fallback.
   const c = globalThis.crypto;
   if (c && typeof c.randomUUID === "function") return c.randomUUID();
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
@@ -135,17 +135,17 @@ function persistShopperSession(id: string, atMs: number = Date.now()): void {
     window.localStorage.setItem(SESSION_KEY, id);
     window.localStorage.setItem(SESSION_AT_KEY, String(atMs));
   } catch {
-    /* localStorage bloqueado (navegação privada) */
+    /* localStorage blocked (private browsing) */
   }
 }
 
-/** Override do timeout de inatividade (0 = desliga expiry). Chamado após getGalileoConfig. */
+/** Override for the inactivity timeout (0 = disables expiry). Called after getGalileoConfig. */
 export function configureShopperSession(idleMinutes: number): void {
   sessionIdleMinutes = idleMinutes >= 0 ? idleMinutes : 0;
   sessionConfigLoaded = true;
 }
 
-/** Gera UUID novo e reinicia a jornada Splunk Agent Observability (botão BTS ou expiry por inatividade). */
+/** Generates a new UUID and restarts the Splunk Agent Observability journey (BTS button or inactivity expiry). */
 export function resetShopperSession(): string {
   const id = newUuid();
   persistShopperSession(id);
@@ -158,7 +158,7 @@ function ensureSessionConfig(): Promise<void> {
   sessionConfigPromise = getGalileoConfig()
     .then((g) => configureShopperSession(g.session_idle_minutes))
     .catch(() => {
-      /* mantém default 5 min */
+      /* keeps the 5 min default */
     });
   return sessionConfigPromise;
 }
@@ -176,7 +176,7 @@ function resolveShopperSession(touchActivity: boolean): string {
     const rawAt = window.localStorage.getItem(SESSION_AT_KEY);
     atMs = rawAt ? Number(rawAt) : 0;
   } catch {
-    /* localStorage bloqueado */
+    /* localStorage blocked */
   }
 
   if (shopperSessionId && !id) id = shopperSessionId;
@@ -196,13 +196,13 @@ function resolveShopperSession(touchActivity: boolean): string {
   return id;
 }
 
-/** Prefetch da config de idle (Providers no boot) — evita race na 1ª request de IA. */
+/** Prefetch of the idle config (Providers on boot) — avoids a race on the 1st AI request. */
 export function initShopperSessionConfig(): void {
   void ensureSessionConfig();
 }
 
 function sessionHeaders(): Record<string, string> {
-  if (typeof window === "undefined") return {}; // SSR não tem jornada de comprador
+  if (typeof window === "undefined") return {}; // SSR has no shopper journey
   return { "x-vega-session": resolveShopperSession(true) };
 }
 
@@ -225,14 +225,14 @@ export async function login(email: string, password: string): Promise<AuthResult
 export async function logout(): Promise<void> {
   await fetch(`${BASE}/api/auth/logout`, { method: "POST", headers: authHeaders() });
 }
-// Retorna o usuário da sessão atual, ou null se o token está ausente/expirado.
+// Returns the current session's user, or null if the token is missing/expired.
 export async function getMe(): Promise<User | null> {
   const r = await fetch(`${BASE}/api/auth/me`, { headers: authHeaders() });
   if (r.status === 401) return null;
   if (!r.ok) throw new Error(`me failed: ${r.status}`);
   return (await r.json()).user;
 }
-// Salva/edita o endereço do perfil (F-011). Exige sessão; retorna o usuário atualizado.
+// Saves/edits the profile address (F-011). Requires a session; returns the updated user.
 export async function updateAddress(address: string): Promise<User> {
   const r = await fetch(`${BASE}/api/auth/me`, {
     method: "PUT", headers: { "content-type": "application/json", ...authHeaders() },
@@ -275,7 +275,7 @@ export async function deleteCatalogProduct(
   return r.json();
 }
 
-// --- Chat aberto (F-050-CHAT) ------------------------------------------------
+// --- Open chat (F-050-CHAT) ------------------------------------------------
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 export type ChatContext = { sku?: string; order_id?: string };
 export type ChatResult = {
@@ -320,8 +320,8 @@ export async function recommendGift(
   return r.json();
 }
 
-// --- IA-Produto (F-022) -----------------------------------------------------
-// Q&A fundamentado nos dados do produto na PDP. Honra os toggles de problema.
+// --- AI-Product (F-022) -----------------------------------------------------
+// Q&A grounded in the product data on the PDP. Honors the problem toggles.
 export async function askProduct(sku: string, question: string): Promise<{ answer: string; grounded: boolean }> {
   const r = await apiFetch(`${BASE}/api/product/qa`, {
     method: "POST", headers: { "content-type": "application/json", ...sessionHeaders() },
@@ -331,9 +331,9 @@ export async function askProduct(sku: string, question: string): Promise<{ answe
   return r.json();
 }
 
-// --- Compare 2 produtos (F-029) ---------------------------------------------
-// Orquestração simples: Compare Coordinator (agente) busca os 2 produtos via tool real e delega
-// ao Comparator (agente) o veredito exibido. Só o conteúdo. Honra os toggles + cache (par igual
+// --- Compare 2 products (F-029) ---------------------------------------------
+// Simple orchestration: Compare Coordinator (agent) fetches the 2 products via a real tool and delegates
+// the displayed verdict to the Comparator (agent). Content only. Honors the toggles + cache (same pair
 // 2× = cache hit).
 export type CompareLayout = {
   lead?: string;
@@ -357,9 +357,9 @@ export async function compareProducts(skuA: string, skuB: string): Promise<Compa
   return r.json();
 }
 
-// --- IA-Carrinho (F-023) ----------------------------------------------------
-// Cross-sell/bundle ("complete your purchase") a partir dos SKUs no carrinho.
-// Honra os toggles; fallback gracioso offline.
+// --- AI-Cart (F-023) ----------------------------------------------------
+// Cross-sell/bundle ("complete your purchase") from the SKUs in the cart.
+// Honors the toggles; graceful offline fallback.
 export type CartCrossSell = { products: Product[]; blurb: string };
 export async function cartCrossSell(skus: string[]): Promise<CartCrossSell> {
   const r = await apiFetch(`${BASE}/api/cart/crosssell`, {
@@ -378,23 +378,23 @@ export async function createOrder(items: OrderItem[], customer: Customer): Promi
   if (!r.ok) throw new Error(`order failed: ${r.status}`);
   return r.json();
 }
-// Histórico de compras do usuário logado (F-008). Exige sessão (401 sem token).
+// Purchase history for the logged-in user (F-008). Requires a session (401 without token).
 export async function getOrders(): Promise<Order[]> {
   const r = await fetch(`${BASE}/api/orders`, { headers: authHeaders() });
   if (!r.ok) throw new Error(`orders failed: ${r.status}`);
   return r.json();
 }
-// Detalhe de uma ordem. Envia o token da sessão (F-019): com sessão, o backend só
-// devolve a PRÓPRIA ordem (404 p/ ordem alheia). Sem token segue público (Admin).
+// Order detail. Sends the session token (F-019): with a session, the backend only
+// returns the user's OWN order (404 for someone else's order). Without a token it stays public (Admin).
 export async function getOrder(id: string): Promise<Order> {
   const r = await fetch(`${BASE}/api/orders/${id}`, { headers: authHeaders() });
   if (!r.ok) throw new Error(`order not found: ${r.status}`);
   return r.json();
 }
-// --- IA-Notificação (F-031) -------------------------------------------------
-// Copy gerada de e-mail p/ o evento atual do pedido (confirmação/enviado), reaproveitando a
-// notificação simulada (F-005). Só o conteúdo. Backend resolve a ordem (grounding real) + honra
-// os toggles; offline → fallback gracioso. Envia o bearer (autorização do getOrder, F-019).
+// --- AI-Notification (F-031) -------------------------------------------------
+// Generated email copy for the order's current event (confirmation/shipped), reusing the
+// simulated notification (F-005). Content only. Backend resolves the order (real grounding) + honors
+// the toggles; offline → graceful fallback. Sends the bearer (getOrder's authorization, F-019).
 export type NotificationCopy = {
   subject: string;
   body: string;
@@ -410,10 +410,10 @@ export async function orderNotification(id: string): Promise<NotificationCopy> {
   return r.json();
 }
 
-// --- IA-Conta (F-031) -------------------------------------------------------
-// Insights do histórico + benefícios do tier + sugestão de recompra a partir dos dados reais
-// do usuário logado. Só o conteúdo. Backend resolve user/pedidos (grounding real) + honra os
-// toggles; offline → fallback gracioso. Exige sessão.
+// --- AI-Account (F-031) -------------------------------------------------------
+// Insights from history + tier benefits + repurchase suggestion based on the logged-in
+// user's real data. Content only. Backend resolves user/orders (real grounding) + honors the
+// toggles; offline → graceful fallback. Requires a session.
 export type AccountInsights = {
   summary: string;
   tier_benefits: string;
@@ -429,9 +429,9 @@ export async function accountInsights(): Promise<AccountInsights> {
 }
 
 // --- Returns/Refund Coordinator (F-029) -------------------------------------
-// Orquestração COMPLEXA: a partir de um pedido DELIVERED, o Returns Coordinator roda
-// eligibility→policy→calc→abuse→process e marca o pedido REFUNDED quando aprovado. Só o conteúdo
-// (passos + veredito). Envia o bearer (autorização do getOrder, F-019).
+// COMPLEX orchestration: starting from a DELIVERED order, the Returns Coordinator runs
+// eligibility→policy→calc→abuse→process and marks the order REFUNDED when approved. Content only
+// (steps + verdict). Sends the bearer (getOrder's authorization, F-019).
 export type RefundStep = { label: string; ok: boolean; detail: string };
 export type RefundResult = {
   eligible: boolean; approved: boolean; refunded: boolean; refund_amount: number;
@@ -449,9 +449,9 @@ export async function requestRefund(id: string): Promise<RefundResult> {
   return r.json();
 }
 
-// --- IA-Checkout (F-024) ----------------------------------------------------
-// Explicação amigável de bloqueio de fraude quando o pedido é barrado.
-// a UI só mostra a explicação amigável quando true. Envia o bearer (autorização do getOrder).
+// --- AI-Checkout (F-024) ----------------------------------------------------
+// Friendly explanation of a fraud block when the order is denied.
+// the UI only shows the friendly explanation when true. Sends the bearer (getOrder's authorization).
 export async function fraudExplain(id: string): Promise<{ explanation: string; fraud: boolean }> {
   const r = await apiFetch(`${BASE}/api/orders/${id}/fraud-explain`, {
     method: "POST", headers: { ...authHeaders(), ...sessionHeaders() },
@@ -460,13 +460,13 @@ export async function fraudExplain(id: string): Promise<{ explanation: string; f
   return r.json();
 }
 
-// --- Admin (camada de NEGÓCIO — dono; F-014) --------------------------------
-// Endpoints aditivos de agregação/admin; veem TODOS os pedidos (diferente de getOrders,
-// escopado pela sessão). Sem auth (consistente com os controles de workshop).
+// --- Admin (BUSINESS layer — owner; F-014) --------------------------------
+// Additive aggregation/admin endpoints; see ALL orders (unlike getOrders,
+// which is session-scoped). No auth (consistent with the workshop controls).
 export type SalesSummary = {
   orders: number;
   paid_orders: number;
-  revenue: number; // = net_revenue (mantido p/ compat)
+  revenue: number; // = net_revenue (kept for compat)
   net_revenue: number;
   gross_revenue: number;
   refunded_amount: number;
@@ -482,9 +482,9 @@ export async function getAdminSummary(): Promise<SalesSummary> {
   return r.json();
 }
 
-// IA-Admin (F-024): insights de vendas + anomalias + reposição a partir de dados agregados.
-// Resumo/anomalias frasados pelo LLM (grounded nos números); restock determinístico. Honra os
-// toggles; offline → texto determinístico. Custo controlado (cache/max_tokens no backend).
+// AI-Admin (F-024): sales insights + anomalies + restocking from aggregated data.
+// Summary/anomalies phrased by the LLM (grounded in the numbers); restock is deterministic. Honors the
+// toggles; offline → deterministic text. Controlled cost (cache/max_tokens on the backend).
 export type AdminInsights = {
   period_days: number;
   metrics: { orders: number; paid: number; failed: number; revenue: number; avg_ticket: number };
@@ -512,23 +512,23 @@ export async function seedAdminOrders(): Promise<number> {
   if (!r.ok) throw new Error(`seed failed: ${r.status}`);
   return (await r.json()).seeded;
 }
-// Clear Sales (F-027): apaga todos os pedidos E repõe o estoque aos níveis iniciais.
+// Clear Sales (F-027): deletes all orders AND restores stock to initial levels.
 export async function clearAdminOrders(): Promise<{ cleared: number; stock_restored: number; catalog_restored?: number }> {
   const r = await fetch(`${BASE}/api/admin/orders`, { method: "DELETE" });
   if (!r.ok) throw new Error(`clear failed: ${r.status}`);
   return r.json();
 }
 
-// --- Simulador avançado (F-018, ADR-014) ------------------------------------
-// Engine de sessões concorrentes: pool de N usuários + N jornadas que navegam e
-// sempre compram (loop espera+sorteio). A tela própria (/admin/simulator) faz poll
-// de simStatus. Config completa no start; controles stop/pause.
+// --- Advanced simulator (F-018, ADR-014) ------------------------------------
+// Concurrent-sessions engine: pool of N users + N journeys that browse and
+// always buy (wait+roll loop). The dedicated screen (/admin/simulator) polls
+// simStatus. Full config on start; stop/pause controls.
 export type SimSession = {
   slot: number; user: string | null; tier: string | null;
   action: string; journeys: number; last: string | null;
 };
 export type SimConfig = {
-  mode: "api" | "browser";   // F-039: API in-process vs navegador real (Playwright) p/ RUM
+  mode: "api" | "browser";   // F-039: API in-process vs. real browser (Playwright) for RUM
   concurrency: number;
   wait_min_s: number; wait_max_s: number;
   think_min_s: number; think_max_s: number;
@@ -583,15 +583,15 @@ export async function simStatus(): Promise<SimStatus> {
   return r.json();
 }
 
-// --- Config de LLM (OWNER-only — F-020, ADR-015) ----------------------------
-// Provedores da cascata gerenciados pelo dono. A API NUNCA devolve `api_key` (versão
-// mascarada: has_key + key_hint). Todas as chamadas vão com o bearer do owner (authHeaders).
+// --- LLM Config (OWNER-only — F-020, ADR-015) ----------------------------
+// Cascade providers managed by the owner. The API NEVER returns `api_key` (masked
+// version: has_key + key_hint). All calls go with the owner's bearer (authHeaders).
 export type ProviderKind = "openai" | "anthropic" | "bedrock";
 export type LLMProvider = {
   id: string; name: string; kind: ProviderKind; base_url: string; model: string;
   enabled: boolean; order: number; has_key: boolean; key_hint: string | null;
 };
-// Entrada de criação/edição. `api_key` é write-only: vazio MANTÉM a chave salva.
+// Create/edit input. `api_key` is write-only: empty KEEPS the saved key.
 export type ProviderInput = {
   name: string; kind: ProviderKind; base_url: string; model: string; api_key?: string; enabled?: boolean;
 };
@@ -634,7 +634,7 @@ export async function reorderProviders(ids: string[]): Promise<LLMProvider[]> {
     body: JSON.stringify({ ids }),
   }), "reorder providers");
 }
-// Test "ao vivo": edições opcionais (ex.: chave recém-digitada) sobre o provider salvo.
+// "Live" test: optional edits (e.g. a freshly typed key) on top of the saved provider.
 export async function testProvider(id: string, edits: Partial<ProviderInput> = {}): Promise<ProviderTest> {
   return configJson(await fetch(`${CONFIG_BASE}/${id}/test`, {
     method: "POST", headers: { "content-type": "application/json", ...authHeaders() },
@@ -642,9 +642,9 @@ export async function testProvider(id: string, edits: Partial<ProviderInput> = {
   }), "test provider");
 }
 
-// --- Type presets de conexão (F-021) ----------------------------------------
-// Catálogo p/ a UI de conexão: escolher um Type prefilla kind+base_url e sugere modelos
-// econômicos (dropdown editável). Defaults convenientes/editáveis — não autoritativos.
+// --- Connection type presets (F-021) ----------------------------------------
+// Catalog for the connection UI: choosing a Type prefills kind+base_url and suggests
+// economical models (editable dropdown). Convenient/editable defaults — not authoritative.
 export type LLMTypePreset = {
   type: string; label: string; kind: ProviderKind; base_url: string; models: string[];
 };
@@ -652,14 +652,14 @@ export async function getLLMTypes(): Promise<LLMTypePreset[]> {
   return configJson(await fetch(`${BASE}/api/admin/config/llm-types`, { headers: authHeaders() }), "llm types");
 }
 
-// --- Config por agente (F-021) ----------------------------------------------
-// Cada um dos 6 agentes do Concierge: `connection` (provider id ou '' = cascata completa),
-// `model` (override opcional), `role` e `system_prompt`. Sem segredo (vai cru ao front).
+// --- Per-agent config (F-021) ----------------------------------------------
+// Each of the Concierge's 6 agents: `connection` (provider id or '' = full cascade),
+// `model` (optional override), `role`, and `system_prompt`. No secrets (goes to the frontend raw).
 export type AgentConfig = {
   agent: string; connection: string; model: string; role: string; system_prompt: string;
 };
 export type AgentInput = Partial<Pick<AgentConfig, "connection" | "model" | "role" | "system_prompt">>;
-export type AgentTest = ProviderTest; // mesmo shape (ok/latency/model/provider/tokens/error)
+export type AgentTest = ProviderTest; // same shape (ok/latency/model/provider/tokens/error)
 
 const AGENTS_BASE = `${BASE}/api/admin/config/agents`;
 export async function getAgents(): Promise<AgentConfig[]> {
@@ -671,8 +671,8 @@ export async function updateAgent(name: string, patch: AgentInput): Promise<Agen
     body: JSON.stringify(patch),
   }), "update agent");
 }
-// Test "ao vivo" de um agente: edições opcionais (connection/model/role/system_prompt) sobre
-// o salvo → 1 chamada real ao LLM resolvido p/ aquele agente.
+// "Live" test of an agent: optional edits (connection/model/role/system_prompt) on top
+// of the saved config → 1 real call to the LLM resolved for that agent.
 export async function testAgent(name: string, edits: AgentInput = {}): Promise<AgentTest> {
   return configJson(await fetch(`${AGENTS_BASE}/${name}/test`, {
     method: "POST", headers: { "content-type": "application/json", ...authHeaders() },
@@ -680,9 +680,9 @@ export async function testAgent(name: string, edits: AgentInput = {}): Promise<A
   }), "test agent");
 }
 
-// --- Topologia de agentes (editor visual — F-027) ---------------------------
-// Derivada do grafo real (ADR-029): clusters ORQUESTRADOS (concierge hub-and-spoke; fulfillment /
-// compare / returns ReAct) + agentes STANDALONE (features F-022). Owner-only.
+// --- Agent topology (visual editor — F-027) ---------------------------
+// Derived from the real graph (ADR-029): ORCHESTRATED clusters (concierge hub-and-spoke; fulfillment /
+// compare / returns ReAct) + STANDALONE agents (F-022 features). Owner-only.
 export type TopologyNode = {
   id: string; kind: "workflow" | "agent" | "tool" | "dep"; agent: string | null; role: string; label: string;
 };
@@ -696,10 +696,10 @@ export async function getAgentTopology(): Promise<AgentTopology> {
   return configJson(await fetch(`${BASE}/api/admin/agents/topology`, { headers: authHeaders() }), "agent topology");
 }
 
-// --- Fonte de config: local | remote (hub/peer — F-026) ---------------------
-// O owner escolhe se a loja é independente (local) ou cliente de um hub (remote: puxa a
-// config de outra loja). Tokens nunca voltam ao front (flags has_*). Status de conexão
-// resume modo/alvo/saúde/last-sync + clientes (no hub).
+// --- Config source: local | remote (hub/peer — F-026) ---------------------
+// The owner chooses whether the store is standalone (local) or a hub client (remote: pulls the
+// config from another store). Tokens never come back to the frontend (has_* flags). Connection status
+// summarizes mode/target/health/last-sync + clients (on the hub).
 export type HubSource = {
   source: "local" | "remote";
   hub_url: string;
@@ -717,7 +717,7 @@ export type HubClient = {
 export type HubRemoteStatus = {
   hub_url: string; interval_s: number; has_cache: boolean; cached_providers: number;
   last_ok: boolean; last_error: string | null; last_sync: string | null; hub_env: string | null;
-  insecure: boolean;  // HTTP não-local: as chaves trafegam em claro (DT-013) → avisar o owner
+  insecure: boolean;  // non-local HTTP: keys travel in the clear (DT-013) → warn the owner
 };
 export type HubStatus = {
   env: string;
@@ -761,9 +761,9 @@ export async function testHubConnection(): Promise<HubTestConnection> {
   }), "test hub connection");
 }
 
-// --- Enrollment push por IP (F-027) -----------------------------------------
-// O hub empurra `source=remote` p/ N lojas (por IP/host), chamando o endpoint de enroll de cada
-// uma (token-gated por um segredo compartilhado do lab). Resultado POR IP (ok/falha/timeout).
+// --- Enrollment push by IP (F-027) -----------------------------------------
+// The hub pushes `source=remote` to N stores (by IP/host), calling each one's enroll
+// endpoint (token-gated by a shared lab secret). Result PER IP (ok/failure/timeout).
 export type EnrollPushInput = {
   ips: string[]; hub_url: string; enroll_token: string; enrollment_token: string; pull_interval_s?: number;
 };
@@ -778,9 +778,9 @@ export async function enrollPush(input: EnrollPushInput): Promise<EnrollPushResu
   }), "enroll push");
 }
 
-// --- LLM Inspector (OWNER-only, desligável — F-023, ADR-017) ----------------
-// Captura LOCAL de atividade de LLM (conteúdo completo + metadados). Owner-only (guarda
-// prompts); reusa o tratamento 401/403 do namespace de config.
+// --- LLM Inspector (OWNER-only, can be disabled — F-023, ADR-017) ----------------
+// LOCAL capture of LLM activity (full content + metadata). Owner-only (stores
+// prompts); reuses the config namespace's 401/403 handling.
 export type LLMActivityEntry = {
   id: number; ts: string; feature: string; model: string; provider: string; family: string;
   input_tokens: number; output_tokens: number; prompt_cache_tokens?: number;
@@ -803,10 +803,10 @@ export async function clearLLMActivity(): Promise<void> {
   await configJson(await fetch(`${BASE}/api/admin/llm-activity`, { method: "DELETE", headers: authHeaders() }), "clear activity");
 }
 
-// --- Feature flags de menu/superfícies (F-033) ------------------------------
-// O owner liga/desliga áreas do menu (o que os PARTICIPANTES veem). Servidas pela mesma fonte
-// de config (local/hub): em `remote` o hub vence. A leitura das EFETIVAS é PÚBLICA (o front
-// decide menu/rotas); a edição é owner-only. `effective` ≠ `local` quando o hub sobrepõe.
+// --- Menu/surfaces feature flags (F-033) ------------------------------
+// The owner toggles menu areas on/off (what PARTICIPANTS see). Served from the same config
+// source (local/hub): in `remote` mode the hub wins. Reading the EFFECTIVE flags is PUBLIC (the frontend
+// decides menu/routes); editing is owner-only. `effective` ≠ `local` when the hub overrides.
 export type FeatureFlags = {
   behind_the_scenes: boolean;
   admin: boolean;
@@ -856,15 +856,15 @@ export async function applyProblemPreset(presetId: string): Promise<Problems> {
   if (!r.ok) throw new Error(`preset failed: ${r.status}`);
   return r.json();
 }
-/** UUID da jornada do comprador (`vega_shopper_session`) — filtra sessão no Splunk Agent Observability Console. */
+/** Shopper journey UUID (`vega_shopper_session`) — filters the session in the Splunk Agent Observability Console. */
 export function getShopperSessionId(): string | null {
   if (typeof window === "undefined") return null;
   return resolveShopperSession(false);
 }
 
-// --- Splunk RUM (Browser Agent) — snippet configurável pelo owner (F-040-RUM) ---
-// `getRum` é PÚBLICO (o layout server-render consome p/ injetar no <head>); a edição
-// (`getRumAdmin`/`setRum`) é owner-only (bearer via authHeaders).
+// --- Splunk RUM (Browser Agent) — snippet configurable by the owner (F-040-RUM) ---
+// `getRum` is PUBLIC (the server-render layout consumes it to inject into <head>); editing
+// (`getRumAdmin`/`setRum`) is owner-only (bearer via authHeaders).
 export type RumConfig = { enabled: boolean; snippet: string };
 export async function getRum(): Promise<RumConfig> {
   const r = await fetch(`${BASE}/api/rum`);

@@ -1,20 +1,20 @@
 "use client";
-// Feature flags de menu/superfícies (F-033) — estado global no cliente. Lê as flags EFETIVAS
-// (`GET /api/flags`, público) p/ o front decidir o que mostrar no menu e quais rotas bloquear
-// p/ os PARTICIPANTES. Em modo `remote` essas flags vêm do hub (propaga p/ as 150 VMs) — por
-// isso há um poll leve: o owner liga/desliga no hub e as lojas refletem em segundos.
+// Menu/surfaces feature flags (F-033) — global client-side state. Reads the EFFECTIVE flags
+// (`GET /api/flags`, public) so the frontend can decide what to show in the menu and which
+// routes to block for PARTICIPANTS. In `remote` mode these flags come from the hub (propagates
+// to the 150 VMs) — hence the light poll: the owner toggles on the hub and the stores reflect it in seconds.
 //
-// O OWNER nunca é bloqueado (ADR-021): o gate é só de visibilidade do participante; o componente
-// que consome (`useFlags`) combina com `useAuth` p/ deixar o owner passar. Aqui só servimos as
-// flags efetivas + um `refresh` (a tela de toggles chama após editar).
+// The OWNER is never blocked (ADR-021): the gate is only about participant visibility; the
+// consuming component (`useFlags`) combines with `useAuth` to let the owner through. Here we
+// only serve the effective flags plus a `refresh` (the toggles screen calls it after editing).
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { FeatureFlags, getFlags } from "./api";
 
-// Default OTIMISTA = tudo ON (standalone-first: nada some até o backend dizer). Evita esconder
-// itens por um piscar antes do 1º fetch.
+// OPTIMISTIC default = everything ON (standalone-first: nothing disappears until the backend says so).
+// Avoids hiding items for a flash before the 1st fetch.
 const ALL_ON: FeatureFlags = { behind_the_scenes: true, admin: true, simulator: true, inspector: true };
 
-const POLL_MS = 15000; // propagação do hub → lojas (modo remote); barato (sem segredo, sem auth)
+const POLL_MS = 15000; // hub → stores propagation (remote mode); cheap (no secret, no auth)
 
 type FlagsContextValue = { flags: FeatureFlags; ready: boolean; refresh: () => Promise<void> };
 
@@ -28,7 +28,7 @@ export function FlagsProvider({ children }: { children: React.ReactNode }) {
     try {
       setFlags(await getFlags());
     } catch {
-      /* backend fora do ar — mantém o último valor (não esconde nada por falha de rede) */
+      /* backend unreachable — keeps the last value (doesn't hide anything on network failure) */
     } finally {
       setReady(true);
     }

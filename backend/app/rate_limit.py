@@ -1,7 +1,7 @@
-"""Rate limit compartilhado — janela deslizante stdlib-only (F-WORKSHOP-GUARD).
+"""Shared rate limit — sliding window stdlib-only (F-WORKSHOP-GUARD).
 
-`RateLimiter` serve HTTP (middleware) e LLM (`llm_cache`). HTTP: bucket por IP + tier de rota;
-estoura → 429 com `Retry-After`. LLM: bucket por instância; estoura → stub offline (ADR-016).
+`RateLimiter` serves HTTP (middleware) and LLM (`llm_cache`). HTTP: bucket per IP + route tier;
+burst → 429 with `Retry-After`. LLM: bucket per instance; burst → offline stub (ADR-016).
 """
 from __future__ import annotations
 
@@ -49,7 +49,7 @@ _AGENT_TEST = re.compile(r"^/api/admin/config/agents/[^/]+/test$")
 
 
 class RateLimiter:
-    """Janela deslizante por bucket. `maxn <= 0` desliga (sempre permite)."""
+    """Sliding window per bucket. `maxn <= 0` disables (always allows)."""
 
     def __init__(self, maxn: int, window: float):
         self.maxn = maxn
@@ -69,7 +69,7 @@ class RateLimiter:
             return True
 
     def retry_after(self) -> int:
-        """Segundos até a janela liberar o próximo slot (para header Retry-After)."""
+        """Seconds until the window frees the next slot (for Retry-After header)."""
         if self.maxn <= 0:
             return 0
         now = time.monotonic()
@@ -88,11 +88,11 @@ _http_limiters: dict[tuple[str, str], RateLimiter] = {}
 
 
 def client_ip(request: Request) -> str:
-    """IP do cliente para a chave de bucket.
+    """Client IP for bucket key.
 
-    Com `X-Forwarded-For`, usa o **primeiro** hop (cliente original na cadeia). Atrás de um
-    proxy mal configurado ou spoofing do header, o bucket pode não refletir o IP real — aceito
-    no workshop (1 VM ≈ 1 participante, acesso direto na :8000).
+    With `X-Forwarded-For`, uses the **first** hop (original client in chain). Behind a
+    misconfigured proxy or header spoofing, the bucket may not reflect the real IP — accepted
+    in the workshop (1 VM ≈ 1 participant, direct access on :8000).
     """
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
@@ -103,7 +103,7 @@ def client_ip(request: Request) -> str:
 
 
 def classify_route(method: str, path: str) -> Tier:
-    """Classifica rota `/api/*` em tier exempt, ai ou default."""
+    """Classifies `/api/*` route into exempt, ai or default tier."""
     method = method.upper()
     path = path.split("?")[0].rstrip("/") or "/"
 
@@ -140,13 +140,13 @@ def get_http_limiter(tier: str, ip: str) -> RateLimiter:
 
 
 def reset_http_limiters() -> None:
-    """Zera buckets HTTP (isolamento entre testes)."""
+    """Clear HTTP buckets (isolation between tests)."""
     with _limiter_guard:
         _http_limiters.clear()
 
 
 class ApiRateLimitMiddleware(BaseHTTPMiddleware):
-    """429 na borda quando o bucket IP+tier estoura; rotas exempt passam sempre."""
+    """429 at the edge when IP+tier bucket bursts; exempt routes always pass."""
 
     async def dispatch(self, request: Request, call_next):
         if not settings.api_rate_enabled:

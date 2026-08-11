@@ -1,21 +1,21 @@
-"""F-WORKSHOP-RAG-1 Etapa 1 — diagnóstico tool/RAG vs Console Galileo (trace ac2de978…).
+"""F-WORKSHOP-RAG-1 Step 1 — tool/RAG diagnosis vs Galileo Console (trace ac2de978…).
 
-Trace de referência do dono: sessão 403fee40…, span focal f1be360d… — fluxo equivalente offline:
-POST /api/chat com "What are the policies of Vega?" → ``chat.answer_store_policy`` +
-``retrieve_store_policies`` (UC chat policy, não product_qa).
+Owner's reference trace: session 403fee40…, focal span f1be360d… — equivalent offline flow:
+POST /api/chat with "What are the policies of Vega?" → ``chat.answer_store_policy`` +
+``retrieve_store_policies`` (chat policy UC, not product_qa).
 
-Hipóteses (Etapa 1):
-- H1 CONFIRMED: ``VegaGalileoCallback.on_retriever_end`` aplicava ``_compact_retriever_output``
-  antes do SDK — colapsava ``list[Document]`` num dict ``{document_count, previews}``.
-- H2 CONFIRMED: ``stub.py`` linhas 249/267 chamavam ``search_catalog()``/``get_price()`` direto
-  (bypass ``StructuredTool.invoke``) no fallback do loop ReAct simulado.
-- H3 CONFIRMED: retriever span LangChain existe (``SpanSpy.retriever_queries``), mas o SDK via
-  callback recebia blob compactado (H1) — tool ``search_policies`` devolve chunks no output da tool
-  separadamente do retriever filho.
-- H4 REJECTED: ``search_policies_tool.invoke(..., config=config)`` propaga config ao retriever
-  (``test_tools.test_search_policies_emits_a_retriever_span`` + asserts abaixo).
-- H5 REJECTED: ``search_catalog``/``get_price`` estão em ``PROTECTED_SPAN_NAMES`` — supressão não
-  esconde tools de catálogo/preço nos fluxos concierge/gift.
+Hypotheses (Step 1):
+- H1 CONFIRMED: ``VegaGalileoCallback.on_retriever_end`` applied ``_compact_retriever_output``
+  before the SDK — collapsed ``list[Document]`` into a ``{document_count, previews}`` dict.
+- H2 CONFIRMED: ``stub.py`` lines 249/267 called ``search_catalog()``/``get_price()`` directly
+  (bypassing ``StructuredTool.invoke``) in the simulated ReAct loop's fallback.
+- H3 CONFIRMED: the LangChain retriever span exists (``SpanSpy.retriever_queries``), but the SDK
+  via callback received the compacted blob (H1) — the ``search_policies`` tool returns chunks in
+  the tool output separately from the child retriever.
+- H4 REJECTED: ``search_policies_tool.invoke(..., config=config)`` propagates config to the
+  retriever (``test_tools.test_search_policies_emits_a_retriever_span`` + asserts below).
+- H5 REJECTED: ``search_catalog``/``get_price`` are in ``PROTECTED_SPAN_NAMES`` — suppression
+  does not hide catalog/price tools in the concierge/gift flows.
 """
 from __future__ import annotations
 
@@ -36,20 +36,20 @@ pytestmark = pytest.mark.trace_audit
 
 
 def test_h1_compact_retriever_output_collapses_document_list():
-    """Mecanismo de H1: compactação pré-SDK destrói N entradas individuais."""
+    """H1 mechanism: pre-SDK compaction destroys N individual entries."""
     docs = [
         Document(page_content="Return window is 30 days.", metadata={"section": "Returns"}),
         Document(page_content="Free shipping over $50.", metadata={"section": "Shipping"}),
     ]
     compact = _compact_retriever_output(docs)
-    assert isinstance(compact, dict), "H1: list[Document] vira dict antes do SDK"
+    assert isinstance(compact, dict), "H1: list[Document] turns into a dict before the SDK"
     assert compact["document_count"] == 2
     assert len(compact["previews"]) == 2
     assert not any(hasattr(item, "page_content") for item in compact.values() if isinstance(item, list))
 
 
 def test_retriever_top_k_matches_document_count_at_langchain_layer():
-    """Etapa 2 critério: retriever devolve k documentos (top_k efetivo), não blob compactado."""
+    """Step 2 criterion: the retriever returns k documents (effective top_k), not a compacted blob."""
     from app.settings import settings
 
     spy = SpanSpy()
@@ -67,7 +67,7 @@ def test_retriever_top_k_matches_document_count_at_langchain_layer():
 
 @pytest.mark.asyncio
 async def test_h1_callback_passes_retriever_documents_to_sdk(monkeypatch):
-    """Pós-fix Etapa 2: SDK recebe list[Document] com N chunks (top_k efetivo)."""
+    """Post-fix Step 2: the SDK receives list[Document] with N chunks (effective top_k)."""
     galileo = pytest.importorskip("galileo")
     from app.obs.galileo_callback import VegaGalileoCallback
 
@@ -104,7 +104,7 @@ async def test_h1_callback_passes_retriever_documents_to_sdk(monkeypatch):
 
 
 def test_h2_stub_invoke_tool_emits_tool_spans():
-    """H2 fix: helper de fallback usa StructuredTool.invoke com callbacks."""
+    """H2 fix: the fallback helper uses StructuredTool.invoke with callbacks."""
     from app.llm.stub import _stub_invoke_tool
 
     spy = SpanSpy()
@@ -119,7 +119,7 @@ def test_h2_stub_invoke_tool_emits_tool_spans():
 
 
 def test_h2_stub_react_fallback_emits_tool_spans_via_invoke():
-    """H2: loop ReAct do stub dispara invoke quando o payload da ToolMessage é inválido."""
+    """H2: the stub's ReAct loop triggers invoke when the ToolMessage payload is invalid."""
     from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
     from app.llm.stub import VegaStubChatModel
@@ -139,7 +139,7 @@ def test_h2_stub_react_fallback_emits_tool_spans_via_invoke():
 
 
 def test_h3_chat_policy_flow_emits_retriever_with_document_list(api_client, monkeypatch):
-    """Fluxo do trace ac2de978… — retriever LangChain entrega list[Document] ao callback chain."""
+    """Flow from trace ac2de978… — the LangChain retriever delivers list[Document] to the callback chain."""
     from app import runnable_config
     from contextlib import contextmanager
 
@@ -173,7 +173,7 @@ def test_h4_search_policies_invoke_propagates_config_to_retriever():
         {"question": "how many days do I have to return an order?"},
         config={"callbacks": [spy]},
     )
-    assert spy.retriever_queries, "H4 REJECTED if config missing — no retriever span"
+    assert spy.retriever_queries, "H4 REJECTED if config is missing — no retriever span"
     assert spy.retriever_outputs, spy.retriever_outputs
     assert isinstance(spy.retriever_outputs[0], list)
     assert result["chunks"]
@@ -185,7 +185,7 @@ def test_h5_catalog_tools_are_protected_from_suppression():
 
 
 def test_product_qa_policy_retriever_emits_document_list():
-    """UC-1 policy path — mesmo contrato de chunks individuais no retriever."""
+    """UC-1 policy path — same individual-chunks contract on the retriever."""
     spy = SpanSpy()
     config = {
         **build_runnable_config(thread_id=make_thread_id(), feature="product_qa"),

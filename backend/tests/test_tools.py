@@ -36,7 +36,7 @@ def test_tool_invokes_with_minimal_input(name, pristine_catalog):
 
 @pytest.mark.parametrize("domain", ["concierge", "fulfillment", "returns", "compare"])
 def test_get_tools_returns_a_domain_catalog(domain):
-    assert get_tools(domain), f"domínio {domain} sem tools"
+    assert get_tools(domain), f"domain {domain} has no tools"
 
 
 def test_get_tools_rejects_unknown_domain():
@@ -49,7 +49,7 @@ def test_search_policies_emits_a_retriever_span_and_finds_the_return_window():
     result = TOOLS_BY_NAME["search_policies"].invoke(
         MINIMAL_INPUTS["search_policies"], config={"callbacks": [spy]},
     )
-    assert spy.retriever_queries, "nenhum retriever span emitido"
+    assert spy.retriever_queries, "no retriever span emitted"
     assert "Return window" in [chunk["section"] for chunk in result["chunks"]]
 
 

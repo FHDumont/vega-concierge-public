@@ -1,5 +1,5 @@
 "use client";
-// Advanced problem toggles — migrado de Behind the Scenes (F-NAV-1). Owner-only.
+// Advanced problem toggles — migrated from Behind the Scenes (F-NAV-1). Owner-only.
 import { useEffect, useState } from "react";
 import {
   getProblems,

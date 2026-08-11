@@ -1,6 +1,6 @@
 "use client";
-// Conteúdo do seletor de paleta + esquema (light/dark) — reutilizado no popup do header
-// da loja (F-NAV-1). Lógica em lib/theme-context.tsx (ADR-012/013).
+// Content of the palette + scheme (light/dark) picker — reused in the store header
+// popup (F-NAV-1). Logic in lib/theme-context.tsx (ADR-012/013).
 import { PALETTES, useTheme, type ColorScheme } from "@/lib/theme-context";
 
 const SCHEMES: { id: ColorScheme; label: string }[] = [

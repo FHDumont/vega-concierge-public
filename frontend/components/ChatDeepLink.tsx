@@ -1,5 +1,5 @@
 "use client";
-// Lê query ?chat=1&seed=&sku=&orderId= na home e abre o widget (F-051).
+// Reads query ?chat=1&seed=&sku=&orderId= on the home page and opens the widget (F-051).
 import { Suspense, useEffect, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useChat } from "@/lib/chat-context";

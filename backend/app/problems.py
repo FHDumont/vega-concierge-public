@@ -3,24 +3,24 @@ from dataclasses import dataclass, fields, asdict
 
 @dataclass
 class ProblemFlags:
-    price_hallucination: bool = False   # Pricing inventa preço fora do catálogo
-    fraud_false_positive: bool = False  # Fraude bloqueia pedido legítimo
-    inventory_outage: bool = False      # check_inventory falha
-    latency_spike: bool = False         # catálogo lento
-    cost_spike: bool = False            # router faz rounds excessivos
-    payment_outage: bool = False        # gateway de pagamento indisponível → checkout FAILED (F-016)
-    payment_latency: bool = False       # gateway de pagamento lento (latência alta no checkout) (F-016)
-    refund_false_denial: bool = False   # agente de elegibilidade NEGA um reembolso ELEGÍVEL (F-029)
-    prompt_injection: bool = False      # agente ACEITA injeção de prompt (UC-4): cumpre override de preço/política
-    active_scenario: str = ""           # preset UC ativo (uc-1..uc-5); vazio = nenhum — persiste até restart da VM
+    price_hallucination: bool = False   # Pricing invents price outside catalog
+    fraud_false_positive: bool = False  # Fraud blocks legitimate order
+    inventory_outage: bool = False      # check_inventory fails
+    latency_spike: bool = False         # catalog slow
+    cost_spike: bool = False            # router makes excessive rounds
+    payment_outage: bool = False        # payment gateway unavailable → checkout FAILED (F-016)
+    payment_latency: bool = False       # payment gateway slow (high latency on checkout) (F-016)
+    refund_false_denial: bool = False   # eligibility agent DENIES an ELIGIBLE refund (F-029)
+    prompt_injection: bool = False      # agent ACCEPTS prompt injection (UC-4): honors price/policy override
+    active_scenario: str = ""           # active UC preset (uc-1..uc-5); empty = none — persists until VM restart
 
     def to_dict(self):
         return asdict(self)
 
-# instância global única (1 usuário por VM -> sem concorrência)
+# Global singleton instance (1 user per VM → no concurrency)
 FLAGS = ProblemFlags()
 
-# Presets UC do workshop Splunk Agent Observability (F-GALILEO-3) — reset total + apply evita flags stale.
+# UC presets for Splunk Agent Observability workshop (F-GALILEO-3) — full reset + apply avoids stale flags.
 UC_PRESETS: dict[str, dict[str, bool]] = {
     "uc-1": {"price_hallucination": True},
     "uc-2": {"cost_spike": True},

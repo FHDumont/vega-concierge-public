@@ -1,8 +1,8 @@
 "use client";
-// Página de detalhe do produto — design custom (ADR-012). Reusa GET /api/catalog
-// (catálogo pequeno, em memória) e filtra pelo SKU no cliente — sem endpoint novo (F-004).
-// add-to-cart usa o estado compartilhado (ShopProvider); atalho leva ao concierge na home.
-// Estilizado pelas variáveis de paleta (globals.css). SEM @splunk/react-ui.
+// Product detail page — custom design (ADR-012). Reuses GET /api/catalog
+// (small, in-memory catalog) and filters by SKU on the client — no new endpoint (F-004).
+// add-to-cart uses the shared state (ShopProvider); shortcut leads to the concierge on the home.
+// Styled by the palette variables (globals.css). WITHOUT @splunk/react-ui.
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { Product, getCatalog } from "@/lib/api";
@@ -16,7 +16,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   return <main className="ns-wrap">{children}</main>;
 }
 
-// Next 15+/16: `params` é uma Promise; desembrulhada com React.use() (F-036).
+// Next 15+/16: `params` is a Promise; unwrapped with React.use() (F-036).
 export default function ProductDetail({ params }: { params: Promise<{ sku: string }> }) {
   const { sku } = use(params);
   const shop = useShop();

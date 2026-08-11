@@ -1,8 +1,8 @@
 "use client";
-// LOJA (experiência do cliente) — e-commerce moderno, SEM dados técnicos.
-// Shell custom (ADR-012): hero, banda do concierge e grade de cards,
-// estilizado por variáveis de paleta (globals.css). Categorias só no header
-// (ShopProvider compartilha estado de busca/categoria entre rotas).
+// STORE (customer experience) — modern e-commerce, WITHOUT technical data.
+// Custom shell (ADR-012): hero, concierge band, and card grid,
+// styled by palette variables (globals.css). Categories only in the header
+// (ShopProvider shares search/category state between routes).
 import { useEffect, useMemo, useState } from "react";
 import { Product, getCatalog } from "@/lib/api";
 import { inCategory } from "@/lib/shop";
@@ -16,7 +16,7 @@ export default function Shop() {
   const [catalog, setCatalog] = useState<Product[] | null>(null);
   const [loadError, setLoadError] = useState(false);
 
-  // Atalho "ask the concierge about this" vindo da página de detalhe (/?ask=…).
+  // "ask the concierge about this" shortcut coming from the detail page (/?ask=…).
   const [askPrefill, setAskPrefill] = useState<string | null>(null);
 
   useEffect(() => {
@@ -42,13 +42,13 @@ export default function Shop() {
     );
   }, [catalog, shop.category, shop.search]);
 
-  // Home "default" = sem categoria e sem busca. Ao filtrar (categoria ou busca), a vitrine
-  // fica enxuta: escondemos hero, promos e a banda do concierge e mostramos só a listagem
-  // (F-011). O launcher flutuante (etapa 4) cobre o acesso ao concierge nessas telas.
+  // "default" home = no category and no search. When filtering (category or search), the
+  // storefront gets leaner: we hide the hero, promos, and the concierge band and show only
+  // the listing (F-011). The floating launcher (step 4) covers concierge access on those screens.
   const filtering = shop.search.trim() !== "" || shop.category !== "All";
   const sectionTitle = filtering ? "Results" : "Popular right now";
 
-  // Limpa busca E categoria de uma vez — volta à home com hero/widgets (F-028).
+  // Clears search AND category at once — returns to the home with hero/widgets (F-028).
   function clearFilters() {
     shop.setSearch("");
     shop.setCategory("All");
@@ -84,8 +84,8 @@ export default function Shop() {
           </>
         )}
 
-        {/* Saída clara da navegação por categoria/busca (F-028): breadcrumb Home › <filtro>
-            sempre visível ao filtrar, com botão para limpar e voltar à home completa. */}
+        {/* Clear exit from category/search navigation (F-028): Home › <filter> breadcrumb
+            always visible while filtering, with a button to clear and return to the full home. */}
         {filtering && (
           <nav className="ns-crumbs" aria-label="Breadcrumb">
             <button type="button" className="ns-crumb-home" onClick={clearFilters}>

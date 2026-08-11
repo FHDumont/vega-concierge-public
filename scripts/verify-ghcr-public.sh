@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Verifica pull anônimo no GHCR (F-DEPLOY-PROD-1, ADR-036).
-# Não exige docker login — espelha o preflight_ghcr de scripts/lib/preflight-prod.sh.
+# Verifies anonymous pull from GHCR (F-DEPLOY-PROD-1, ADR-036).
+# Does not require docker login — mirrors preflight_ghcr from scripts/lib/preflight-prod.sh.
 #
-# Uso:
-#   ./scripts/verify-ghcr-public.sh                    # IMAGE_OWNER do .env ou fhdumont
+# Usage:
+#   ./scripts/verify-ghcr-public.sh                    # IMAGE_OWNER from .env or fhdumont
 #   ./scripts/verify-ghcr-public.sh --owner fhdumont
-#   ./scripts/verify-ghcr-public.sh --browser          # inclui vega-backend-browser
+#   ./scripts/verify-ghcr-public.sh --browser          # includes vega-backend-browser
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -17,17 +17,17 @@ usage() {
   cat <<'EOF'
 usage: verify-ghcr-public.sh [options]
 
-Verifica docker manifest inspect sem login (packages GHCR públicos).
+Verifies docker manifest inspect without login (public GHCR packages).
 
 Options:
-  --owner NAME    GHCR namespace (default: IMAGE_OWNER do .env ou fhdumont)
-  --tag TAG       Tag da imagem (default: latest)
-  --browser       Também verifica vega-backend-browser
-  -h, --help      Esta ajuda
+  --owner NAME    GHCR namespace (default: IMAGE_OWNER from .env or fhdumont)
+  --tag TAG       Image tag (default: latest)
+  --browser       Also checks vega-backend-browser
+  -h, --help      This help
 
-Se falhar com "denied" ou unauthorized, torne o package Public na UI GitHub:
+If it fails with "denied" or unauthorized, make the package Public in the GitHub UI:
   GitHub → Packages → vega-backend → Package settings → Change visibility → Public
-  (repita para vega-frontend e, se usar, vega-backend-browser)
+  (repeat for vega-frontend and, if used, vega-backend-browser)
 EOF
 }
 
@@ -66,21 +66,21 @@ fi
 OWNER="${OWNER:-${IMAGE_OWNER:-fhdumont}}"
 
 if ! command -v docker >/dev/null 2>&1; then
-  echo "verify-ghcr-public: docker não encontrado" >&2
+  echo "verify-ghcr-public: docker not found" >&2
   exit 1
 fi
 
-# Evita falso positivo: logout temporário só se já logado no ghcr.io.
+# Avoids a false positive: temporary logout only if already logged in to ghcr.io.
 _was_logged_in=0
 if [ -f "${HOME}/.docker/config.json" ] && grep -q '"ghcr.io"' "${HOME}/.docker/config.json" 2>/dev/null; then
   _was_logged_in=1
-  echo "→ verify-ghcr-public: removendo credencial ghcr.io local (teste anônimo)…"
+  echo "→ verify-ghcr-public: removing local ghcr.io credential (anonymous test)…"
   docker logout ghcr.io >/dev/null 2>&1 || true
 fi
 
 cleanup() {
   if [ "$_was_logged_in" -eq 1 ]; then
-    echo "→ verify-ghcr-public: re-logue em ghcr.io se precisar (teste usou pull anônimo)" >&2
+    echo "→ verify-ghcr-public: log back into ghcr.io if needed (test used anonymous pull)" >&2
   fi
 }
 trap cleanup EXIT
@@ -94,21 +94,21 @@ if [ "$INCLUDE_BROWSER" -eq 1 ]; then
 fi
 
 failed=0
-echo "→ verify-ghcr-public: owner=${OWNER} tag=${TAG} (sem docker login)"
+echo "→ verify-ghcr-public: owner=${OWNER} tag=${TAG} (no docker login)"
 for img in "${images[@]}"; do
   echo -n "  ${img} … "
   if docker manifest inspect "$img" >/dev/null 2>&1; then
     echo "OK"
   else
-    echo "FALHOU"
-    echo "    Package ainda privado, tag inexistente ou rede. UI: Packages → $(basename "${img%%:*}" | sed 's|.*/||') → Public" >&2
+    echo "FAILED"
+    echo "    Package still private, tag doesn't exist, or network issue. UI: Packages → $(basename "${img%%:*}" | sed 's|.*/||') → Public" >&2
     failed=1
   fi
 done
 
 if [ "$failed" -ne 0 ]; then
-  echo "verify-ghcr-public: um ou mais manifests inacessíveis (pull anônimo)" >&2
+  echo "verify-ghcr-public: one or more manifests unreachable (anonymous pull)" >&2
   exit 1
 fi
 
-echo "→ verify-ghcr-public: todos os manifests OK (GHCR público para pull anônimo)"
+echo "→ verify-ghcr-public: all manifests OK (GHCR public for anonymous pull)"

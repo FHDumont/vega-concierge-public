@@ -188,7 +188,7 @@ def route_shopper_request(state: ChatWorkflowState, config) -> dict[str, Any]:
     routed = _intent(text, state.get("context_sku"), state.get("context_order_id"), config)
     source = routed["intent_source"]
     reason = routed.get("intent_reason") or ""
-    trace_note = f"Coordinator: intent detectado → {routed['intent']} ({source}"
+    trace_note = f"Coordinator: intent detected → {routed['intent']} ({source}"
     if reason:
         trace_note = f"{trace_note}, {reason}"
     trace_note = f"{trace_note})"
@@ -222,7 +222,7 @@ def _result(answer: str, artifacts: dict[str, Any], state: ChatWorkflowState) ->
         "answer": answer,
         "artifacts": artifacts,
         "messages": [AIMessage(content=answer)],
-        "trace": [*state.get("trace", []), f"Chat: {state.get('intent')} concluído"],
+        "trace": [*state.get("trace", []), f"Chat: {state.get('intent')} completed"],
     }
 
 
@@ -413,7 +413,7 @@ def recommend_product(state: ChatWorkflowState, config) -> dict[str, Any]:
     return {
         "candidates": candidates[:4],
         "selected": selected,
-        "trace": [*state.get("trace", []), f"Curator: {len(candidates)} candidatos"],
+        "trace": [*state.get("trace", []), f"Curator: {len(candidates)} candidates"],
     }
 
 

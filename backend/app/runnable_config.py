@@ -1,8 +1,8 @@
-"""RunnableConfig central — thread_id, metadata e callbacks de observabilidade (F-OBS-PREP-5/7).
+"""Central RunnableConfig — thread_id, metadata and observability callbacks (F-OBS-PREP-5/7).
 
-O gancho `callbacks` que a readiness deixou reservado é preenchido na F-GALILEO-1 (ADR-032):
-`galileo_obs.callbacks()` devolve `[GalileoAsyncCallback()]` quando há credencial e `[]` quando
-não — o único ponto do backend que sabe da existência do Splunk Agent Observability.
+The `callbacks` hook that readiness left reserved is filled in F-GALILEO-1 (ADR-032):
+`galileo_obs.callbacks()` returns `[GalileoAsyncCallback()]` when there's a credential and `[]` when
+not — the only backend point that knows about the existence of Splunk Agent Observability.
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ def _env() -> str:
 
 
 def make_thread_id(*, user_id: str | None = None) -> str:
-    """Session de workshop: `{env}:{user|anon}:{uuid12}`."""
+    """Workshop session: `{env}:{user|anon}:{uuid12}`."""
     who = user_id or "anon"
     return f"{_env()}:{who}:{uuid.uuid4().hex[:12]}"
 
@@ -38,10 +38,10 @@ def build_runnable_config(
     feature: str,
     metadata: dict | None = None,
 ) -> RunnableConfig:
-    """Monta RunnableConfig com metadata mergeada e os callbacks de observabilidade do momento.
+    """Builds RunnableConfig with merged metadata and observability callbacks of the moment.
 
-    Um callback NOVO por config (= por request): é assim que cada turno do usuário vira um trace
-    próprio no Console, em vez de tudo cair num trace gigante."""
+    One NEW callback per config (= per request): this is how each user turn becomes its own trace
+    in the Console, instead of everything falling into one giant trace."""
     merged: dict = {
         "feature": feature,
         "vm": _env(),
@@ -61,7 +61,7 @@ def set_current_runnable_config(
     config: RunnableConfig | None,
     token: contextvars.Token | None = None,
 ) -> contextvars.Token | None:
-    """Publica ou limpa o config no contextvar. Com `token`, faz reset; senão set e devolve token."""
+    """Publishes or clears config in contextvar. With `token`, resets; otherwise sets and returns token."""
     if token is not None:
         _current_runnable_config.reset(token)
         return None
@@ -69,14 +69,14 @@ def set_current_runnable_config(
 
 
 def current_runnable_config() -> RunnableConfig | None:
-    """Config publicado pelo request corrente, ou None. Diferente de `resolve_config`, NÃO cria um
-    novo — quem só quer se pendurar no trace existente não deve fabricar um trace órfão."""
+    """Config published by current request, or None. Unlike `resolve_config`, does NOT create a new one —
+    someone who just wants to hang on the existing trace shouldn't fabricate an orphaned trace."""
     return _current_runnable_config.get()
 
 
 @contextmanager
 def bind_runnable_config(config: RunnableConfig) -> Iterator[RunnableConfig]:
-    """Context manager: expõe config ao contextvar (features/nested LLM no mesmo request)."""
+    """Context manager: exposes config to contextvar (features/nested LLM in same request)."""
     token = _current_runnable_config.set(config)
     try:
         yield config
@@ -92,13 +92,13 @@ def ai_request_scope(
     user_id: str | None = None,
     metadata: dict | None = None,
 ) -> Iterator[RunnableConfig]:
-    """Escopo de UM request de IA: sessão Splunk Agent Observability + config publicado no contextvar.
+    """Scope of ONE AI request: Splunk Agent Observability session + config published in contextvar.
 
-    Junta os três passos que todo endpoint de IA precisa (abrir a sessão da jornada, montar o
-    config com os callbacks, publicá-lo pro caminho síncrono das features) num CM só. O config
-    é criado DENTRO da sessão, senão o callback nasce fora do contexto e o trace fica órfão —
-    e, desde a D.3, também fora do trace vivo: é o `session_scope` que decide se o callback
-    nasce em modo batch ou pendurado no trace do request."""
+    Combines the three steps every AI endpoint needs (open the journey session, build the
+    config with callbacks, publish it to the synchronous path of features) into one CM. Config
+    is created INSIDE the session, otherwise the callback is born outside the context and the trace becomes orphaned —
+    and, since D.3, also outside the live trace: it's `session_scope` that decides if the callback
+    is born in batch mode or hanging on the request trace."""
     with galileo_obs.session_scope(session_id, feature=feature) as resolved_session:
         extra = dict(metadata or {})
         if user_id is not None:
@@ -115,11 +115,11 @@ def ai_request_scope(
 
 
 def derive_feature_config(parent: RunnableConfig | None, feature: str) -> RunnableConfig:
-    """Deriva RunnableConfig filho com `metadata.feature` do specialist.
+    """Derives child RunnableConfig with specialist's `metadata.feature`.
 
-    Herda `configurable` (thread_id), `callbacks`, `tags` e demais metadata do pai;
-    substitui sempre `feature`. Se o pai tinha `feature=chat`, grava `parent_feature=chat`
-    (breadcrumb p/ filtros no Console). Um trace por turno — não cria segundo callback."""
+    Inherits `configurable` (thread_id), `callbacks`, `tags` and other metadata from parent;
+    always replaces `feature`. If parent had `feature=chat`, records `parent_feature=chat`
+    (breadcrumb for Console filters). One trace per turn — doesn't create second callback."""
     if parent is None:
         return build_runnable_config(thread_id=make_thread_id(), feature=feature)
     parent_meta = dict(parent.get("metadata") or {})
@@ -141,7 +141,7 @@ def resolve_config(
     user_id: str | None = None,
     order_id: str | None = None,
 ) -> RunnableConfig:
-    """Usa config explícito, contextvar ou default sensato (run_demo/simulador)."""
+    """Uses explicit config, contextvar or sensible default (run_demo/simulator)."""
     if config is not None:
         return config
     ctx = _current_runnable_config.get()

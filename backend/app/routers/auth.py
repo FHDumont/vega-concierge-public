@@ -1,4 +1,4 @@
-"""Sessão de demo (bearer token) e a área da Conta do comprador."""
+"""Demo session (bearer token) and the buyer's Account area."""
 from fastapi import APIRouter, Header, HTTPException
 from ..ai_agents import insights
 from ..runnable_config import ai_request_scope
@@ -6,7 +6,7 @@ from ..store import orders, users
 from ..schemas import LoginRequest, RegisterRequest, UpdateMeRequest
 from ._common import _token_from_header, _optional_user_id, _me_payload
 
-# Sem `prefix`: cada rota carrega o path completo, igualzinho ao que estava em `api.py`.
+# No `prefix`: each route carries the full path, just like it was in `api.py`.
 router = APIRouter()
 
 
@@ -47,7 +47,7 @@ def me(authorization: str | None = Header(default=None)):
 
 @router.put("/api/auth/me")
 def update_me(req: UpdateMeRequest, authorization: str | None = Header(default=None)):
-    # Salva/edita o endereço do perfil (F-011); pré-preenche o checkout. Exige sessão.
+    # Saves/edits the profile address (F-011); pre-fills checkout. Requires session.
     user_id = _optional_user_id(authorization)
     if user_id is None:
         raise HTTPException(status_code=401, detail="not authenticated")
@@ -55,10 +55,10 @@ def update_me(req: UpdateMeRequest, authorization: str | None = Header(default=N
     return {"user": _me_payload(user_id)}
 
 
-# --- IA-Conta (F-031) -------------------------------------------------------
-# Insights do histórico + benefícios do tier + recompra a partir dos dados REAIS do usuário
-# logado. Passa pelo controle de custo (F-022). Contexto enxuto = resumo dos próprios
-# pedidos/tier. Exige sessão.
+# --- AI-Account (F-031) -------------------------------------------------------
+# History insights + tier benefits + repurchase from REAL data of logged-in user.
+# Passes through cost control (F-022). Lean context = summary of own
+# orders/tier. Requires session.
 
 @router.get("/api/account/insights")
 def account_insights(authorization: str | None = Header(default=None),
@@ -66,7 +66,7 @@ def account_insights(authorization: str | None = Header(default=None),
     user_id = _optional_user_id(authorization)
     if user_id is None:
         raise HTTPException(status_code=401, detail="not authenticated")
-    user = _me_payload(user_id)  # tier/gasto recomputados (materialização lazy)
+    user = _me_payload(user_id)  # tier/spend recomputed (lazy materialization)
     user_orders = orders.list_orders_for_user(user_id)
     with ai_request_scope(
         feature="account_insights", session_id=x_vega_session, user_id=user_id,

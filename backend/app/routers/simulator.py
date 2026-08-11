@@ -1,22 +1,22 @@
-"""Simulador avançado de sessões concorrentes (F-018, ADR-014)."""
+"""Advanced concurrent session simulator (F-018, ADR-014)."""
 from fastapi import APIRouter, HTTPException
 from ..sim import simulator
 from ..schemas import SimPauseRequest, SimStartRequest
 
-# Sem `prefix`: cada rota carrega o path completo, igualzinho ao que estava em `api.py`.
+# No `prefix`: each route carries the full path, just like it was in `api.py`.
 router = APIRouter()
 
 
-# --- Simulador avançado (F-018, ADR-014) ------------------------------------
-# Engine asyncio de sessões concorrentes (pool de N usuários + N jornadas que navegam
-# e sempre compram, loop espera+sorteio). Controles + poll de status p/ a tela própria
-# (/admin/simulator). Aditivo; não muda o contrato existente (só adições).
+# --- Advanced simulator (F-018, ADR-014) ------------------------------------
+# Asyncio engine for concurrent sessions (pool of N users + N journeys that browse
+# and always buy, wait+draw loop). Controls + status poll for dedicated screen
+# (/admin/simulator). Additive; doesn't change existing contract (additions only).
 
 @router.post("/api/simulator/start")
 async def simulator_start(req: SimStartRequest):
     cfg = simulator.SimConfig.from_dict(req.model_dump(exclude_none=True))
-    if cfg.mode == "browser":  # F-039: Playwright/Chromium são deps opcionais (não na imagem base)
-        # import tardio: Playwright é dependência opcional, fora da imagem base (F-039)
+    if cfg.mode == "browser":  # F-039: Playwright/Chromium are optional deps (not in base image)
+        # late import: Playwright is optional dependency, outside base image (F-039)
         from ..sim import sim_browser
         ok, reason = sim_browser.available()
         if not ok:

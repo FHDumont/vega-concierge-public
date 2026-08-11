@@ -1,6 +1,6 @@
 "use client";
-// ADMIN — overview de negócio (/admin). Orders/products em rotas próprias.
-// Links legados ?v=orders|products redirecionam uma vez (compat).
+// ADMIN — business overview (/admin). Orders/products have their own routes.
+// Legacy ?v=orders|products links redirect once (compat).
 import { Suspense } from "react";
 import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";

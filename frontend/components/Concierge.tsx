@@ -1,5 +1,5 @@
 "use client";
-// Banda do Concierge na vitrine — CTA abre o widget flutuante (F-051).
+// Concierge banner on the storefront — CTA opens the floating widget (F-051).
 import { useEffect, useRef, useState } from "react";
 import { useChat } from "@/lib/chat-context";
 

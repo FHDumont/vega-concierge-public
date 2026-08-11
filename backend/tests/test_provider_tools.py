@@ -1,8 +1,8 @@
-"""Paridade de providers na cascata (ADR-034) — ex `run_provider_tools_demo.py`.
+"""Provider parity in the cascade (ADR-034) — formerly `run_provider_tools_demo.py`.
 
-Offline: só monta os runnables, nenhum provider é chamado (nem o Ollama do `base_url`). Guarda
-contra reintroduzir skip por provider — tool-calling é capacidade do modelo, resolvida em runtime,
-não por allowlist estática.
+Offline: only assembles the runnables, no provider is called (not even the Ollama at `base_url`).
+Guards against reintroducing a per-provider skip — tool-calling is a model capability, resolved
+at runtime, not a static allowlist.
 """
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ def test_every_provider_binds_tools(name):
 
 @pytest.mark.parametrize("name", sorted(n for n in PROVIDERS if n != "stub"))
 def test_every_provider_binds_structured_output(name):
-    # O stub responde JSON determinístico, sem `with_structured_output`.
+    # The stub responds with deterministic JSON, without `with_structured_output`.
     assert PROVIDERS[name].with_structured_output(_Decision) is not None
 
 

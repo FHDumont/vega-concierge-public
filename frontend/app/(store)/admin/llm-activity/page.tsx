@@ -1,9 +1,9 @@
 "use client";
-// LLM INSPECTOR — tela do DONO (owner-only) p/ ver a atividade de LLM (F-023, ADR-017).
-// Lupa LOCAL de debug que mostra o conteúdo completo (system/user prompt + resposta) +
-// metadados (modelo/provider/tokens/cache/latência).
-// Gateada por papel (só `role === "OWNER"`); o backend é a fronteira real (401/403). Desligável
-// (toggle que pausa a captura no backend; vira feature flag de verdade na F-025).
+// LLM INSPECTOR — OWNER-only screen to see LLM activity (F-023, ADR-017).
+// LOCAL debug magnifier that shows the full content (system/user prompt + response) +
+// metadata (model/provider/tokens/cache/latency).
+// Role-gated (only `role === "OWNER"`); the backend is the real boundary (401/403). Can be
+// disabled (toggle that pauses capture on the backend; becomes a real feature flag in F-025).
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import {
@@ -12,8 +12,8 @@ import {
 } from "@/lib/api";
 import FlagGuard from "@/components/FlagGuard";
 
-// F-033: a flag `inspector` é o "desligável" do F-023 — esconde a superfície + barra a rota
-// (o owner passa; ADR-021). A captura/pausa no backend respeita a mesma flag efetiva.
+// F-033: the `inspector` flag is F-023's "kill switch" — hides the surface + blocks the route
+// (the owner still gets through; ADR-021). Capture/pause on the backend respects the same effective flag.
 export default function LLMActivityPage() {
   return (
     <FlagGuard flag="inspector">
@@ -31,7 +31,7 @@ function LLMActivityGate() {
   return <Inspector />;
 }
 
-// Borda fora da permissão: mantém o chrome, sem expor nada.
+// Edge outside of permission: keeps the chrome, without exposing anything.
 function Gate({ msg, cta }: { msg: string; cta?: boolean }) {
   return (
     <>
@@ -61,8 +61,8 @@ function Inspector() {
   const [busy, setBusy] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
-  // Paginação no cliente (F-030): a captura já chega inteira (até `data.max`);
-  // paginamos no front p/ não renderizar todas as linhas de uma vez.
+  // Client-side pagination (F-030): the capture already arrives whole (up to `data.max`);
+  // we paginate on the frontend to avoid rendering all the rows at once.
   const [pageSize, setPageSize] = useState(25);
   const [page, setPage] = useState(1);
 

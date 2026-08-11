@@ -1,16 +1,16 @@
-"""Rótulos legíveis para spans Splunk Agent Observability via LangChain (F-GALILEO-4).
+"""Human-readable labels for Splunk Agent Observability spans via LangChain (F-GALILEO-4).
 
-Nomes descrevem **superfície** (chat, concierge, compare…) + **passo de negócio**
-(o que a lógica está fazendo), não papéis internos (`coordinator`, `curator`) nem
-classes LangChain (`RunnableSequence`, `ChatOpenAI`).
+Names describe **surface** (chat, concierge, compare…) + **business step**
+(what the logic is doing), not internal roles (`coordinator`, `curator`) nor
+LangChain classes (`RunnableSequence`, `ChatOpenAI`).
 
-Complementa `galileo_obs.GalileoAsyncCallback` — sem `@log` do SDK (ADR-032).
+Complements `galileo_obs.GalileoAsyncCallback` — no SDK `@log` (ADR-032).
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-# Passo de negócio por agent_key configurável — independente de superfície.
+# Business step per configurable agent_key — independent of surface.
 BUSINESS_STEPS: dict[str, str] = {
     "concierge": "route_shopper_request",
     "curator": "search_catalog_and_price",
@@ -35,8 +35,8 @@ BUSINESS_STEPS: dict[str, str] = {
     "chat_respond": "compose_product_recommendation",
 }
 
-# Fallback workflow quando call site não passa `run_name` explícito (F-GALILEO-13).
-# Chaves ausentes → `feature.{business_step}` (ex. comparator → feature.write_comparison_verdict).
+# Fallback workflow when call site doesn't pass explicit `run_name` (F-GALILEO-13).
+# Missing keys → `feature.{business_step}` (e.g. comparator → feature.write_comparison_verdict).
 AGENT_DEFAULT_WORKFLOW: dict[str, str] = {
     "concierge": "concierge",
     "curator": "concierge",
@@ -50,11 +50,11 @@ AGENT_DEFAULT_WORKFLOW: dict[str, str] = {
     "abuse_check": "returns",
 }
 
-# Retriever spans L4r — nomes legíveis no Console (evita `VectorStoreRetriever` cru).
+# Retriever spans L4r — readable names in Console (avoids bare `VectorStoreRetriever`).
 RETRIEVE_STORE_POLICIES_RUN_NAME = "retrieve_store_policies"
 RETRIEVE_CATALOG_RUN_NAME = "retrieve_catalog"
 
-# Prep RAG dentro da feature chain — evita RunnableAssign/RunnableSequence genéricos no Console.
+# RAG prep inside feature chain — avoids generic RunnableAssign/RunnableSequence in Console.
 MERGE_POLICY_CONTEXT_RUN_NAME = "feature.merge_policy_context"
 MERGE_CATALOG_CONTEXT_RUN_NAME = "feature.merge_catalog_context"
 MERGE_STATIC_CONTEXT_RUN_NAME = "feature.merge_static_context"
@@ -62,7 +62,7 @@ MERGE_POLICY_RETRIEVE_RUN_NAME = "feature.retrieve_policies_for_context"
 MERGE_CATALOG_RETRIEVE_RUN_NAME = "feature.retrieve_catalog_for_context"
 PREPARE_FEATURE_MESSAGES_RUN_NAME = "feature.prepare_messages"
 
-# Tool span no hit de cache F-022 (F-GALILEO-9) — StructuredTool, não workflow chain.
+# Tool span on F-022 cache hit (F-GALILEO-9) — StructuredTool, not workflow chain.
 RESPONSE_CACHE_TOOL_NAME = "check_response_cache"
 
 # Stats aggregation before LLM (F-TRACE-UX-1) — visible deterministic span, not RAG/tool.
@@ -71,41 +71,41 @@ AGGREGATE_STORE_STATISTICS = "aggregate_store_statistics"
 # Chat deterministic routing/finalize (F-TRACE-UX-1) — mini-chains when no LLM span.
 CHAT_ROUTE_DECISION = "chat.route_decision"
 
-# Decisão de fraude no checkout — StructuredTool p/ input/output visível no Console Splunk Agent Observability.
+# Fraud decision on checkout — StructuredTool for input/output visible in Splunk Agent Observability Console.
 FRAUD_DECISION_TOOL_NAME = "decide_fraud_allow_or_block"
 
-# Elegibilidade e abuse no returns — StructuredTools p/ input/output visível no Console Splunk Agent Observability.
+# Eligibility and abuse on returns — StructuredTools for input/output visible in Splunk Agent Observability Console.
 REFUND_ELIGIBILITY_TOOL_NAME = "check_refund_eligibility"
 REFUND_ABUSE_TOOL_NAME = "screen_refund_abuse"
 
-# Checkout pós-fraude — StructuredTools p/ I/O JSON visível no Console Splunk Agent Observability (F-GALILEO-12).
+# Post-fraud checkout — StructuredTools for JSON I/O visible in Splunk Agent Observability Console (F-GALILEO-12).
 CONFIRM_CART_STOCK_TOOL_NAME = "confirm_cart_stock"
 CHARGE_PAYMENT_TOOL_NAME = "charge_payment"
 SEND_ORDER_NOTIFICATION_TOOL_NAME = "send_order_notification"
 
-# Refund pós-ReAct — StructuredTool p/ I/O JSON visível no Console Splunk Agent Observability (F-GALILEO-16).
+# Post-ReAct refund — StructuredTool for JSON I/O visible in Splunk Agent Observability Console (F-GALILEO-16).
 PROCESS_REFUND_TOOL_NAME = "process_refund"
 
-# Curator misconfig (F-GALILEO-7) — operação destrutiva exposta ao shopper-facing agent.
+# Curator misconfig (F-GALILEO-7) — destructive operation exposed to shopper-facing agent.
 DELETE_PRODUCT_TOOL_NAME = "delete_product"
 LIST_RECENT_CUSTOMERS_TOOL_NAME = "list_recent_customers"
 
 
 def response_cache_replay_run_name(feature_run_name: str) -> str:
-    """Passo LCEL que devolve o texto cacheado — evita `RunnableLambda` genérico no Console."""
+    """LCEL step that returns cached text — avoids generic `RunnableLambda` in Console."""
     return f"{feature_run_name}.replay_cached_response"
 
 
 def response_cache_invoke_run_name(feature_run_name: str) -> str:
-    """Passo LCEL pós-check de cache miss — encadeia a chain LLM real da feature."""
+    """LCEL step after cache miss check — chains the real feature LLM chain."""
     return f"{feature_run_name}.invoke_llm"
 
 
 def replay_stats_answer_run_name(feature_run_name: str) -> str:
-    """Fast-path stats answer replay — evita RunnableLambda genérico no Console."""
+    """Fast-path stats answer replay — avoids generic `RunnableLambda` in Console."""
     return f"{feature_run_name}.replay_stats_answer"
 
-# Nós LangGraph — superfície explícita no id do span.
+# LangGraph nodes — explicit surface in span id.
 CHAT_GRAPH_NODES: dict[str, str] = {
     "route": "chat.route_shopper_request",
     "general_qa": "chat.answer_store_policy",
@@ -128,7 +128,7 @@ CONCIERGE_GRAPH_NODES: dict[str, str] = {
     "finalize": "concierge.verify_grounded_answer",
 }
 
-# Chaves internas de roteamento (LLM structured output) → id de nó no grafo chat.
+# Internal routing keys (LLM structured output) → node id in chat graph.
 CHAT_ROUTE_TO_NODE: dict[str, str] = {
     "general_qa": CHAT_GRAPH_NODES["general_qa"],
     "stats_qa": CHAT_GRAPH_NODES["stats_qa"],
@@ -157,7 +157,7 @@ def _step_slug(agent_key: str) -> str:
 
 
 def default_llm_run_name(agent_key: str) -> str:
-    """Default dotted `run_name`/`model.name` para spans L3 — alinha com L2/L4."""
+    """Default dotted `run_name`/`model.name` for L3 spans — aligns with L2/L4."""
     if not agent_key:
         return ""
     step = _step_slug(agent_key)
@@ -168,18 +168,18 @@ def default_llm_run_name(agent_key: str) -> str:
 
 
 def llm_run_name(workflow: str, step: str) -> str:
-    """`run_name` para chains/structured-output — evita `RunnableSequence` no trace."""
+    """`run_name` for chains/structured-output — avoids `RunnableSequence` in trace."""
     return f"{workflow}.{step}"
 
 
 def agent_llm_run_name(workflow: str, agent_key: str) -> str:
-    """`run_name` dotted para LLM spans de agentes em grafos — alinha com `feature.{step}`."""
+    """Dotted `run_name` for LLM spans of agents in graphs — aligns with `feature.{step}`."""
     return llm_run_name(workflow, _step_slug(agent_key))
 
 
 @dataclass(frozen=True)
 class ReactNodeNames:
-    """Nós LangGraph ReAct — ids `{surface}.{business_step}`."""
+    """LangGraph ReAct nodes — ids `{surface}.{business_step}`."""
 
     agent: str = "react.run_coordinator"
     tools: str = "react.run_tools"

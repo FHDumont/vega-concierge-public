@@ -1,5 +1,5 @@
 "use client";
-// IA-Produto (F-022): assistente na página de detalhe — Q&A fundamentado nos dados do produto.
+// Product AI (F-022): assistant on the detail page — Q&A grounded in the product data.
 import { useMemo, useState } from "react";
 import { askProduct } from "@/lib/api";
 import AiThinking from "./AiThinking";

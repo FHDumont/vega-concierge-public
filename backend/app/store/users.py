@@ -1,17 +1,17 @@
-"""Contas de usuário + auth de DEMO + tiers (F-008, ADR-011).
+"""User accounts + DEMO auth + tiers (F-008, ADR-011).
 
-Decisões (demo, sem segurança de produção — ver DT-010):
-- **Senha:** PBKDF2-HMAC-SHA256 (stdlib `hashlib`, sem nova dependência). Não é
-  bcrypt/argon2, mas evita texto-plano. Guardada como `pbkdf2_sha256$iter$salt$hash`.
-- **Sessão:** token opaco (`secrets.token_urlsafe`) enviado em `Authorization: Bearer`.
-  Mapa token→user_id vive EM MEMÓRIA (reseta no restart, como o estoque — DT-007/DT-010).
-  Escolhido em vez de cookie httpOnly porque o CORS é `allow_origins=["*"]`, incompatível
-  com cookies de credencial; token em header é mais simples e standalone-first (ADR-011).
-- **Tier:** computado pelo GASTO ACUMULADO do usuário (pedidos PAID/SHIPPED/DELIVERED) e
-  materializado de forma lazy na coluna `tier` (espelha o padrão do ciclo de vida — ADR-008).
-  Thresholds simples e configuráveis por env.
+Decisions (demo, no production security — see DT-010):
+- **Password:** PBKDF2-HMAC-SHA256 (stdlib `hashlib`, no new dependency). Not
+  bcrypt/argon2, but avoids plaintext. Stored as `pbkdf2_sha256$iter$salt$hash`.
+- **Session:** opaque token (`secrets.token_urlsafe`) sent in `Authorization: Bearer`.
+  token→user_id map lives IN MEMORY (resets on restart, like stock — DT-007/DT-010).
+  Chosen over httpOnly cookie because CORS is `allow_origins=["*"]`, incompatible
+  with credential cookies; token in header is simpler and standalone-first (ADR-011).
+- **Tier:** computed from user's CUMULATIVE SPEND (PAID/SHIPPED/DELIVERED orders) and
+  lazily materialized in the `tier` column (mirrors lifecycle pattern — ADR-008).
+  Simple thresholds, configurable by env.
 
-Usuários persistem em SQLite (mesmo arquivo dos pedidos — ADR-006).
+Users persist in SQLite (same file as orders — ADR-006).
 """
 import hashlib
 import secrets
@@ -20,21 +20,21 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from .db import connect
-from .orders import create_order as _create_order  # seed do usuário de teste (F-010)
+from .orders import create_order as _create_order  # test user seed (F-010)
 from ..settings import settings
 
-# Thresholds de tier por gasto acumulado (BRL). Configuráveis por env; valores simples p/ demo.
+# Tier thresholds by cumulative spend (BRL). Configurable by env; simple values for demo.
 GOLD_THRESHOLD = settings.tier_gold_usd
 PLATINUM_THRESHOLD = settings.tier_platinum_usd
 
 PBKDF2_ITERATIONS = settings.auth_pbkdf2_iterations
 
-# token → user_id (sessões de demo, em memória; resetam no restart — DT-010).
+# token → user_id (demo sessions, in memory; reset on restart — DT-010).
 _SESSIONS: dict[str, str] = {}
 
 
 def init_db() -> None:
-    """create_all no boot: tabela de usuários se não existir."""
+    """create_all at boot: users table if it doesn't exist."""
     with connect() as conn:
         conn.execute(
             """CREATE TABLE IF NOT EXISTS users (
@@ -43,12 +43,12 @@ def init_db() -> None:
                 email       TEXT NOT NULL UNIQUE,
                 password    TEXT NOT NULL,   -- pbkdf2_sha256$iter$salt_hex$hash_hex
                 tier        TEXT NOT NULL DEFAULT 'STANDARD',  -- STANDARD | GOLD | PLATINUM
-                role        TEXT NOT NULL DEFAULT 'STANDARD',  -- STANDARD | OWNER (gate da config — F-020)
-                address     TEXT NOT NULL DEFAULT '',  -- endereço salvo (F-011); pré-preenche o checkout
+                role        TEXT NOT NULL DEFAULT 'STANDARD',  -- STANDARD | OWNER (config gate — F-020)
+                address     TEXT NOT NULL DEFAULT '',  -- saved address (F-011); pre-fills checkout
                 created_at  TEXT NOT NULL    -- ISO-8601 UTC
             )"""
         )
-        # Migrações aditivas: `address` (F-011), `role` (F-020) em tabelas pré-existentes.
+        # Additive migrations: `address` (F-011), `role` (F-020) in pre-existing tables.
         cols = [r[1] for r in conn.execute("PRAGMA table_info(users)")]
         if "address" not in cols:
             conn.execute("ALTER TABLE users ADD COLUMN address TEXT NOT NULL DEFAULT ''")
@@ -86,7 +86,7 @@ def _verify_password(password: str, stored: str) -> bool:
 # --- tier -------------------------------------------------------------------
 
 def tier_for_spend(spend: float) -> str:
-    """Tier a partir do gasto acumulado. Thresholds configuráveis (env)."""
+    """Tier from cumulative spend. Thresholds configurable (env)."""
     if spend >= PLATINUM_THRESHOLD:
         return "PLATINUM"
     if spend >= GOLD_THRESHOLD:
@@ -108,9 +108,9 @@ def _row_to_user(row: sqlite3.Row) -> dict:
 
 
 def public_user(user: dict, spend: float) -> dict:
-    """Payload de API: recomputa o tier pelo gasto (não expõe a senha).
-    `address` (F-011) é o endereço salvo que pré-preenche o checkout.
-    `role` (F-020) é STANDARD|OWNER — o front esconde a tela de config p/ não-owner."""
+    """API payload: recomputes tier from spend (does not expose password).
+    `address` (F-011) is the saved address that pre-fills checkout.
+    `role` (F-020) is STANDARD|OWNER — front hides config screen for non-owner."""
     return {
         "id": user["id"],
         "name": user["name"],
@@ -125,7 +125,7 @@ def public_user(user: dict, spend: float) -> dict:
 # --- CRUD + auth ------------------------------------------------------------
 
 def register(name: str, email: str, password: str) -> dict:
-    """Cria um usuário. Levanta ValueError se o e-mail já existe."""
+    """Creates a user. Raises ValueError if email already exists."""
     email = email.strip().lower()
     user = {
         "id": _new_id(),
@@ -147,7 +147,7 @@ def register(name: str, email: str, password: str) -> dict:
 
 
 def _row_to_user_dict(user: dict) -> dict:
-    """Versão sem a senha (para uso interno após criar)."""
+    """Version without password (for internal use after creation)."""
     return {k: user[k] for k in ("id", "name", "email", "tier", "created_at")}
 
 
@@ -164,7 +164,7 @@ def get_user_by_email(email: str) -> dict | None:
 
 
 def authenticate(email: str, password: str) -> dict | None:
-    """Verifica e-mail+senha; retorna o usuário (sem senha) ou None."""
+    """Checks email+password; returns user (without password) or None."""
     with connect() as conn:
         row = conn.execute("SELECT * FROM users WHERE email = ?", (email.strip().lower(),)).fetchone()
     if row is None or not _verify_password(password, row["password"]):
@@ -173,18 +173,18 @@ def authenticate(email: str, password: str) -> dict | None:
 
 
 def update_tier(user_id: str, tier: str) -> None:
-    """Materializa o tier computado na coluna (lazy, no /me)."""
+    """Materializes computed tier in column (lazy, on /me)."""
     with connect() as conn:
         conn.execute("UPDATE users SET tier = ? WHERE id = ?", (tier, user_id))
 
 
 def update_address(user_id: str, address: str) -> None:
-    """Salva/edita o endereço do usuário no perfil (F-011)."""
+    """Saves/edits user address in profile (F-011)."""
     with connect() as conn:
         conn.execute("UPDATE users SET address = ? WHERE id = ?", (address.strip(), user_id))
 
 
-# --- papel OWNER (gate da config de LLM — F-020) ----------------------------
+# --- OWNER role (LLM config gate — F-020) ----------------------------
 
 def update_role(user_id: str, role: str) -> None:
     with connect() as conn:
@@ -192,12 +192,12 @@ def update_role(user_id: str, role: str) -> None:
 
 
 def is_owner(user_id: str) -> bool:
-    """True se o usuário tem papel OWNER (acesso à tela/endpoints de config de LLM)."""
+    """True if user has OWNER role (access to LLM config screen/endpoints)."""
     user = get_user(user_id)
     return bool(user and user.get("role") == "OWNER")
 
 
-# --- sessões (em memória) ---------------------------------------------------
+# --- sessions (in memory) ---------------------------------------------------
 
 def create_session(user_id: str) -> str:
     token = secrets.token_urlsafe(32)
@@ -213,15 +213,15 @@ def drop_session(token: str) -> None:
     _SESSIONS.pop(token, None)
 
 
-# --- usuário de teste (seed de DEMO — F-010) --------------------------------
-# Conta padrão para facilitar a validação no workshop. Credenciais FIXAS e
-# conhecidas → INSEGURO por design (só a camada de demo; ver DT-010). Os pedidos
-# de exemplo somam ~$1,275 → tier GOLD (≥$1,000) com histórico não-vazio.
+# --- demo test user (DEMO seed — F-010) --------------------------------
+# Standard account to ease workshop validation. FIXED and
+# known credentials → UNSAFE by design (demo layer only; see DT-010). Example orders
+# sum ~$1,275 → GOLD tier (≥$1,000) with non-empty history.
 DEMO_EMAIL = "demo@vega.test"
 DEMO_PASSWORD = "demo1234"
 DEMO_NAME = "Demo User"
 _DEMO_ADDRESS = "221B Demo Street, Test City"
-# Dados de pagamento fictícios (workshop UC-5 — DT-010; nunca usar em produção).
+# Fictional payment data (workshop UC-5 — DT-010; never use in production).
 _DEMO_PAYMENT = {
     "ssn": "123-45-6789",
     "card_number": "4242 4242 4242 4242",
@@ -238,9 +238,9 @@ def _demo_customer() -> dict:
         **_DEMO_PAYMENT,
     }
 
-# (dias atrás, itens). Datados no passado → o ciclo de vida (ADR-008) materializa
-# SHIPPED/DELIVERED na 1ª leitura, dando um histórico realista. Itens são snapshots
-# (espelham SKUs do catálogo; pedidos guardam o item, não referenciam o catálogo vivo).
+# (days ago, items). Dated in the past → lifecycle (ADR-008) materializes
+# SHIPPED/DELIVERED on first read, giving realistic history. Items are snapshots
+# (mirror catalog SKUs; orders store the item, don't reference live catalog).
 _DEMO_ORDERS = [
     (40, [{"sku": "NS-002", "name": "Smartwatch Pulse", "qty": 1, "price": 299.0},
           {"sku": "NS-001", "name": "Aura Bluetooth Headphones", "qty": 1, "price": 249.0}]),
@@ -251,15 +251,15 @@ _DEMO_ORDERS = [
 
 
 def seed_demo_user() -> None:
-    """Idempotente: cria o usuário de teste de DEMO + pedidos de exemplo (tier GOLD),
-    se ainda não existir. Roda no boot (api.py). Não faz nada se o e-mail já existe —
-    seguro para reiniciar. NÃO usar em produção (credenciais públicas — DT-010)."""
+    """Idempotent: creates DEMO test user + example orders (GOLD tier),
+    if not already present. Runs at boot (api.py). Does nothing if email exists —
+    safe to restart. DO NOT use in production (public credentials — DT-010)."""
     existing = get_user_by_email(DEMO_EMAIL)
     if existing:
         update_address(existing["id"], _DEMO_ADDRESS)
         return
     user = register(DEMO_NAME, DEMO_EMAIL, DEMO_PASSWORD)
-    update_address(user["id"], _DEMO_ADDRESS)  # endereço salvo no perfil (F-011)
+    update_address(user["id"], _DEMO_ADDRESS)  # saved address in profile (F-011)
     customer = _demo_customer()
     for days_ago, items in _DEMO_ORDERS:
         total = sum(i["qty"] * i["price"] for i in items)
@@ -267,18 +267,18 @@ def seed_demo_user() -> None:
         _create_order(items, customer, total, status="PAID", user_id=user["id"], created_at=created)
 
 
-# --- usuário OWNER (dono; gate da config de LLM — F-020) ---------------------
-# Único papel OWNER da app: acessa a tela/endpoints de config de LLM. Senha via env
-# OWNER_PASSWORD (default de DEMO — trocar em qualquer deploy; ver DT-012). Idempotente:
-# garante a conta E o papel no boot (se a conta já existir, só promove a OWNER).
+# --- OWNER user (owner; LLM config gate — F-020) ---------------------
+# Only OWNER role in app: accesses LLM config screen/endpoints. Password via env
+# OWNER_PASSWORD (DEMO default — change on any deploy; see DT-012). Idempotent:
+# ensures account AND role at boot (if account exists, just promotes to OWNER).
 OWNER_EMAIL = settings.owner_email
-OWNER_PASSWORD = settings.owner_password  # default DEMO — DT-012
+OWNER_PASSWORD = settings.owner_password  # DEMO default — DT-012
 OWNER_NAME = settings.owner_name
 
 
 def seed_owner_user() -> None:
-    """Garante o usuário OWNER no boot. Cria se não existir (senha = OWNER_PASSWORD) e
-    sempre garante `role=OWNER`. Não reescreve a senha de uma conta já existente."""
+    """Ensures OWNER user at boot. Creates if not present (password = OWNER_PASSWORD) and
+    always ensures `role=OWNER`. Does not overwrite password of existing account."""
     existing = get_user_by_email(OWNER_EMAIL)
     if existing is None:
         user = register(OWNER_NAME, OWNER_EMAIL, OWNER_PASSWORD)

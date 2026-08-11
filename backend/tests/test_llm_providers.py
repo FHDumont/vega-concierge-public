@@ -1,8 +1,8 @@
-"""Base única da cascata (F-BACKEND-1).
+"""Single source of truth for the cascade (F-BACKEND-1).
 
-Antes desta fase a regra de "quais providers, em que ordem, com que override" existia duas
-vezes — em `llm.get_llm_for` (adapters HTTP) e em `llm_models._provider_cfgs_for_agent`
-(modelos LangChain). Estes testes fixam que agora é uma só.
+Before this phase the rule for "which providers, in what order, with what override" existed
+twice — in `llm.get_llm_for` (HTTP adapters) and in `llm_models._provider_cfgs_for_agent`
+(LangChain models). These tests pin down that now there's only one.
 """
 from __future__ import annotations
 
@@ -40,16 +40,16 @@ def test_model_override_applies_to_every_remaining_provider(fixed_cascade):
 
 
 def test_unknown_connection_resolves_to_nothing(fixed_cascade):
-    # Fixar num provider desabilitado/ausente tem de esvaziar a cascata — quem chama acrescenta
-    # o stub e a app segue offline em vez de estourar.
+    # Pinning to a disabled/missing provider must empty the cascade — the caller adds
+    # the stub and the app stays offline instead of blowing up.
     assert llm_providers.resolve_provider_configs(connection="LP-inexistente") == []
 
 
 def test_both_paths_resolve_the_same_provider_order(fixed_cascade):
-    """O ponto da unificação: adapters HTTP e modelos LangChain veem a MESMA cascata.
+    """The point of the unification: HTTP adapters and LangChain models see the SAME cascade.
 
-    Fora de um run do pipeline a cascata congelada não está setada, então os dois caminhos
-    partem da mesma leitura da fonte de config.
+    Outside of a pipeline run the frozen cascade isn't set, so both paths
+    start from the same read of the config source.
     """
     assert llm_providers.current_provider_cfgs.get() is None
 
@@ -59,7 +59,7 @@ def test_both_paths_resolve_the_same_provider_order(fixed_cascade):
     langchain_cfgs, _ = llm_providers.provider_configs_for_agent()
     langchain_models = [c["model"] for c in langchain_cfgs]
 
-    # O caminho HTTP acrescenta o StubLLM no fim; tirando ele, a ordem é idêntica.
+    # The HTTP path appends StubLLM at the end; excluding it, the order is identical.
     assert http_models[:-1] == langchain_models == ["m-1", "m-2"]
 
 
@@ -109,7 +109,7 @@ def test_type_presets_are_a_defensive_copy():
 
 
 def test_admin_test_provider_button_works_offline(api_client):
-    """O botão "test provider" do Admin: cria, testa e apaga, sem rede."""
+    """The Admin "test provider" button: creates, tests and deletes, without network."""
     from app.store import users
 
     users.seed_owner_user()
@@ -125,8 +125,8 @@ def test_admin_test_provider_button_works_offline(api_client):
         result = api_client.post(
             f"/api/admin/config/providers/{created['id']}/test", headers=headers, json={},
         ).json()
-        # Sem rede o teste FALHA — o que se garante é o contrato da resposta e que a chave
-        # nunca volta ao front.
+        # Without network the test FAILS — what's guaranteed is the response contract and that
+        # the key never comes back to the front end.
         assert set(result) >= {"ok"}
         assert "sk-offline" not in str(result)
     finally:

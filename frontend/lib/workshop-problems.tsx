@@ -1,5 +1,5 @@
 "use client";
-// Estado compartilhado dos toggles/scenarios de workshop — header + /use-cases.
+// Shared state for workshop toggles/scenarios — header + /use-cases.
 import {
   createContext,
   useCallback,
@@ -57,7 +57,7 @@ export function useWorkshopProblems(): WorkshopProblemsContextValue {
   return ctx;
 }
 
-/** Label curto p/ menu quando um preset UC está ativo (ex. "UC-4 ON"). */
+/** Short label for the menu when a UC preset is active (e.g. "UC-4 ON"). */
 export function activeScenarioMenuLabel(activeScenario?: string): string | null {
   if (!activeScenario) return null;
   const uc = WORKSHOP_UCS.find((u) => u.presetId === activeScenario);

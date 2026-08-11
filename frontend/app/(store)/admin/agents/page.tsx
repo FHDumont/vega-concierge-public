@@ -1,7 +1,7 @@
 "use client";
-// AGENTS — editor VISUAL da orquestração (owner-only; F-027 / F-050 ADR-029). Mostra o grafo
-// real: concierge hub-and-spoke (coordinator sem tools → curator/respond → volta ao coordinator),
-// demais fluxos ReAct (fulfillment/compare/returns) e features standalone (F-022).
+// AGENTS — VISUAL editor for the orchestration (owner-only; F-027 / F-050 ADR-029). Shows the
+// real graph: concierge hub-and-spoke (coordinator with no tools → curator/respond → back to
+// coordinator), the other ReAct flows (fulfillment/compare/returns), and standalone features (F-022).
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import AgentCard from "@/components/AgentCard";
@@ -40,7 +40,7 @@ function AgentsEditor() {
   const [agents, setAgents] = useState<AgentConfig[]>([]);
   const [providers, setProviders] = useState<LLMProvider[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string | null>(null); // agente selecionado (config aberta)
+  const [selected, setSelected] = useState<string | null>(null); // selected agent (config open)
 
   const loadAgents = useCallback(async () => {
     try { setAgents(await getAgents()); } catch (e) { setError((e as Error).message); }
@@ -115,14 +115,14 @@ function AgentsEditor() {
   );
 }
 
-// --- Diagrama de um cluster (SVG) -------------------------------------------
+// --- Diagram for a cluster (SVG) ---------------------------------------------
 const NODE_W = 156;
 const NODE_H = 46;
 const COL_GAP = 56;
 const ROW_GAP = 18;
 const PAD = 14;
 
-/** Posições fixas p/ hub-and-spoke — evita ciclo coordinator↔specialist no layout DAG. */
+/** Fixed positions for hub-and-spoke — avoids a coordinator↔specialist cycle in the DAG layout. */
 function layoutHubSpoke(cluster: TopologyCluster) {
   const byId = new Map(cluster.nodes.map((n) => [n.id, n]));
   const pos = new Map<string, { x: number; y: number }>();
@@ -242,7 +242,7 @@ function ClusterDiagram({ cluster, selected, onPick }: {
   );
 }
 
-// Chip de agente standalone (sem arestas) — clicável p/ abrir a config.
+// Standalone agent chip (no edges) — clickable to open the config.
 function NodeChip({ node, selected, onPick }: { node: TopologyNode; selected: boolean; onPick: () => void }) {
   return (
     <button type="button" className={`ns-agt-chip ${selected ? "sel" : ""}`} onClick={onPick}>

@@ -1,18 +1,18 @@
-"""Modelo hub/peer no MESMO app (F-026, ADR-019). Sem 2º aplicativo.
+"""Hub/peer model in SAME app (F-026, ADR-019). No 2nd application.
 
-Liga as três pontas:
+Connects three sides:
 
-- **Aplicar a fonte:** lê `hub_settings` e instala a `ConfigSource` ativa (`local` ou
-  `remote`) via `config_source.set_active_source`. Chamado no boot e a cada mudança do owner.
-- **Lado hub (servir):** `serve_config(token, chain, client)` autentica pelo token de
-  enrollment, **rastreia o cliente** e devolve a config da cascata resolvida (com chaves —
-  **DT-013: chaves trafegam na rede**). Anti-loop pela cadeia `X-Hub-Chain`.
-- **Status:** `status()` resume o modo (independente | servindo como hub | cliente de um hub),
-  alvo, saúde/last-sync e — no hub — os clientes conectados, p/ a tela do owner.
+- **Apply source:** reads `hub_settings` and installs active `ConfigSource` (`local` or
+  `remote`) via `config_source.set_active_source`. Called on boot and on every owner change.
+- **Hub side (serve):** `serve_config(token, chain, client)` authenticates by enrollment token,
+  **tracks the client** and returns resolved cascade config (with keys —
+  **DT-013: keys travel on network**). Anti-loop via `X-Hub-Chain` chain.
+- **Status:** `status()` summarizes mode (standalone | serving as hub | client of hub),
+  target, health/last-sync and — on hub side — connected clients, for owner screen.
 
-Identidade desta loja = `DEPLOYMENT_ENVIRONMENT` (`user-NN`), reusada no anti-loop e no rastreio.
-Owner-only em tudo (a API gateia com `_require_owner`). Registro de clientes vive em memória
-(reseta no restart — mesma régua de DT-010).
+This store's identity = `DEPLOYMENT_ENVIRONMENT` (`user-NN`), reused in anti-loop and tracking.
+Owner-only in everything (API gates with `_require_owner`). Client registry lives in memory
+(resets on restart — same rule as DT-010).
 """
 import hmac
 import threading
@@ -32,13 +32,13 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-# --- Aplicar a fonte ativa (boot + mudança do owner) ------------------------
+# --- Apply active source (boot + owner change) ---------------------------
 
-_remote: config_source.RemoteConfigSource | None = None  # instância remota corrente (se source=remote)
+_remote: config_source.RemoteConfigSource | None = None  # current remote instance (if source=remote)
 
 
 def apply_source() -> None:
-    """Lê os settings e instala a ConfigSource ativa. Idempotente; chamável a quente."""
+    """Reads settings and installs active ConfigSource. Idempotent; callable hot."""
     global _remote
     s = hub_settings.get_settings()
     if s["source"] == "remote" and s["hub_url"]:
@@ -53,16 +53,16 @@ def apply_source() -> None:
 
 
 def sync_now() -> dict:
-    """Pull sob demanda (botão 'sync agora'). Sem efeito se não estamos em modo remote."""
+    """On-demand pull ('sync now' button). No effect if not in remote mode."""
     if _remote is None:
         return {"synced": False, "reason": "not in remote mode"}
     st = _remote.sync_now()
     return {"synced": True, **st}
 
 
-# --- Lado hub: rastreio de clientes -----------------------------------------
+# --- Hub side: client tracking ------------------------------------------
 
-_clients: dict[str, dict] = {}  # env do cliente → {env, last_pull, ip, agent, pulls}
+_clients: dict[str, dict] = {}  # client env → {env, last_pull, ip, agent, pulls}
 _lock = threading.Lock()
 
 
@@ -71,7 +71,7 @@ def _track_client(env: str, ip: str | None, agent: str | None) -> None:
     now = _now_iso()
     with _lock:
         c = _clients.get(key)
-        if c is None:  # 1ª vez que este cliente aparece → marca "conectado desde"
+        if c is None:  # first time this client appears → mark "connected since"
             c = {"env": env or "(unknown)", "pulls": 0, "first_seen": now}
         c["ip"] = ip or c.get("ip")
         c["agent"] = agent or c.get("agent")
@@ -86,7 +86,7 @@ def list_clients() -> list[dict]:
 
 
 class HubError(Exception):
-    """Erro de servir config. `status` vira o HTTP (401 token, 409 loop)."""
+    """Error serving config. `status` becomes HTTP (401 token, 409 loop)."""
     def __init__(self, status: int, detail: str):
         super().__init__(detail)
         self.status = status
@@ -95,18 +95,18 @@ class HubError(Exception):
 
 def serve_config(token: str | None, chain: str | None, client_env: str | None,
                  ip: str | None, agent: str | None) -> dict:
-    """Entrega a config da cascata a um cliente. Levanta `HubError` em token/loop.
+    """Delivers cascade config to a client. Raises `HubError` on token/loop.
 
-    - **Token-gated:** sem `serve_token` configurado, ou token errado → 401.
-    - **Anti-loop:** se nossa identidade já está na cadeia `X-Hub-Chain` → 409 (ciclo).
-    - **Rastreia** o cliente (env/last-pull/ip/agent).
-    - Devolve `providers` da fonte ativa (local: rows locais; remote: cache do upstream —
-      encadeamento por cache, sem recursão de rede). **Chaves vão no payload (DT-013).**
+    - **Token-gated:** without `serve_token` configured, or wrong token → 401.
+    - **Anti-loop:** if our identity is already in `X-Hub-Chain` → 409 (cycle).
+    - **Tracks** client (env/last-pull/ip/agent).
+    - Returns `providers` from active source (local: local rows; remote: upstream cache —
+      chaining by cache, no network recursion). **Keys go in payload (DT-013).**
     """
     settings = hub_settings.get_settings()
     serve_token = settings["serve_token"]
-    # Sem token configurado = não servimos (independente). Compare em tempo constante
-    # (hmac.compare_digest) p/ não vazar o token por timing — DT-013 / ADR-019.
+    # No token configured = we don't serve (independent). Compare in constant time
+    # (hmac.compare_digest) to not leak token by timing — DT-013 / ADR-019.
     if not serve_token or not token or not hmac.compare_digest(token, serve_token):
         raise HubError(401, "invalid enrollment token")
 
@@ -118,29 +118,29 @@ def serve_config(token: str | None, chain: str | None, client_env: str | None,
     _track_client(client_env, ip, agent)
     active = config_source.get_active_source()
     providers = active.get_llm_config()
-    flags = active.get_flags()  # F-033: propaga as flags de menu junto com a config (sem segredo)
+    flags = active.get_flags()  # F-033: propagates menu flags alongside config (no secret)
     return {"hub_env": me, "served_at": _now_iso(), "providers": providers, "flags": flags,
             "chain": chain_ids + [me]}
 
 
-# --- Status (tela do owner) -------------------------------------------------
+# --- Status (owner screen) -------------------------------------------------
 
 def status() -> dict:
-    """Resumo do modo/alvo/saúde + clientes. Sem segredos (tokens nunca saem)."""
+    """Mode/target/health summary + clients. No secrets (tokens never go out)."""
     s = hub_settings.get_settings()
     serving = bool(s["serve_token"])
     clients = list_clients()
     if s["source"] == "remote" and s["hub_url"]:
-        mode = "client"  # cliente de um hub
+        mode = "client"  # client of a hub
         remote_status = _remote.status() if _remote is not None else None
     elif serving and clients:
-        mode = "hub"     # servindo como hub (há clientes)
+        mode = "hub"     # serving as hub (has clients)
         remote_status = None
     elif serving:
-        mode = "hub-idle"  # pronto p/ servir, sem clientes ainda
+        mode = "hub-idle"  # ready to serve, no clients yet
         remote_status = None
     else:
-        mode = "standalone"  # independente
+        mode = "standalone"  # independent
         remote_status = None
     return {
         "env": _env(),
@@ -157,7 +157,7 @@ def status() -> dict:
 
 
 def settings_public() -> dict:
-    """Settings p/ o front — SEM segredos (tokens viram flags `has_*`)."""
+    """Settings for front — NO secrets (tokens become `has_*` flags)."""
     s = hub_settings.get_settings()
     return {
         "source": s["source"],
@@ -169,7 +169,7 @@ def settings_public() -> dict:
 
 
 def test_connection() -> dict:
-    """Pull (se remote) e resume a cascata EFETIVA p/ a UI — sem chaves."""
+    """Pull (if remote) and summarize EFFECTIVE cascade for UI — without keys."""
     s = hub_settings.get_settings()
     sync_meta: dict | None = None
     if s["source"] == "remote" and _remote is not None:

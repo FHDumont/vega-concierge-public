@@ -1,13 +1,12 @@
-"""Base única da cascata de LLM (F-BACKEND-1).
+"""Single base for LLM cascade (F-BACKEND-1).
 
-`llm.py` (adapters HTTP diretos) e `llm_models.py` (modelos LangChain) resolvem a MESMA cascata
-por caminhos diferentes, e por isso mantinham cópias da mesma regra: quais providers estão
-ativos, como fixar um agente numa conexão, como sobrescrever o modelo, de onde sai a região do
-Bedrock. As cópias divergiram sem ninguém notar. Aqui essa regra existe uma vez só; os dois
-módulos viram consumidores.
+`llm.py` (direct HTTP adapters) and `llm_models.py` (LangChain models) resolve the SAME cascade
+via different paths, and so maintained copies of the same rule: which providers are active,
+how to pin agent to connection, how to override model, where Bedrock region comes from.
+Copies diverged without anyone noticing. Here that rule exists once; both modules become consumers.
 
-O que NÃO mora aqui: como falar com cada provider. `llm.py` continua dono dos adapters HTTP e
-`llm_models.py` dos `BaseChatModel` — este módulo só decide QUAL config usar, em que ordem.
+What does NOT live here: how to talk to each provider. `llm.py` still owns HTTP adapters and
+`llm_models.py` owns `BaseChatModel` — this module only decides WHICH config to use, in what order.
 """
 from __future__ import annotations
 
@@ -16,20 +15,20 @@ import contextvars
 from ..hub import agent_config
 from ..settings import settings
 
-# Cascata resolvida UMA vez por execução do pipeline (`agents.run_workflow` e afins). Enquanto
-# estiver setada, os nós daquele run usam essa lista congelada em vez de reconsultar a fonte de
-# config a cada chamada — assim um `PUT` no meio do run não troca de provider na metade.
+# Cascade resolved ONCE per pipeline execution (`agents.run_workflow` etc). While
+# set, nodes of that run use this frozen list instead of re-querying config source per call
+# — so a `PUT` mid-run doesn't switch provider mid-flight.
 current_provider_cfgs: contextvars.ContextVar = contextvars.ContextVar(
     "current_provider_cfgs", default=None,
 )
 
 
-# --- Type presets de conexão (F-021, etapa 2) -------------------------------
-# Catálogo de "Types" para a UI de conexão: ao escolher um Type, a tela faz PREFILL de
-# `kind` + `base_url` + uma lista de **modelos econômicos** sugeridos (dropdown editável).
-# São defaults CONVENIENTES e **editáveis** — NÃO autoritativos: pricing/modelos mudam, então
-# o owner ajusta livremente. `custom` deixa tudo livre. Todos OpenAI-compatíveis exceto Claude
-# (kind anthropic → AnthropicAdapter). Modelos = a classe mais barata de cada provider.
+# --- Connection type presets (F-021, stage 2) ---------
+# Catalog of "Types" for connection UI: choosing a Type makes screen PREFILL
+# `kind` + `base_url` + list of **budget models** suggested (editable dropdown).
+# They're convenient DEFAULTS and **editable** — NOT authoritative: pricing/models change, so
+# owner tweaks freely. `custom` leaves all free. All OpenAI-compatible except Claude
+# (kind anthropic → AnthropicAdapter). Models = cheapest tier of each provider.
 TYPE_PRESETS: list[dict] = [
     {"type": "openai", "label": "OpenAI", "kind": "openai",
      "base_url": "https://api.openai.com/v1",
@@ -62,32 +61,32 @@ TYPE_PRESETS: list[dict] = [
 
 
 def list_type_presets() -> list[dict]:
-    """Presets de Type p/ a UI de conexão (cópia defensiva — convenientes/editáveis)."""
+    """Type presets for connection UI (defensive copy — convenient/editable)."""
     return [dict(p) for p in TYPE_PRESETS]
 
 
 def bedrock_region(base_url: str) -> str:
-    """Região AWS a partir de `base_url` (campo reaproveitado p/ bedrock) ou do ambiente."""
+    """AWS region from `base_url` (field repurposed for bedrock) or environment."""
     return (base_url or settings.aws_default_region).strip() or "us-east-1"
 
 
-# --- Resolução da cascata ----------------------------------------------------
+# --- Cascade resolution -------------------------------------------------
 
 def load_provider_configs() -> list[dict]:
-    """Providers habilitados, em ordem, pela FONTE de config ATIVA.
+    """ENABLED providers, in order, from ACTIVE config SOURCE.
 
-    Hoje é a `LocalConfigSource` (SQLite via `llm_config`); em modo hub a fonte é remota, sem
-    que os consumidores mudem. Tabela ausente / standalone → lista vazia → só stub. Provider
-    inicial: `seed_ollama_default` no boot (Ollama Local)."""
+    Today it's `LocalConfigSource` (SQLite via `llm_config`); in hub mode source is remote, without
+    consumers changing. Missing table / standalone → empty list → stub only. Initial provider:
+    `seed_ollama_default` at boot (Ollama Local)."""
     from ..hub import config_source  # import tardio: ciclo llm_providers↔config_source
 
     return config_source.get_active_source().get_llm_config()
 
 
 def filter_provider_configs(cfgs: list[dict], connection: str = "", model: str = "") -> list[dict]:
-    """Aplica a UMA lista de providers as duas regras de override da config por agente (F-021):
-    `connection` fixa um provider (por id ou nome) e `model` sobrescreve o modelo de todos os
-    que sobrarem. Era esta regra que estava escrita duas vezes."""
+    """Apply to ONE provider list the two override rules for config per agent (F-021):
+    `connection` pins a provider (by id or name) and `model` overrides model of all
+    remaining. It's this rule that was written twice."""
     if connection:
         cfgs = [c for c in cfgs if c.get("id") == connection or c.get("name") == connection]
     if model:
@@ -96,16 +95,16 @@ def filter_provider_configs(cfgs: list[dict], connection: str = "", model: str =
 
 
 def resolve_provider_configs(connection: str = "", model: str = "") -> list[dict]:
-    """Cascata corrente já filtrada pelos overrides. Sem `connection` nem `model` é a cascata
-    inteira."""
+    """Current cascade already filtered by overrides. Without `connection` or `model` is full
+    cascade."""
     return filter_provider_configs(load_provider_configs(), connection, model)
 
 
 def provider_configs_for_agent(agent_name: str = "") -> tuple[list[dict], str]:
-    """Configs de provider + modelo do stub para um agente.
+    """Provider configs + stub model for an agent.
 
-    Ordem de precedência: config do próprio agente (connection/model) > cascata congelada do run
-    corrente > cascata da config ativa."""
+    Precedence order: agent's own config (connection/model) > frozen cascade of current run
+    > cascade of active config."""
     stub_model = settings.llm_stub_model
     if agent_name:
         cfg = agent_config.get_agent(agent_name)

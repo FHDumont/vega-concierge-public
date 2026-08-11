@@ -1,30 +1,30 @@
-"""Feature flags de SUPERFÍCIE/menu — F-033.
+"""Surface/menu feature flags — F-033.
 
-O owner liga/desliga áreas do menu (o que os PARTICIPANTES veem durante o workshop): liberar o
-Behind the Scenes só na hora de ensinar, esconder o Admin/Simulator, ligar/desligar o Inspector.
+The owner toggles menu areas (what PARTICIPANTS see during workshop): enable Behind the Scenes
+only at teaching time, hide Admin/Simulator, toggle Inspector.
 
-Servido pela **mesma fonte de config** da cascata de LLM (F-020/F-026): em modo `local` valem as
-flags do próprio SQLite desta loja; em modo `remote` valem as flags **servidas pelo hub** (que
-propaga p/ as 150 VMs), com cache resiliente. A precedência (hub vence em `remote`) e o cálculo
-das flags **efetivas** ficam em `effective_flags()` (a fronteira de visibilidade no front consome
-isso). Owner nunca se autobloqueia: o gate é só no front e o owner passa por cima (ADR-021).
+Served by the **same config source** as the LLM cascade (F-020/F-026): in `local` mode
+flags from this store's SQLite apply; in `remote` mode flags **served by the hub** apply (which
+propagates to 150 VMs), with resilient cache. Precedence (hub wins in `remote`) and
+calculation of **effective** flags happens in `effective_flags()` (front's visibility boundary consumes
+this). Owner never self-blocks: gate is front-only and owner can override (ADR-021).
 
-Persistência: tabela de 1 linha (`feature_flags`) no mesmo SQLite (ADR-006), default tudo ON
-(nada escondido até o owner decidir — standalone-first). Sem segredo aqui → vai cru ao front.
+Persistence: single-row table (`feature_flags`) in the same SQLite (ADR-006), default all ON
+(nothing hidden until owner decides — standalone-first). No secret here → goes raw to front.
 """
 import sqlite3
 
 from ..store.db import connect
 
-_ROW_ID = 1  # tabela de 1 linha (singleton de flags)
+_ROW_ID = 1  # single-row table (flags singleton)
 
-# Superfícies/menus controláveis. Default ON (nada escondido até o owner desligar).
+# Controllable surfaces/menus. Default ON (nothing hidden until owner disables).
 FLAG_KEYS = ["behind_the_scenes", "admin", "simulator", "inspector"]
 DEFAULTS = {k: True for k in FLAG_KEYS}
 
 
 def init_db() -> None:
-    """create_all no boot: tabela de flags (1 linha) + linha default idempotente (tudo ON)."""
+    """create_all on boot: flags table (1 row) + idempotent default row (all ON)."""
     with connect() as conn:
         conn.execute(
             """CREATE TABLE IF NOT EXISTS feature_flags (
@@ -43,7 +43,7 @@ def init_db() -> None:
 
 
 def get_local_flags() -> dict:
-    """Flags persistidas nesta loja. Tolerante a tabela ausente → defaults (tudo ON)."""
+    """Flags persisted in this store. Tolerant of missing table → defaults (all ON)."""
     try:
         with connect() as conn:
             row = conn.execute("SELECT * FROM feature_flags WHERE id = ?", (_ROW_ID,)).fetchone()
@@ -55,7 +55,7 @@ def get_local_flags() -> dict:
 
 
 def update_flags(**partial) -> dict:
-    """Edita as flags locais (owner). Ignora chaves desconhecidas. Devolve as flags locais novas."""
+    """Edits local flags (owner). Ignores unknown keys. Returns new local flags."""
     sets, vals = [], []
     for k in FLAG_KEYS:
         if k in partial and partial[k] is not None:
@@ -69,14 +69,14 @@ def update_flags(**partial) -> dict:
 
 
 def effective_flags() -> dict:
-    """Flags EFETIVAS que o front consome — resolvidas pela FONTE ativa (ADR-021).
+    """EFFECTIVE flags consumed by front — resolved by ACTIVE source (ADR-021).
 
-    - `local`: valem as flags do próprio SQLite.
-    - `remote`: vencem as flags **servidas pelo hub** (cache resiliente do `RemoteConfigSource`);
-      antes do 1º pull (sem opinião do hub) → defaults tudo ON (standalone-first, nada escondido).
-    Chaves ausentes caem no default ON.
+    - `local`: flags from this store's SQLite apply.
+    - `remote`: flags **served by hub** win (resilient cache from `RemoteConfigSource`);
+      before first pull (no hub opinion) → defaults all ON (standalone-first, nothing hidden).
+    Missing keys default to ON.
     """
-    from . import config_source  # lazy: config_source.LocalConfigSource depende deste módulo
+    from . import config_source  # lazy: config_source.LocalConfigSource depends on this module
     src = config_source.get_active_source()
     if getattr(src, "name", "local") == "remote":
         try:

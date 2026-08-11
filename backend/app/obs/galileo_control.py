@@ -1,7 +1,7 @@
-"""Agent Control / Protect (ADR-033) — enforcement em runtime, opt-in pela mesma credencial Splunk Agent Observability.
+"""Agent Control / Protect (ADR-033) — runtime enforcement, opt-in via same Splunk Agent Observability credential.
 
-Único módulo que importa `agent_control`. Sem `GALILEO_API_KEY` (ou init falhou / pacote ausente) →
-no-op; a loja segue idêntica à demo base. Rulesets ficam no Console, não em código.
+Only module importing `agent_control`. Without `GALILEO_API_KEY` (or init failed / package absent) →
+no-op; store stays identical to base demo. Rulesets live in Console, not code.
 """
 from __future__ import annotations
 
@@ -29,8 +29,8 @@ _initialized = False
 _warned = False
 _decorated = False
 
-# Backward-compatible read-only views for legacy call sites. The agent package owns
-# the declarations; this adapter only consumes them.
+# Backward-compatible read-only views for legacy call sites. Agent package owns
+# declarations; adapter only consumes them.
 # delete_product runs through controlled_delete_product(), not controlled_feature_invoke().
 _CONTROLLED_LLM_PRE = control_features("pre")
 _CONTROL_STANDALONE_PRE = frozenset({"delete_product", "list_recent_customers"})
@@ -41,14 +41,14 @@ CONTROLLED_FEATURES = CONTROL_FEATURES_PRE | CONTROL_FEATURES_POST
 _invoke_fn_var: contextvars.ContextVar[Callable[[], Any] | None] = contextvars.ContextVar(
     "_galileo_control_invoke_fn", default=None,
 )
-# O `@control` do agent_control roda o step decorado dentro de `asyncio.run(...)`
-# (`agent_control/control_decorators.py:862`), e **escrita** em ContextVar dentro de um contexto
-# novo NÃO propaga de volta pro chamador — só a leitura funciona (o contexto é copiado pra
-# dentro). Um ContextVar carregando o VALOR do resultado voltava sempre `None` aqui fora, e o
-# código caía no fallback, invocando o LLM uma SEGUNDA vez: dobro de custo e a subárvore inteira
-# duplicada no trace (medido no Console — F-WORKSHOP-STAB-4). O que atravessa a fronteira é um
-# container MUTÁVEL: o dict é criado aqui fora, o step escreve nele lá dentro, e a mutação é
-# visível porque é o mesmo objeto.
+# agent_control's `@control` runs decorated step inside `asyncio.run(...)`
+# (`agent_control/control_decorators.py:862`), and **writes** to ContextVar inside new context
+# do NOT propagate back to caller — only reads work (context is copied in).
+# ContextVar carrying result VALUE always came back `None` here, and
+# code fell to fallback, invoking LLM SECOND time: double cost and entire subtree
+# duplicated in trace (measured in Console — F-WORKSHOP-STAB-4). What crosses boundary is
+# MUTABLE container: dict created here, step writes in there, mutation
+# visible because same object.
 _result_sink_var: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
     "_galileo_control_result_sink", default=None,
 )
@@ -101,7 +101,7 @@ def _warn_once(exc: Exception) -> None:
     global _warned
     if not _warned:
         _warned = True
-        log.warning("Agent Control desabilitado nesta execução (%s: %s)", type(exc).__name__, exc)
+        log.warning("Agent Control disabled for this run (%s: %s)", type(exc).__name__, exc)
 
 
 def init_once() -> None:
@@ -139,7 +139,7 @@ def init_once() -> None:
         configure_settings(url=server_url, api_key=api_key)
         _ensure_decorated_steps()
         _initialized = True
-        log.info("Agent Control inicializado (target=%s/%s)", target.target_type, target.target_id)
+        log.info("Agent Control initialized (target=%s/%s)", target.target_type, target.target_id)
     except Exception as exc:  # noqa: BLE001
         _warn_once(exc)
 
@@ -173,7 +173,7 @@ def _ensure_decorated_steps() -> None:
             r, status = result
             sink = _result_sink_var.get()
             if sink is not None:
-                # Mutação, não `set()`: só o dict atravessa o `asyncio.run` do `@control`.
+                # Mutation, not `set()`: only the dict crosses the `@control`'s `asyncio.run`.
                 sink["llm"] = (r, status)
             return r.text
         raise RuntimeError("invoke fn must return (LLMResult, status)")
@@ -250,7 +250,7 @@ def controlled_feature_invoke(
     chain_invoke: Callable[[str], tuple[LLMResult, str]],
     control_fallback: Callable[[], str] | None = None,
 ) -> tuple[str, LLMResult, str]:
-    """Choke point UC-4 (pre Block) e UC-5 (post Steer + retry)."""
+    """Choke point for UC-4 (pre Block) and UC-5 (post Steer + retry)."""
     if not is_active() or feature not in CONTROLLED_FEATURES:
         r, status = invoke_fn()
         return r.text, r, status
@@ -263,8 +263,8 @@ def controlled_feature_invoke(
         sink_token = _result_sink_var.set(sink)
         try:
             text = run_control_step(_pre_handler(feature), prompt)
-            # `invoke_fn()` de novo aqui só se o step NÃO chegou a rodar a chain (nunca no
-            # caminho normal) — é rede de segurança, não o caminho esperado.
+            # `invoke_fn()` again here only if the step did NOT actually run the chain (never on
+            # the normal path) — it's a safety net, not the expected path.
             r, status = sink.get("llm") or invoke_fn()
             return text, r, status
         except ControlViolationError:
@@ -305,7 +305,7 @@ def controlled_feature_invoke(
     if control_fallback is not None:
         return _control_block_result(feature, control_fallback())
     if last_err is not None:
-        log.info("Steer esgotado em %s (%s)", feature, last_err.control_name)
+        log.info("Steer exhausted on %s (%s)", feature, last_err.control_name)
     r, status = chain_invoke(prompt)
     return r.text, r, status
 
@@ -316,7 +316,7 @@ def controlled_delete_product(
     *,
     prompt_snippet: str | None = None,
 ) -> dict:
-    """UC-4 — Block em `delete_product` (step tool, avaliação pre — bloqueia antes de mutar)."""
+    """UC-4 — Block on `delete_product` (step tool, pre evaluation — blocks before mutating)."""
     if not is_active():
         return compute_fn()
 
@@ -341,7 +341,7 @@ def controlled_list_recent_customers(
     prompt: str,
     compute_fn: Callable[[], list[dict]],
 ) -> list[dict] | dict:
-    """UC-4 — Block em ``list_recent_customers`` (pre — antes de vazar PII)."""
+    """UC-4 — Block on ``list_recent_customers`` (pre — before leaking PII)."""
     if not is_active():
         return compute_fn()
 
@@ -368,7 +368,7 @@ def controlled_finalize_refund(
     *,
     corrected_fn: Callable[[], dict],
 ) -> dict:
-    """UC-3 — Block em `returns.finalize` (step tool, avaliação post)."""
+    """UC-3 — Block on `returns.finalize` (step tool, post evaluation)."""
     if not is_active():
         return compute_fn()
 

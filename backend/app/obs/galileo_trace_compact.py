@@ -32,10 +32,10 @@ def _compact_product(p: dict | None) -> dict | None:
 
 
 def _last_human_message(messages: Any) -> str:
-    """Varredura do último `HumanMessage`, sem importar `langchain_core` — o payload que chega
-    aqui pode ser objeto vivo (`m.type == "human"`) ou já serializado (`m.get("role")` em
-    `{"user", "human"}`). Mesma lógica de `agents.arun_chat_workflow:587-590`, local ao módulo
-    pra não acoplar `obs/` a `langchain_core`."""
+    """Scan for last `HumanMessage`, without importing `langchain_core` — payload arriving
+    here can be live object (`m.type == "human"`) or already serialized (`m.get("role")` in
+    `{"user", "human"}`). Same logic as `agents.arun_chat_workflow:587-590`, local to module
+    to not couple `obs/` to `langchain_core`."""
     if not isinstance(messages, list):
         return ""
     for m in reversed(messages):
@@ -51,9 +51,9 @@ def _last_human_message(messages: Any) -> str:
 
 
 def _request_preview(data: dict) -> str:
-    """`request` é o dado do comprador — sai do processo compactado pra UC-4 (prompt injection)
-    ter o que avaliar. Teto de 500, o mesmo que `compact_trace_payload` já aplica a payload
-    string (`:88`); o `_MAX_PREVIEW=200` cortaria justamente o payload de injeção."""
+    """`request` is shopper's data — leaves process compacted so UC-4 (prompt injection)
+    has something to evaluate. Cap of 500, same as `compact_trace_payload` already applies to payload
+    string (`:88`); `_MAX_PREVIEW=200` would cut right at injection payload."""
     request = str(data.get("request") or "")
     if not request:
         request = _last_human_message(data.get("messages"))
@@ -61,7 +61,7 @@ def _request_preview(data: dict) -> str:
 
 
 def _compact_chat_state(data: dict) -> dict:
-    """Workshop trace root — só o que o Console/evaluators precisam ler."""
+    """Workshop trace root — only what the Console/evaluators need to read."""
     return {
         "request": _request_preview(data),
         "intent": data.get("intent"),
@@ -107,16 +107,16 @@ def _compact_fulfillment_state(data: dict) -> dict:
 
 
 def _returns_request_preview(order: dict) -> str:
-    """A raiz do `returns.workflow` semeia o input no `on_chain_start` (`galileo_callback.py`),
-    quando o state ainda é `{"order":…, "messages":[], "trace":[]}` — não há `HumanMessage` pra
-    varrer ainda (diferente de chat/concierge). Import tardio pra não criar ciclo `obs` ↔
-    `graphs` (`graphs.returns` não importa `obs`, `obs` importaria `graphs` só aqui); qualquer
-    falha cai numa frase sintética equivalente — compactação nunca pode levantar."""
+    """The root of `returns.workflow` seeds the input in `on_chain_start` (`galileo_callback.py`),
+    when the state is still `{"order":…, "messages":[], "trace":[]}` — there's no `HumanMessage` to
+    scan yet (unlike chat/concierge). Late import to avoid an `obs` ↔ `graphs` import cycle
+    (`graphs.returns` doesn't import `obs`, `obs` would only import `graphs` here); any
+    failure falls back to an equivalent synthetic sentence — trace compaction must never raise."""
     try:
         from ..ai_agents.refund import refund_request_text
 
         return _preview(refund_request_text(order), limit=500)
-    except Exception:  # noqa: BLE001 — compactação de trace nunca pode quebrar o request
+    except Exception:  # noqa: BLE001 — trace compaction must never break the request
         order_id = order.get("id", "?") if isinstance(order, dict) else "?"
         return _preview(f"Coordinate a refund request for order {order_id}.", limit=500)
 
@@ -176,10 +176,10 @@ def _compact_notification_copy_state(data: dict) -> dict:
 
 
 def _compact_returns_state(data: dict) -> dict:
-    """UC-3 (Correctness): `returns.workflow` era compactado pelo compactador do fulfillment
-    (`checkout_success` nunca existe em `ReturnsState`) e o desfecho real do refund — o que o
-    judge precisa ler — saía como JSON quase todo `null`. Expõe as chaves que existem de fato em
-    `ReturnsState` (`graphs/returns.py:46-59`) e no retorno de `_finalize_refund_outcome`."""
+    """UC-3 (Correctness): `returns.workflow` was being compacted by the fulfillment compactor
+    (`checkout_success` never exists in `ReturnsState`), and the actual refund outcome — what the
+    judge needs to read — came out as JSON that was almost entirely `null`. Exposes the keys that
+    actually exist in `ReturnsState` (`graphs/returns.py:46-59`) and in the return value of `_finalize_refund_outcome`."""
     order = data.get("order") if isinstance(data.get("order"), dict) else {}
     updated_order = data.get("updated_order") if isinstance(data.get("updated_order"), dict) else None
     effective_order = updated_order or order

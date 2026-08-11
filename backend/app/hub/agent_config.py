@@ -1,20 +1,20 @@
-"""Config POR AGENTE do Concierge (F-021, evolui ADR-015 / F-050).
+"""Per-agent config for Concierge (F-021, evolves ADR-015 / F-050).
 
-A F-020 deu config de **conexões** (provedores da cascata). A F-021 acrescenta config por
-**agente**: cada agente da orquestração ganha `connection`, `model`, `role` e `system_prompt`.
-Persistido no MESMO SQLite (ADR-006), tabela `llm_agents`. NÃO guarda segredo.
+F-020 provided config for **connections** (cascade providers). F-021 adds per-
+**agent** config: each orchestration agent gets `connection`, `model`, `role` and `system_prompt`.
+Persisted in the SAME SQLite (ADR-006), `llm_agents` table. Does NOT store secrets.
 
-**F-050 (ADR-029):** cluster concierge hub-and-spoke — `concierge` roteia (sem tools),
-`curator` usa tools de catálogo, `respond` compõe a resposta exibida.
+**F-050 (ADR-029):** hub-and-spoke concierge cluster — `concierge` routes (no tools),
+`curator` uses catalog tools, `respond` composes the displayed response.
 """
 import sqlite3
 from datetime import datetime, timezone
 
 from ..store.db import connect
 
-# Agentes de LLM da orquestração (F-025 → F-050 / ADR-029). Ops de negócio são tools sem LLM
+# LLM agents in orchestration (F-025 → F-050 / ADR-029). Business ops are LLM-less tools
 # (`langchain_tools` / `ToolNode`). Concierge = coordinator (routing only); curator/respond =
-# especialistas. `connection`/`model` default vazios = usar a cascata completa.
+# specialists. `connection`/`model` default empty = use full cascade.
 AGENT_DEFAULTS: list[dict] = [
     {"agent": "concierge", "role": "Store chatbot coordinator",
      "system_prompt": "You coordinate the Vega store chatbot. Route customer messages to the "
@@ -42,7 +42,7 @@ AGENT_DEFAULTS: list[dict] = [
      "system_prompt": "You decide whether to ALLOW or BLOCK an order based on the order data. "
                       "Default to ALLOW for legitimate orders. When asked, reply ONLY with the "
                       "requested JSON object. Reply with raw JSON only — no markdown code fences."},
-    # Compare 2 produtos (F-029) — orquestração simples (coordinator → comparator + tools).
+    # Compare 2 products (F-029) — simple orchestration (coordinator → comparator + tools).
     {"agent": "compare_coordinator", "role": "Compare coordinator",
      "system_prompt": "You coordinate a comparison between two store products: fetch each product's "
                       "real facts and hand off to the comparator for the verdict. Be brief. Never "
@@ -52,9 +52,9 @@ AGENT_DEFAULTS: list[dict] = [
                       "facts provided (name, price, tags, description). Say who each is best for and "
                       "which to pick. Never mention internal fields such as 'grounded' or API metadata. "
                       "Be concise. Reply in English."},
-    # Returns/Refund Coordinator (F-029) — orquestração complexa (eligibility → policy/calc → abuse
-    # → process). `eligibility` é o agente cujo "falso negativo" (toggle refund_false_denial) nega
-    # um reembolso ELEGÍVEL — erro de DECISÃO do agente sobre dado correto.
+    # Returns/Refund Coordinator (F-029) — complex orchestration (eligibility → policy/calc → abuse
+    # → process). `eligibility` is the agent whose "false negative" (toggle refund_false_denial) denies
+    # an ELIGIBLE refund — DECISION error by agent on correct data.
     {"agent": "returns_coordinator", "role": "Returns coordinator",
      "system_prompt": "You oversee a customer's return/refund request: look up the policy, "
                       "compute the refund, screen for abuse, then process it if approved. "
@@ -71,10 +71,10 @@ AGENT_DEFAULTS: list[dict] = [
                       "object. Reply with raw JSON only — no markdown code fences."},
 ]
 
-# Features de IA da Loja (F-022) registradas como "agentes" configuráveis (mesma config por
-# agente da F-021 — connection/model/role/system_prompt). São chamadas AVULSAS (fora do pipeline,
-# via agents.feature_complete), não nós do grafo. System prompts em INGLÊS (a Loja é em inglês —
-# CONVENCOES) e compactos (contexto enxuto): o dado do produto/catálogo vai no prompt do usuário.
+# Store AI features (F-022) registered as configurable "agents" (same per-agent config
+# as F-021 — connection/model/role/system_prompt). Called standalone (outside pipeline,
+# via agents.feature_complete), not graph nodes. System prompts in ENGLISH (Store is English —
+# CONVENCOES) and compact (lean context): product/catalog data goes in user prompt.
 FEATURE_DEFAULTS: list[dict] = [
     {"agent": "store_chat", "role": "Store chatbot",
      "system_prompt": "You are the Vega store chatbot. Answer the customer's question using ONLY "
@@ -104,25 +104,25 @@ FEATURE_DEFAULTS: list[dict] = [
      "system_prompt": "You suggest a few products that complete a shopper's current cart "
                       "(complements/bundles), drawn only from the store's catalog. Reply in English. "
                       "Reply with raw JSON only — no markdown code fences."},
-    # IA-Checkout (F-024): explicação amigável de bloqueio de fraude quando o pedido é barrado.
+    # AI-Checkout (F-024): friendly explanation of fraud block when order is held.
     {"agent": "fraud_explain", "role": "Checkout support assistant",
      "system_prompt": "You reassure a customer whose order was held for a routine security review. "
                       "Explain in a calm, friendly way that no charge was made, that this is a "
                       "precaution, and what they can do next. Be concise. Reply in English."},
-    # IA-Conta (F-031): insights do histórico + benefícios do tier + recompra (dados reais do user).
+    # AI-Account (F-031): insights from history + tier benefits + reorder (real user data).
     {"agent": "account_insights", "role": "Account concierge",
      "system_prompt": "You are a friendly account concierge for a returning shopper. Given a summary "
                       "of their order history and membership tier, write a warm overview of their "
                       "buying patterns, explain their tier benefits, and suggest something to buy "
                       "again. Ground every claim strictly in the data provided; never invent "
                       "figures. Reply in English. Reply with raw JSON only — no markdown code fences."},
-    # IA-Notificação (F-031): copy de e-mail p/ eventos do pedido (confirmação/enviado, F-005).
+    # AI-Notification (F-031): email copy for order events (confirmation/shipped, F-005).
     {"agent": "notification_copy", "role": "Notification copywriter",
      "system_prompt": "You write short, warm transactional order emails (confirmation and shipping "
                       "updates) for an online store, grounded strictly in the order data provided "
                       "(id, status, items, total). Return a clear subject and a 2-3 sentence body. "
                       "Reply in English. Reply with raw JSON only — no markdown code fences."},
-    # IA-Admin (F-024): insights de vendas + anomalia a partir de dados AGREGADOS (não dumps crus).
+    # AI-Admin (F-024): sales insights + anomaly from AGGREGATED data (not raw dumps).
     {"agent": "admin_insights", "role": "Sales analyst",
      "system_prompt": "You are a retail sales analyst. Given aggregated store metrics for a period, "
                       "write a brief executive summary and flag any anomalies. Ground every claim "
@@ -130,7 +130,7 @@ FEATURE_DEFAULTS: list[dict] = [
                       "Reply with raw JSON only — no markdown code fences."},
 ]
 
-# Todos os agentes configuráveis (pipeline + features), em ordem canônica (pipeline primeiro).
+# All configurable agents (pipeline + features), in canonical order (pipeline first).
 _ALL_DEFAULTS = AGENT_DEFAULTS + FEATURE_DEFAULTS
 AGENT_NAMES = [d["agent"] for d in _ALL_DEFAULTS]
 FEATURE_NAMES = [d["agent"] for d in FEATURE_DEFAULTS]
@@ -142,23 +142,23 @@ def _now_iso() -> str:
 
 
 def init_db() -> None:
-    """create_all no boot: tabela de config por agente se não existir."""
+    """create_all on boot: per-agent config table if it doesn't exist."""
     with connect() as conn:
         conn.execute(
             """CREATE TABLE IF NOT EXISTS llm_agents (
-                agent         TEXT PRIMARY KEY,           -- nome do nó (concierge, catalogo, ...)
-                connection    TEXT NOT NULL DEFAULT '',   -- provider id (LP-xxxx) ou '' = cascata completa
-                model         TEXT NOT NULL DEFAULT '',   -- override opcional do modelo ('' = herda)
-                role          TEXT NOT NULL DEFAULT '',   -- persona curta (label + compõe o system)
-                system_prompt TEXT NOT NULL DEFAULT '',   -- instrução do agente
+                agent         TEXT PRIMARY KEY,           -- node name (concierge, catalog, ...)
+                connection    TEXT NOT NULL DEFAULT '',   -- provider id (LP-xxxx) or '' = full cascade
+                model         TEXT NOT NULL DEFAULT '',   -- optional model override ('' = inherit)
+                role          TEXT NOT NULL DEFAULT '',   -- short persona (label + composes system)
+                system_prompt TEXT NOT NULL DEFAULT '',   -- agent instruction
                 updated_at    TEXT NOT NULL
             )"""
         )
 
 
 def seed_defaults() -> None:
-    """Semeia os agentes da orquestração (F-025) com os prompts atuais, idempotente: só insere os que faltam
-    (não sobrescreve edição do owner). Roda no boot depois de init_db."""
+    """Seeds orchestration agents (F-025) with current prompts, idempotent: only inserts missing ones
+    (does not overwrite owner edits). Runs on boot after init_db."""
     with connect() as conn:
         existing = {r["agent"] for r in conn.execute("SELECT agent FROM llm_agents").fetchall()}
         for d in _ALL_DEFAULTS:
@@ -172,7 +172,7 @@ def seed_defaults() -> None:
 
 
 def migrate_f052_prompts() -> None:
-    """Atualiza prompts pré-F-052 no SQLite (seed_defaults não sobrescreve linhas existentes)."""
+    """Updates pre-F-052 prompts in SQLite (seed_defaults does not overwrite existing rows)."""
     markers: dict[str, tuple[str, ...]] = {
         "concierge": (
             "concierge supervisor",
@@ -218,8 +218,8 @@ def _default_dict(name: str) -> dict:
 
 
 def list_agents() -> list[dict]:
-    """Todos os agentes configuráveis (orquestração F-025 + features de loja F-022) em ordem canônica,
-    com a config persistida (ou default p/ os que faltam)."""
+    """All configurable agents (orchestration F-025 + store features F-022) in canonical order,
+    with persisted config (or default for missing ones)."""
     try:
         with connect() as conn:
             rows = {r["agent"]: r for r in conn.execute("SELECT * FROM llm_agents").fetchall()}
@@ -229,7 +229,7 @@ def list_agents() -> list[dict]:
 
 
 def get_agent(name: str) -> dict:
-    """Config de UM agente. Tolerante a tabela/linha ausente → default (standalone/run_demo)."""
+    """Config for ONE agent. Tolerant of missing table/row → default (standalone/run_demo)."""
     try:
         with connect() as conn:
             row = conn.execute("SELECT * FROM llm_agents WHERE agent = ?", (name,)).fetchone()
@@ -239,14 +239,14 @@ def get_agent(name: str) -> dict:
 
 
 def update_agent(name: str, *, connection=None, model=None, role=None, system_prompt=None) -> dict | None:
-    """Atualização parcial de um agente. None p/ um campo = mantém. Retorna a config nova,
-    ou None se o nome não é um agente válido (404 na API).
+    """Partial agent update. None for a field = keep it. Returns new config,
+    or None if name is not a valid agent (404 in API).
 
-    Se connection/model/role/system_prompt mudam, limpa o cache F-022 (F-COST-CACHE) para
-    não servir resposta gerada com system/modelo antigos até o TTL expirar."""
+    If connection/model/role/system_prompt change, clears F-022 cache (F-COST-CACHE) to
+    not serve responses generated with old system/model until TTL expires."""
     if name not in _DEFAULT_BY_NAME:
         return None
-    # Garante a linha (caso a tabela tenha sido semeada antes deste agente existir).
+    # Ensures row (in case table was seeded before this agent existed).
     with connect() as conn:
         if conn.execute("SELECT 1 FROM llm_agents WHERE agent = ?", (name,)).fetchone() is None:
             d = _default_dict(name)
@@ -264,13 +264,13 @@ def update_agent(name: str, *, connection=None, model=None, role=None, system_pr
         vals.append(name)
         conn.execute(f"UPDATE llm_agents SET {', '.join(sets)} WHERE agent = ?", vals)
     if any(v is not None for v in (connection, model, role, system_prompt)):
-        from ..llm import llm_cache  # lazy: evita ciclo agent_config ↔ llm_cache ↔ …
+        from ..llm import llm_cache  # lazy: avoids cycle agent_config ↔ llm_cache ↔ …
         llm_cache.clear_cache()
     return get_agent(name)
 
 
 def effective_system(cfg: dict) -> str:
-    """System message efetivo enviado ao LLM: `role` (se houver) como linha de persona +
-    `system_prompt`. Mantém os dois knobs separados na config mas combina na chamada."""
+    """Effective system message sent to LLM: `role` (if present) as persona line +
+    `system_prompt`. Keeps both knobs separate in config but combines at call."""
     parts = [p for p in (cfg.get("role", "").strip(), cfg.get("system_prompt", "").strip()) if p]
-    return "\n\n".join(parts) or "Você é um agente do Vega Concierge."
+    return "\n\n".join(parts) or "You are a Vega Concierge agent."

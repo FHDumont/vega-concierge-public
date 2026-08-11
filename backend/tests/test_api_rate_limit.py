@@ -1,4 +1,4 @@
-"""Rate limit HTTP na borda — tiers exempt/ai/default (F-WORKSHOP-GUARD)."""
+"""HTTP rate limit at the edge — exempt/ai/default tiers (F-WORKSHOP-GUARD)."""
 from __future__ import annotations
 
 import pytest
@@ -18,7 +18,7 @@ def _reset_http_limiters():
 
 @pytest.fixture
 def rate_client(api_client, monkeypatch):
-    """TestClient com limites baixos p/ burst previsível."""
+    """TestClient with low limits for a predictable burst."""
     monkeypatch.setattr(settings, "api_rate_enabled", True)
     monkeypatch.setattr(settings, "api_rate_ai_max", 12)
     monkeypatch.setattr(settings, "api_rate_ai_window_s", 60)

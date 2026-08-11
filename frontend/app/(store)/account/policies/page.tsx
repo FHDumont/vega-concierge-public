@@ -1,5 +1,5 @@
 "use client";
-// Store policies — leitura humana das políticas markdown (F-KNOWLEDGE-1).
+// Store policies — human-readable view of the markdown policies (F-KNOWLEDGE-1).
 import { useEffect, useState } from "react";
 import { StorePolicy, getPolicies } from "@/lib/api";
 import { useAuth } from "@/lib/auth";

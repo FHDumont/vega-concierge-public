@@ -1,6 +1,6 @@
-# Vega Ops Console — terminal web (ttyd) "SSH via browser" (F-047, ADR-025). Serviço de HOST.
-# Serve shell do host em localhost only; o painel faz proxy autenticado em /shell/ (sem Basic Auth duplo).
-# -b /shell = base-path alinhado ao proxy FastAPI. NÃO exponha :7681 no Security Group — só :9000.
+# Vega Ops Console — web terminal (ttyd) "SSH via browser" (F-047, ADR-025). HOST service.
+# Serves the host shell on localhost only; the panel proxies authenticated at /shell/ (no double Basic Auth).
+# -b /shell = base-path aligned with the FastAPI proxy. Do NOT expose :7681 in the Security Group — only :9000.
 [Unit]
 Description=Vega Ops Console (web terminal via ttyd)
 After=network-online.target
@@ -9,7 +9,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/vega-concierge
-# Precedência (F-REAL-ENV-2): /etc/environment DEPOIS do .env — injeção por réplica (Ansible) vence o arquivo.
+# Precedence (F-REAL-ENV-2): /etc/environment AFTER .env — injection by the replica (Ansible) wins over the file.
 EnvironmentFile=-/opt/vega-concierge/.env
 EnvironmentFile=-/etc/environment
 ExecStart=/bin/sh -c 'exec ttyd -b /shell -i lo -p ${CONTROL_TTYD_PORT:-7681} -W bash'

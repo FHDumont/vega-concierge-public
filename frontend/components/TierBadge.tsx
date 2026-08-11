@@ -1,8 +1,8 @@
-// Selo de tier do usuário (F-008) — design custom dirigido por paletas (ADR-012/013).
-// O REALCE cresce com o tier (Standard discreto → Platinum preenchido com a cor de
-// acento), comunicando hierarquia por mais que a cor (rótulo textual sempre presente —
-// acessibilidade). Estilizado por variáveis de paleta (globals.css › .ns-tier). Migrado
-// para fora do @splunk/themes na F-010.
+// User tier badge (F-008) — custom design driven by palettes (ADR-012/013).
+// The EMPHASIS grows with the tier (subtle Standard → Platinum filled with the accent
+// color), conveying hierarchy through more than color alone (text label always present —
+// accessibility). Styled via palette variables (globals.css › .ns-tier). Migrated
+// out of @splunk/themes in F-010.
 import { Tier } from "@/lib/api";
 
 const LABEL: Record<Tier, string> = {

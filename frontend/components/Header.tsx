@@ -1,8 +1,8 @@
 "use client";
-// Header da Loja — design custom (ADR-012): top promo bar + barra horizontal fixa com
-// logo, nav de categorias, busca, carrinho e conta. Estilizado pelas variáveis
-// de paleta (globals.css › .ns-header). SEM @splunk/react-ui. O TierBadge (telas técnicas)
-// é reusado no atalho da conta — pequeno e reativo ao tema, sem refator de carona.
+// Store Header — custom design (ADR-012): top promo bar + fixed horizontal bar with
+// logo, category nav, search, cart, and account. Styled via the palette
+// variables (globals.css › .ns-header). NO @splunk/react-ui. The TierBadge (technical screens)
+// is reused in the account shortcut — small and theme-reactive, no piggyback refactor.
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { User } from "@/lib/api";

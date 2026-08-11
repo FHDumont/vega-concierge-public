@@ -1,17 +1,17 @@
 "use client";
-// FEATURE FLAGS — tela do DONO (owner-only). Liga/desliga áreas do menu que os PARTICIPANTES
-// veem (libera o Behind the Scenes só na hora de ensinar, esconde Admin/Simulator, controla o
-// Inspector). Owner-gated na UI; o backend é a fronteira da edição (401/403). As flags são
-// servidas pela MESMA fonte de config (F-026): em modo `remote` o HUB vence — o que o owner
-// edita aqui é o LOCAL, sobreposto pelo hub (a tela avisa). Refresca o estado global após editar
-// (o próprio menu/rotas reagem). Classes ns-adm-* + ns-ff-switch.
+// FEATURE FLAGS — OWNER-only screen. Turns menu areas that PARTICIPANTS see on/off
+// (unlocks Behind the Scenes only when teaching, hides Admin/Simulator, controls the
+// Inspector). Owner-gated in the UI; the backend is the edit boundary (401/403). The flags are
+// served from the SAME config source (F-026): in `remote` mode the HUB wins — what the owner
+// edits here is the LOCAL value, overridden by the hub (the screen warns about this). Refreshes
+// the global state after editing (the menu/routes react on their own). Classes ns-adm-* + ns-ff-switch.
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useFlags } from "@/lib/flags";
 import { AdminFlags, FeatureFlags, getAdminFlags, setFlags } from "@/lib/api";
 
-// Ordem + cópia (inglês). `key` casa com FeatureFlags do backend.
-// `controls` = o que a flag mostra/esconde; `example` = quando usar no workshop.
+// Order + copy (English). `key` matches the backend's FeatureFlags.
+// `controls` = what the flag shows/hides; `example` = when to use it in the workshop.
 const FLAGS: {
   key: keyof FeatureFlags;
   label: string;
@@ -81,7 +81,7 @@ function Gate({ msg, cta }: { msg: string; cta?: boolean }) {
 }
 
 function FlagsManager() {
-  const { refresh: refreshGlobal } = useFlags(); // reflete no menu/rotas desta sessão (owner)
+  const { refresh: refreshGlobal } = useFlags(); // reflects in this session's menu/routes (owner)
   const [data, setData] = useState<AdminFlags | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -105,7 +105,7 @@ function FlagsManager() {
       const next = !data.local[key];
       const updated = await setFlags({ [key]: next });
       setData(updated);
-      await refreshGlobal(); // AppNav/guards reagem à nova flag efetiva
+      await refreshGlobal(); // AppNav/guards react to the new effective flag
     } catch (e) {
       setError(e instanceof Error ? e.message : "failed to update flag");
     } finally {

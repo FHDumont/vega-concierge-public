@@ -1,5 +1,5 @@
-# Vega Ops Console — painel de manutenção (F-047, ADR-025). Serviço de HOST (watchdog nativo).
-# Instalar em /etc/systemd/system/ (ver control/systemd/install.sh) e habilitar no boot.
+# Vega Ops Console — maintenance panel (F-047, ADR-025). HOST service (native watchdog).
+# Install in /etc/systemd/system/ (see control/systemd/install.sh) and enable on boot.
 [Unit]
 Description=Vega Ops Console (control panel)
 After=network-online.target
@@ -7,15 +7,15 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-# Ajuste User/WorkingDirectory conforme a AMI (padrão do lab: /opt/vega-concierge).
+# Adjust User/WorkingDirectory per the AMI (lab default: /opt/vega-concierge).
 WorkingDirectory=/opt/vega-concierge/control
-# .env do repo carrega CONTROL_PASSWORD e VEGA_REPO_DIR.
-# Precedência (F-REAL-ENV-2): /etc/environment DEPOIS do .env — injeção por réplica (Ansible) vence o arquivo.
+# The repo's .env carries CONTROL_PASSWORD and VEGA_REPO_DIR.
+# Precedence (F-REAL-ENV-2): /etc/environment AFTER .env — injection by the replica (Ansible) wins over the file.
 EnvironmentFile=-/opt/vega-concierge/.env
 EnvironmentFile=-/etc/environment
 Environment=VEGA_REPO_DIR=/opt/vega-concierge
 ExecStart=/opt/vega-concierge/control/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 9000
-# Watchdog: nunca deixa o painel fora do ar (é a ferramenta de manutenção da infra).
+# Watchdog: never lets the panel go down (it's the infra's maintenance tool).
 Restart=always
 RestartSec=2
 

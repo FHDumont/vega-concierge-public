@@ -1,6 +1,6 @@
 "use client";
-// Detalhe de uma ordem (itens · total · cliente · timeline do ciclo de vida) —
-// componente compartilhado entre o Admin (F-014) e o histórico do usuário (F-019).
+// Detail of an order (items · total · customer · lifecycle timeline) —
+// component shared between Admin (F-014) and the user's order history (F-019).
 import { Order, OrderStatus } from "@/lib/api";
 import { formatMoney } from "@/lib/shop";
 import StatusPill from "@/components/StatusPill";

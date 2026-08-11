@@ -233,8 +233,8 @@ def build_store_chat_layout(
 def build_stats_layout(facts: dict, scopes: set[str]) -> dict[str, Any] | None:
     """Stats answers — fact rows from authoritative context.
 
-    `facts` já vem completo do `_build_stats_context` para cada escopo ativo — este layout só
-    formata, não vai buscar dado nenhum.
+    `facts` already comes complete from `_build_stats_context` for each active scope — this layout only
+    formats, doesn't fetch any data.
     """
     rows: list[dict[str, str]] = []
     active = scopes or set()
@@ -272,12 +272,12 @@ _PRODUCT_OVERVIEW_RE = re.compile(
 
 
 def is_product_overview_question(question: str) -> bool:
-    """Pergunta pedindo visão geral do produto (PDP / chat com SKU de contexto)."""
+    """Question asking for product overview (PDP / chat with context SKU)."""
     return bool(_PRODUCT_OVERVIEW_RE.search(question or ""))
 
 
 def _spec_bullets_from_qa(qa_row: dict | None) -> list[str]:
-    """Extrai bullets legíveis do bloco `answer` do products_qa.csv."""
+    """Extracts readable bullets from the `answer` block of products_qa.csv."""
     if not qa_row or not qa_row.get("answer"):
         return []
     parts = re.split(r"\.\s+(?=[A-Z])", qa_row["answer"])
@@ -293,7 +293,7 @@ def _price_from_answer(answer: str) -> str | None:
 def build_product_qa_layout(
     product: dict, answer: str, *, question: str = "", grounded: bool = True,
 ) -> dict[str, Any] | None:
-    """Product Q&A — facts + spec bullets; sem duplicar lead truncado + seção Answer."""
+    """Product Q&A — facts + spec bullets; without duplicating truncated lead + Answer section."""
     answer = (answer or "").strip()
     if not answer:
         return None

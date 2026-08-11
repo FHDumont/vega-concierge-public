@@ -1,6 +1,6 @@
-// Layout das rotas de loja (home + detalhe + conta): provê o estado de cliente
-// (carrinho/busca via ShopProvider) e o chrome (header + carrinho).
-// ChatProvider (F-051) expõe o widget flutuante global.
+// Layout for the store routes (home + detail + account): provides the customer state
+// (cart/search via ShopProvider) and the chrome (header + cart).
+// ChatProvider (F-051) exposes the global floating widget.
 import StoreProviders from "@/components/StoreProviders";
 
 export default function StoreLayout({ children }: { children: React.ReactNode }) {

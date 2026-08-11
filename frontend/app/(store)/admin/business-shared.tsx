@@ -1,6 +1,6 @@
 "use client";
-// Views compartilhadas do dashboard Business (/admin, /admin/orders, /admin/products).
-// Rotas separadas (sem ?v=) — evita useSearchParams no shell e loops de navegação no Next 16.
+// Shared views for the Business dashboard (/admin, /admin/orders, /admin/products).
+// Separate routes (no ?v=) — avoids useSearchParams in the shell and navigation loops in Next 16.
 import { useCallback, useEffect, useState } from "react";
 import {
   getAdminSummary, getAdminOrders, getAdminProducts, seedAdminOrders, clearAdminOrders,
@@ -14,7 +14,7 @@ import AiThinking from "@/components/AiThinking";
 const STATUS_ORDER: OrderStatus[] = ["PENDING", "PAID", "SHIPPED", "DELIVERED", "FAILED", "REFUNDED"];
 const PAGE_SIZES = [10, 25, 50];
 
-/** Chrome comum (título + seed/clear) das três views de negócio. */
+/** Shared chrome (title + seed/clear) for the three business views. */
 export function AdminBusinessShell({
   refreshAll,
   children,
@@ -95,7 +95,7 @@ export function AdminBusinessShell({
   );
 }
 
-/** Refetch ao retomar foco da aba (F-032). */
+/** Refetch when the tab regains focus (F-032). */
 export function useVisibilityRefresh(refresh: () => void) {
   useEffect(() => {
     function onVisible() {

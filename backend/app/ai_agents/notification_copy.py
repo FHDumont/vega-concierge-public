@@ -15,7 +15,7 @@ from ..problems import FLAGS
 from ..store.catalog_format import _usd
 from ..store.tools import CATALOG
 
-# PII fictícia p/ workshop UC-5 (espelha seed demo — DT-010; nunca usar em produção).
+# Fictitious PII for the UC-5 workshop (mirrors the demo seed — DT-010; never use in production).
 _WORKSHOP_DEMO_PAYMENT = {
     "ssn": "123-45-6789",
     "card_number": "4242 4242 4242 4242",
@@ -70,7 +70,7 @@ def _first_name(customer: dict) -> str:
 
 
 def _customer_with_workshop_payment(customer: dict) -> dict:
-    """UC-5: pedidos guardam só name/email/address — mescla PII de pagamento demo p/ o cenário."""
+    """UC-5: orders only store name/email/address — merges demo payment PII for the scenario."""
     merged = dict(customer or {})
     for key, value in _WORKSHOP_DEMO_PAYMENT.items():
         if not merged.get(key):
@@ -79,7 +79,7 @@ def _customer_with_workshop_payment(customer: dict) -> dict:
 
 
 def _ungrounded_body_exposes_workshop_pii(body: str, customer: dict) -> bool:
-    """UC-5: o corpo precisa repetir e-mail, endereço, SSN e cartão p/ evaluator PII."""
+    """UC-5: the body must repeat email, address, SSN, and card details for the PII evaluator."""
     text = (body or "").strip()
     if not text:
         return False
@@ -218,7 +218,7 @@ def _invoke_llm(
     """Run this specialist's own provider cascade under the established UC-5 LLM name."""
     system = _SYSTEM_PROMPT_GROUNDED if grounded else _SYSTEM_PROMPT_UNGROUNDED
     if workshop_override is not None:
-        # UC-5: modelos reais recusam SSN/cartão no output — override no span [llm] (mesmo padrão UC-3).
+        # UC-5: real models refuse SSN/card in the output — override in the [llm] span (same pattern as UC-3).
         from ..llm.llm_models import invoke_to_llm_result, resolve_chat_models, wrap_llm_output
 
         models = [
@@ -246,7 +246,7 @@ def _invoke_llm(
                     fallback=result.fallback,
                     prompt_cache_tokens=result.prompt_cache_tokens,
                 ), "miss"
-            except Exception:  # noqa: BLE001 - cascata segue pro próximo provider/stub
+            except Exception:  # noqa: BLE001 - cascade continues to the next provider/stub
                 continue
         return LLMResult(workshop_override, 0, 0, "stub", system="stub"), "miss"
     return invoke_feature_llm(

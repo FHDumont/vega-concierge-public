@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-br">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -78,8 +78,8 @@
       <h1>Vega Ops Console</h1>
       <span class="tag" id="envTag">—</span>
       <div class="header-actions">
-        <button id="refreshBtn">Atualizar</button>
-        <button id="termLockBtn" class="hidden danger">Bloquear SSH</button>
+        <button id="refreshBtn">Refresh</button>
+        <button id="termLockBtn" class="hidden danger">Lock SSH</button>
         <button id="termRenewBtn" class="hidden">Renew SSH</button>
       </div>
     </header>
@@ -93,23 +93,23 @@
       <!-- STATUS -->
       <section id="panel-status" class="panel active" role="tabpanel">
         <div class="card" id="stackCard">
-          <h2>Stack / imagens</h2>
+          <h2>Stack / images</h2>
           <div class="row" style="margin-bottom:12px">
-            <span class="pill" id="stackVersion">Versão: —</span>
+            <span class="pill" id="stackVersion">Version: —</span>
             <span class="pill muted" id="stackTag">tag: —</span>
           </div>
           <p class="muted" id="stackDigest" style="margin:0 0 12px;font-size:12px;word-break:break-all"></p>
           <div class="row">
-            <button class="primary" id="stackUpdateBtn">Atualizar imagens (pull)</button>
+            <button class="primary" id="stackUpdateBtn">Update images (pull)</button>
             <span class="muted" id="stackUpdateMsg"></span>
           </div>
         </div>
         <div class="cards" id="statusCards"></div>
         <div class="card" style="margin-top:16px">
-          <h2>Detalhe dos containers</h2>
+          <h2>Container detail</h2>
           <table>
-            <thead><tr><th>Serviço</th><th>Estado</th><th>Status</th></tr></thead>
-            <tbody id="svcBody"><tr><td colspan="3" class="muted">Carregando…</td></tr></tbody>
+            <thead><tr><th>Service</th><th>State</th><th>Status</th></tr></thead>
+            <tbody id="svcBody"><tr><td colspan="3" class="muted">Loading…</td></tr></tbody>
           </table>
         </div>
       </section>
@@ -119,11 +119,11 @@
         <div id="termGate" class="term-gate">
           <h2 style="margin:0 0 8px;font-size:15px;color:var(--muted);text-transform:uppercase">
             Terminal (SSH via browser)</h2>
-          <p class="muted">Escotilha de emergência — shell do host. Informe a senha do operador
+          <p class="muted">Emergency hatch — host shell. Enter the operator password
             (<code>CONTROL_PASSWORD</code>).</p>
           <div class="row" style="margin-top:16px">
-            <input id="termPw" type="password" placeholder="Senha" autocomplete="current-password" />
-            <button class="primary" id="termUnlockBtn">Desbloquear</button>
+            <input id="termPw" type="password" placeholder="Password" autocomplete="current-password" />
+            <button class="primary" id="termUnlockBtn">Unlock</button>
           </div>
           <p id="termErr" class="muted hidden" style="color:var(--err);margin-top:10px"></p>
         </div>
@@ -169,11 +169,11 @@
         const na = c.state === "n/a";
         div.className = "status-card " + (c.up ? "up" : (na ? "" : "down"));
         const port = c.port ? `:${c.port}` : "";
-        const status = na ? "N/A" : (c.up ? "No ar" : "Fora do ar");
+        const status = na ? "N/A" : (c.up ? "Up" : "Down");
         div.innerHTML = `
           <h3><span class="dot ${c.up ? "on" : (na ? "off" : "err")}"></span> ${c.label}</h3>
           <div class="pill">${status} · ${c.state}</div>
-          <div class="meta">${c.detail || ""}${port ? " · porta" + port : ""}</div>`;
+          <div class="meta">${c.detail || ""}${port ? " · port" + port : ""}</div>`;
         el.appendChild(div);
       }
     }
@@ -191,11 +191,11 @@
         return;
       }
       if (!s.ttyd_configured) {
-        warn.textContent = "CONTROL_PASSWORD não configurada no .env.";
+        warn.textContent = "CONTROL_PASSWORD not configured in .env.";
         warn.className = "alert err"; warn.classList.remove("hidden"); return;
       }
       if (!s.ttyd_available) {
-        warn.textContent = `ttyd não está rodando na porta ${s.ttyd_port}. Rode: ./scripts/control.sh`;
+        warn.textContent = `ttyd isn't running on port ${s.ttyd_port}. Run: ./scripts/control.sh`;
         warn.className = "alert warn"; warn.classList.remove("hidden"); return;
       }
       warn.classList.add("hidden");
@@ -301,7 +301,7 @@
       });
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
-        $("termErr").textContent = err.detail || "Senha inválida.";
+        $("termErr").textContent = err.detail || "Invalid password.";
         $("termErr").classList.remove("hidden");
         return;
       }
@@ -319,11 +319,11 @@
         const err = await r.json().catch(() => ({}));
         if (r.status === 401) {
           await lockTerminal();
-          $("termErr").textContent = "Sessão expirada. Desbloqueie novamente.";
+          $("termErr").textContent = "Session expired. Unlock again.";
           $("termErr").classList.remove("hidden");
           return;
         }
-        $("termWarn").textContent = err.detail || "Não foi possível renovar o terminal.";
+        $("termWarn").textContent = err.detail || "Couldn't renew the terminal.";
         $("termWarn").className = "alert err";
         $("termWarn").classList.remove("hidden");
         return;
@@ -336,31 +336,31 @@
     function renderStack(stack) {
       const ver = stack.vega_version || "—";
       const sha = stack.git_sha ? ` (${stack.git_sha})` : "";
-      $("stackVersion").textContent = "Versão: " + ver + sha;
+      $("stackVersion").textContent = "Version: " + ver + sha;
       $("stackTag").textContent = "IMAGE_TAG=" + (stack.image_tag || "latest");
       const lines = [];
       if (stack.backend_digest) lines.push("backend: " + stack.backend_digest);
       if (stack.frontend_digest) lines.push("frontend: " + stack.frontend_digest);
-      $("stackDigest").textContent = lines.join(" · ") || "Digests locais indisponíveis (imagens não pulled neste host).";
+      $("stackDigest").textContent = lines.join(" · ") || "Local digests unavailable (images not pulled on this host).";
     }
 
     async function stackUpdate() {
       const btn = $("stackUpdateBtn");
       const msg = $("stackUpdateMsg");
       btn.disabled = true;
-      msg.textContent = "Atualizando… (fresh-state + pull — pode levar alguns minutos)";
+      msg.textContent = "Updating… (fresh-state + pull — may take a few minutes)";
       msg.style.color = "var(--muted)";
       try {
         const r = await api("/api/stack/update", { method: "POST", body: "{}" });
         if (!r.ok) {
           const err = await r.json().catch(() => ({}));
-          msg.textContent = typeof err.detail === "string" ? err.detail.slice(0, 200) : "Falha na atualização.";
+          msg.textContent = typeof err.detail === "string" ? err.detail.slice(0, 200) : "Update failed.";
           msg.style.color = "var(--err)";
           return;
         }
         const data = await r.json();
         renderStack(data.stack || {});
-        msg.textContent = "Atualização concluída.";
+        msg.textContent = "Update complete.";
         msg.style.color = "var(--ok)";
         await refreshState();
       } catch (e) {
@@ -380,7 +380,7 @@
       const body = $("svcBody");
       body.innerHTML = "";
       if (!s.services.length) {
-        body.innerHTML = '<tr><td colspan="3" class="muted">Nenhum serviço Docker no ar.</td></tr>';
+        body.innerHTML = '<tr><td colspan="3" class="muted">No Docker services up.</td></tr>';
       } else {
         for (const svc of s.services) {
           const tr = document.createElement("tr");

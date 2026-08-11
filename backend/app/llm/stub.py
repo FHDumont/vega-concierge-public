@@ -1,7 +1,7 @@
-"""Stub offline LangChain (F-OBS-PREP-1 / ADR-027) — fatia de llm_models.py (F-BACKEND-2).
+"""Offline stub LangChain (F-OBS-PREP-1 / ADR-027) — slice of llm_models.py (F-BACKEND-2).
 
-`VegaStubChatModel`: texto/tokens determinísticos; com `bind_tools` emite tool_calls
-determinísticos (ReAct) por grafo (concierge/compare/fulfillment/returns).
+`VegaStubChatModel`: deterministic text/tokens; with `bind_tools` emits deterministic tool_calls
+(ReAct) per graph (concierge/compare/fulfillment/returns).
 """
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ def _stub_recommendation(selected: dict | None) -> str:
 
 
 class VegaStubChatModel(BaseChatModel):
-    """Stub offline LangChain — texto/tokens; com `bind_tools` emite tool_calls determinísticos (ReAct)."""
+    """Offline stub LangChain — text/tokens; with `bind_tools` emits deterministic tool_calls (ReAct)."""
     model_name: str = DEFAULT_STUB_MODEL
     name: str | None = None
     provider: str = "stub"
@@ -72,7 +72,7 @@ class VegaStubChatModel(BaseChatModel):
         return "vega-stub"
 
     def bind_tools(self, tools, *, tool_choice=None, **kwargs):  # noqa: ANN001
-        """ReAct offline: propaga tools via bind para `_generate_react`."""
+        """Offline ReAct: propagates tools via bind to `_generate_react`."""
         return self.bind(tools=tools, tool_choice=tool_choice, **kwargs)
 
     def _generate(self, messages: list[BaseMessage], stop=None, run_manager=None, **kwargs):
@@ -311,7 +311,7 @@ class VegaStubChatModel(BaseChatModel):
         for m in messages:
             if isinstance(m, HumanMessage):
                 text = m.content if isinstance(m.content, str) else str(m.content)
-                # Cart line: "NS-003 x1 @ R$179" or bare "SKU: NS-003"
+                # Cart line: "NS-003 x1 @ $179" or bare "SKU: NS-003"
                 m_sku = re.search(r"\b(NS-\d+)\b", text, re.I)
                 if m_sku:
                     sku = m_sku.group(1).upper()
@@ -452,7 +452,7 @@ def _parse_tool_payload(content) -> object:
 
 
 def _matches_delete_injection(text: str) -> bool:
-    """Stub UC-4: delete + SKU ou NS-001 explícito no prompt do shopper."""
+    """Stub UC-4: delete + explicit SKU or NS-001 in shopper prompt."""
     low = text.lower()
     if "delete" not in low:
         return False
@@ -462,7 +462,7 @@ def _matches_delete_injection(text: str) -> bool:
 
 
 def _matches_customer_leak_injection(text: str) -> bool:
-    """Stub UC-4: exportar PII de outros compradores."""
+    """Stub UC-4: export PII from other buyers."""
     low = text.lower()
     if not any(w in low for w in ("customer", "buyer", "shopper", "user", "email", "address")):
         return False
@@ -470,7 +470,7 @@ def _matches_customer_leak_injection(text: str) -> bool:
 
 
 def _stub_plain_text(system: str, prompt: str, *, verbose: bool = False, max_tokens: int | None = None) -> str:
-    """Respostas determinísticas do stub offline — JSON quando o agente pede structured output."""
+    """Deterministic stub responses — JSON when agent requests structured output."""
     from ..problems import FLAGS
     from ..prompt_injection import (
         catalog_delete_compose_reply,

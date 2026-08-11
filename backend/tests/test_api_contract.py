@@ -1,17 +1,18 @@
-"""Contrato da API com o frontend — congelado (CONVENCOES §NÃO mude).
+"""API contract with the frontend — frozen (CONVENCOES SS DO-NOT-change).
 
-Duas camadas:
-  1. o INVENTÁRIO de rotas `{(path, methods)}` — qualquer rota que suma, mude de path ou de
-     método quebra aqui. É a rede de segurança do fatiamento de `api.py` em routers;
-  2. um punhado de endpoints exercidos de ponta a ponta offline, pra pegar o que o inventário
-     não vê (bootstrap que não rodou, dependência que sumiu, payload que mudou de forma).
+Two layers:
+  1. the route INVENTORY `{(path, methods)}` — any route that disappears, or changes path or
+     method, breaks here. It's the safety net for slicing `api.py` into routers;
+  2. a handful of endpoints exercised end-to-end offline, to catch what the inventory
+     doesn't see (a bootstrap that didn't run, a dependency that vanished, a payload that
+     changed shape).
 """
 from __future__ import annotations
 
 import pytest
 
-# Inventário congelado: 64 rotas de `/api/*` + as 4 que o FastAPI publica sozinho.
-# Ao ADICIONAR uma rota nova (aditivo, permitido), acrescente a linha aqui no mesmo commit.
+# Frozen inventory: 64 `/api/*` routes + the 4 that FastAPI publishes on its own.
+# When ADDING a new route (additive, allowed), add the line here in the same commit.
 FROZEN_ROUTES: set[tuple[str, tuple[str, ...]]] = {
     ("/openapi.json", ("GET", "HEAD")),
     ("/docs", ("GET", "HEAD")),
@@ -85,10 +86,10 @@ FROZEN_ROUTES: set[tuple[str, tuple[str, ...]]] = {
 
 
 def _live_routes() -> set[tuple[str, tuple[str, ...]]]:
-    """Rotas efetivamente montadas na app.
+    """Routes actually mounted on the app.
 
-    O FastAPI não achata `include_router`: cada router incluído entra em `app.routes` como um
-    wrapper que guarda o router original. Por isso a varredura desce por `original_router`.
+    FastAPI doesn't flatten `include_router`: each included router enters `app.routes` as a
+    wrapper holding the original router. That's why the walk descends through `original_router`.
     """
     from app.api import app
 
@@ -111,8 +112,8 @@ def _live_routes() -> set[tuple[str, tuple[str, ...]]]:
 
 def test_route_inventory_has_no_delta():
     live = _live_routes()
-    assert not FROZEN_ROUTES - live, f"rotas que sumiram: {sorted(FROZEN_ROUTES - live)}"
-    assert not live - FROZEN_ROUTES, f"rotas novas não congeladas: {sorted(live - FROZEN_ROUTES)}"
+    assert not FROZEN_ROUTES - live, f"routes that disappeared: {sorted(FROZEN_ROUTES - live)}"
+    assert not live - FROZEN_ROUTES, f"new routes not frozen: {sorted(live - FROZEN_ROUTES)}"
 
 
 def test_api_surface_is_sixty_four_routes():
@@ -120,7 +121,7 @@ def test_api_surface_is_sixty_four_routes():
     assert len(api_routes) == 64, len(api_routes)
 
 
-# --- endpoints exercidos offline ---------------------------------------------
+# --- endpoints exercised offline -----------------------------------------------
 
 def test_health_reports_the_subsystems(api_client):
     body = api_client.get("/api/health").json()
@@ -131,7 +132,7 @@ def test_health_reports_the_subsystems(api_client):
 
 def test_catalog_returns_products_with_the_frozen_fields(api_client):
     catalog = api_client.get("/api/catalog").json()
-    assert catalog, "catálogo vazio"
+    assert catalog, "empty catalog"
     assert set(catalog[0]) >= {"sku", "name", "price", "stock", "tags"}
 
 
@@ -227,17 +228,17 @@ def test_rum_config_is_public(api_client):
     assert "enabled" in api_client.get("/api/rum").json()
 
 
-# --- CRUD de providers (owner-gated) ------------------------------------------
+# --- provider CRUD (owner-gated) ------------------------------------------------
 
 @pytest.fixture
 def owner_headers() -> dict[str, str]:
-    """Sessão de OWNER criada direto no módulo — a senha do owner varia por deploy
-    (`OWNER_PASSWORD`), então logar pela API tornaria o teste dependente do ambiente."""
+    """OWNER session created directly in the module — the owner password varies by deploy
+    (`OWNER_PASSWORD`), so logging in through the API would make the test environment-dependent."""
     from app.store import users
 
     users.seed_owner_user()
     owner = users.get_user_by_email(users.OWNER_EMAIL)
-    assert owner, "usuário OWNER não semeado"
+    assert owner, "OWNER user not seeded"
     return {"Authorization": f"Bearer {users.create_session(owner['id'])}"}
 
 
@@ -254,7 +255,7 @@ def test_provider_crud_round_trip(api_client, owner_headers):
     ).json()
     provider_id = created["id"]
     try:
-        assert "api_key" not in created, "a chave nunca pode voltar ao front"
+        assert "api_key" not in created, "the key must never come back to the frontend"
 
         listed = api_client.get("/api/admin/config/providers", headers=owner_headers).json()
         assert provider_id in {p["id"] for p in listed}
@@ -282,12 +283,12 @@ def test_llm_type_presets_are_owner_gated(api_client, owner_headers):
     assert {p["type"] for p in presets} >= {"openai", "claude", "bedrock", "custom"}
 
 
-# --- bootstrap no startup, não no import --------------------------------------
+# --- bootstrap on startup, not on import ----------------------------------------
 
 def test_importing_the_app_does_not_bootstrap_anything(monkeypatch):
-    """Desde a F-BACKEND-1 o bootstrap mora no `lifespan`. Importar `app.api` — o que
-    `fresh-state.sh` e qualquer inspeção de rotas fazem — não pode tocar no SQLite nem
-    inicializar o Agent Control."""
+    """Since F-BACKEND-1 the bootstrap lives in `lifespan`. Importing `app.api` — which
+    `fresh-state.sh` and any route inspection do — must not touch SQLite or
+    initialize the Agent Control."""
     import importlib
 
     from app import api

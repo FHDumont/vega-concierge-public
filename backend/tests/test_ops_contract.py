@@ -1,8 +1,8 @@
-"""Sentinelas do que os scripts de operação importam por NOME.
+"""Sentinels for what the ops scripts import by NAME.
 
-`scripts/lib/fresh-state.sh` e `scripts/lib/rag-init.sh` chamam o backend por linha de comando,
-fora do import da app. Nenhum teste de API pega uma renomeação aqui — só este arquivo pega.
-Se um destes falhar, o script de ops quebra em produção, não no CI.
+`scripts/lib/fresh-state.sh` and `scripts/lib/rag-init.sh` call the backend from the command
+line, outside of the app import. No API test catches a rename here — only this file does.
+If one of these fails, the ops script breaks in production, not in CI.
 """
 from __future__ import annotations
 
@@ -30,27 +30,27 @@ def test_rag_init_can_read_the_backend_name():
 
 
 def test_setup_vectordb_stays_at_the_backend_root():
-    # scripts/lib/rag-init.sh:105/113 chamam `python setup_vectordb.py` pelo caminho.
+    # scripts/lib/rag-init.sh:105/113 call `python setup_vectordb.py` by path.
     assert (BACKEND_ROOT / "setup_vectordb.py").is_file()
 
 
 def test_llm_config_module_keeps_its_name():
-    # O basename do módulo é parte do contrato com o fresh-state.sh (renomear é fase futura).
+    # The module's basename is part of the contract with fresh-state.sh (renaming is a future phase).
     import app.llm.llm_config as module
 
     assert module.__name__ == "app.llm.llm_config"
 
 
 def _imported_modules(module_file: str) -> set[str]:
-    """Módulos (caminho `app.`-qualificado completo) importados por um arquivo de `app/`, em
-    QUALQUER nível (topo ou dentro de função) — é justamente o import adiado que costuma
-    reintroduzir ciclo sem ninguém notar. Resolve `from ..features import store_qa` para
-    `app.features.store_qa` em vez de só `features` — um subpacote (F-BACKEND-2) faria isso
-    colapsar pro nome do subpacote e cegar o guard pra violação nenhuma."""
+    """Modules (full `app.`-qualified path) imported by an `app/` file, at
+    ANY level (top-level or inside a function) — it's exactly the deferred import that tends to
+    reintroduce a cycle without anyone noticing. Resolves `from ..features import store_qa` to
+    `app.features.store_qa` instead of just `features` — a subpackage (F-BACKEND-2) would make this
+    collapse to the subpackage name and blind the guard to any violation."""
     import ast
 
     path = Path(module_file)
-    pkg_parts = ("app", *path.parent.parts)  # ex.: "store/catalog_format.py" → ("app", "store")
+    pkg_parts = ("app", *path.parent.parts)  # ex.: "store/catalog_format.py" -> ("app", "store")
     tree = ast.parse((BACKEND_ROOT / "app" / module_file).read_text())
     out: set[str] = set()
     for node in ast.walk(tree):
@@ -62,7 +62,7 @@ def _imported_modules(module_file: str) -> set[str]:
 
 
 def test_catalog_format_stays_pure_formatting():
-    # Formatação não pode reintroduzir dependências de dados, IA ou LLM.
+    # Formatting must not reintroduce data, AI, or LLM dependencies.
     imported = _imported_modules("store/catalog_format.py")
     forbidden_prefixes = {
         "app.ai_agents.",

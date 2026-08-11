@@ -1,4 +1,4 @@
-"""Grafo do Concierge sob stub — ex `run_demo.py` (smoke histórico do backend)."""
+"""Concierge graph under stub — ex `run_demo.py` (historical backend smoke test)."""
 from __future__ import annotations
 
 import pytest
@@ -17,7 +17,7 @@ async def test_happy_path_selects_a_grounded_candidate():
     candidate_skus = {c["sku"] for c in final.get("candidates") or []}
     selected = final.get("selected")
     assert (final.get("quality") or {}).get("grounded") is True
-    assert selected, "esperado um produto selecionado"
+    assert selected, "expected a selected product"
     assert selected.get("sku") in candidate_skus
 
 
@@ -31,4 +31,4 @@ async def test_price_hallucination_marks_answer_ungrounded(reset_problem_flags):
 async def test_workflow_still_completes_under_toggle(reset_problem_flags, flag):
     setattr(reset_problem_flags, flag, True)
     final = await _run()
-    assert final.get("trace"), f"{flag}: trace vazio"
+    assert final.get("trace"), f"{flag}: empty trace"

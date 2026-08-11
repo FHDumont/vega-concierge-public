@@ -1,16 +1,17 @@
-"""Vega Ops Console — manutenção da infra da VM pelo navegador, SEM SSH (F-047, ADR-025).
+"""Vega Ops Console — VM infra maintenance from the browser, NO SSH (F-047, ADR-025).
 
-Roda como serviço de HOST (systemd, watchdog nativo — ver control/systemd/), NÃO como container:
-assim segue de pé mesmo quando o stack Docker está sendo derrubado/subido/quebrado (é a hora em que
-mais se precisa da ferramenta de manutenção) e evita expor o socket do Docker dentro de um container.
+Runs as a HOST service (systemd, native watchdog — see control/systemd/), NOT as a container:
+this way it stays up even while the Docker stack is being torn down/brought up/broken (that's
+exactly when the maintenance tool is needed most) and avoids exposing the Docker socket inside
+a container.
 
-O que faz:
-  - Estado do stack (o que está no ar, saúde dos containers).
-  - Escotilha de terminal (ttyd local + proxy /shell/ no painel) — uma senha só, sem Basic Auth duplo.
+What it does:
+  - Stack status (what's up, container health).
+  - Terminal hatch (local ttyd + /shell/ proxy on the panel) — a single password, no double Basic Auth.
 
-Segurança (decisão do dono): o PAINEL é ABERTO (estado do stack) — sem login. A ÚNICA superfície
-protegida por senha é o TERMINAL: senha na aba Terminal → cookie de sessão → proxy /shell/ para o
-ttyd (localhost only, sem Basic Auth duplo). Ações são auditadas (arquivo de log).
+Security (owner's call): the PANEL is OPEN (stack status) — no login. The ONLY surface
+protected by a password is the TERMINAL: password on the Terminal tab → session cookie →
+/shell/ proxy to ttyd (localhost only, no double Basic Auth). Actions are audited (log file).
 """
 from __future__ import annotations
 
@@ -34,15 +35,15 @@ from starlette.responses import Response as StarletteResponse
 
 # --- paths / config -----------------------------------------------------------------------------
 STATIC_DIR = Path(__file__).parent / "static"
-# Diretório do repo (onde vivem os compose files). Default = /opt/vega-concierge (AMI); overridável.
+# Repo directory (where the compose files live). Default = /opt/vega-concierge (AMI); overridable.
 REPO_DIR = Path(os.getenv("VEGA_REPO_DIR", "/opt/vega-concierge")).resolve()
 PLAIN_FILE = "compose.plain.yml"
 AUDIT_LOG = Path(os.getenv("CONTROL_AUDIT_LOG", str(REPO_DIR / "control-audit.log")))
 
-# ttyd escuta só em localhost; o painel faz proxy autenticado em /shell/ (mesma porta — sem 2º popup).
+# ttyd listens on localhost only; the panel proxies authenticated to /shell/ (same port — no 2nd popup).
 TTYD_HOST = os.getenv("CONTROL_TTYD_HOST", "127.0.0.1")
 TTYD_BASE_PATH = "/shell"
-TERMINAL_SESSION_TTL = 300  # segundos
+TERMINAL_SESSION_TTL = 300  # seconds
 _terminal_sessions: dict[str, float] = {}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -100,7 +101,7 @@ def _strip_session_query(query: str) -> str:
 
 
 async def _ttyd_reachable() -> bool:
-    """ttyd roda como processo separado (control.sh ou systemd). Testa TCP na porta configurada."""
+    """ttyd runs as a separate process (control.sh or systemd). Tests TCP on the configured port."""
     return await _port_open(TTYD_HOST, _ttyd_port())
 
 
@@ -118,7 +119,7 @@ async def _port_open(host: str, port: int) -> bool:
 
 
 async def _backend_health() -> dict:
-    """GET /api/health do backend Vega (localhost:8000)."""
+    """GET /api/health from the Vega backend (localhost:8000)."""
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
             r = await client.get("http://127.0.0.1:8000/api/health")
@@ -130,7 +131,7 @@ async def _backend_health() -> dict:
 
 
 def _local_image_digest(image_ref: str) -> str:
-    """Digest da imagem local (docker inspect) — vazio se não pulled."""
+    """Local image digest (docker inspect) — empty if not pulled."""
     import subprocess
 
     try:
@@ -148,7 +149,7 @@ def _local_image_digest(image_ref: str) -> str:
 
 
 async def _stack_version_info() -> dict:
-    """Versão runtime + digests locais das imagens em uso."""
+    """Runtime version + local digests of the images in use."""
     owner = _read_env_value("IMAGE_OWNER") or "fhdumont"
     tag = _read_env_value("IMAGE_TAG") or "latest"
     backend_name = _read_env_value("BACKEND_IMAGE") or "vega-backend"
@@ -186,7 +187,7 @@ def _compose_base_cmd() -> list[str]:
 
 
 async def _run(cmd: list[str]) -> tuple[int, str]:
-    """Roda um comando no REPO_DIR, capturando stdout+stderr juntos."""
+    """Runs a command in REPO_DIR, capturing stdout+stderr together."""
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         cwd=str(REPO_DIR),
@@ -198,7 +199,7 @@ async def _run(cmd: list[str]) -> tuple[int, str]:
 
 
 async def _running_services() -> list[dict]:
-    """Lista os serviços do projeto `vega` no ar (via `docker compose ps`)."""
+    """Lists the `vega` project services that are up (via `docker compose ps`)."""
     code, out = await _run([*_compose_base_cmd(), "ps", "--format", "json"])
     if code != 0:
         return []
@@ -211,7 +212,7 @@ async def _running_services() -> list[dict]:
             obj = json.loads(raw)
         except json.JSONDecodeError:
             continue
-        # docker compose ps --format json pode vir 1 objeto por linha OU 1 array.
+        # docker compose ps --format json may come as 1 object per line OR 1 array.
         if isinstance(obj, list):
             services.extend(obj)
         else:
@@ -220,7 +221,7 @@ async def _running_services() -> list[dict]:
 
 
 def _read_env_value(key: str) -> str:
-    """Lê uma chave do .env do repo (sem depender de shell)."""
+    """Reads a key from the repo's .env (without depending on shell)."""
     env_file = REPO_DIR / ".env"
     if not env_file.exists():
         return ""
@@ -238,7 +239,7 @@ def _read_env_value(key: str) -> str:
 
 
 def _control_password() -> str:
-    """Senha do terminal: env do processo vence; senão lê CONTROL_PASSWORD do .env do repo."""
+    """Terminal password: process env wins; otherwise reads CONTROL_PASSWORD from the repo's .env."""
     return os.getenv("CONTROL_PASSWORD") or _read_env_value("CONTROL_PASSWORD")
 
 
@@ -260,7 +261,7 @@ def _status_cards(
     ttyd_up: bool,
     ports: dict[int, bool],
 ) -> list[dict]:
-    """Cards de status — Docker quando existir; senão probe de porta (dev sem container)."""
+    """Status cards — Docker when present; otherwise port probe (dev without a container)."""
 
     def card(
         key: str,
@@ -280,7 +281,7 @@ def _status_cards(
                 "required": required,
                 "up": up,
                 "state": state,
-                "detail": svc.get("Status", "") or "Container Docker",
+                "detail": svc.get("Status", "") or "Docker container",
             }
         if port and ports.get(port):
             return {
@@ -290,7 +291,7 @@ def _status_cards(
                 "required": required,
                 "up": True,
                 "state": "running",
-                "detail": "Porta respondendo (dev local, sem container)",
+                "detail": "Port responding (local dev, no container)",
             }
         return {
             "id": key,
@@ -298,12 +299,12 @@ def _status_cards(
             "port": port,
             "required": required,
             "up": False,
-            "state": "ausente",
-            "detail": "Fora do ar" if port else "Container não encontrado",
+            "state": "absent",
+            "detail": "Down" if port else "Container not found",
         }
 
     cards = [
-        card("frontend", "Loja (frontend)", 3000, True, "frontend"),
+        card("frontend", "Store (frontend)", 3000, True, "frontend"),
         card("backend", "API (backend)", 8000, True, "backend"),
         {
             "id": "ops-console",
@@ -312,16 +313,16 @@ def _status_cards(
             "required": True,
             "up": True,
             "state": "running",
-            "detail": "Você está usando este painel agora",
+            "detail": "You're using this panel right now",
         },
         {
             "id": "ttyd",
-            "label": "Terminal web (ttyd)",
+            "label": "Web terminal (ttyd)",
             "port": _ttyd_port(),
             "required": False,
             "up": ttyd_up,
-            "state": "running" if ttyd_up else "ausente",
-            "detail": "Disponível na aba Terminal" if ttyd_up else "Rode ./scripts/control.sh",
+            "state": "running" if ttyd_up else "absent",
+            "detail": "Available on the Terminal tab" if ttyd_up else "Run ./scripts/control.sh",
         },
     ]
     return cards
@@ -339,11 +340,11 @@ def index() -> FileResponse:
 
 @app.get("/api/health")
 def health() -> dict:
-    # Painel aberto; a senha só existe para o terminal SSH (ttyd). auth_required=False.
+    # Panel is open; the password only exists for the SSH terminal (ttyd). auth_required=False.
     return {"status": "ok", "auth_required": False}
 
 
-# --- routes: state / plan (ABERTOS — sem login) -------------------------------------------------
+# --- routes: state / plan (OPEN — no login) ------------------------------------------------------
 @app.get("/api/state")
 async def state(request: Request) -> dict:
     services = await _running_services()
@@ -354,9 +355,9 @@ async def state(request: Request) -> dict:
         8000: await _port_open("127.0.0.1", 8000),
     }
     return {
-        # Precedência F-REAL-ENV-2: INSTANCE (nome único da réplica) sempre vence — o
-        # DEPLOYMENT_ENVIRONMENT visto via os.getenv pode ter vindo do .env pela unit
-        # (EnvironmentFile), indistinguível de env do SO.
+        # Precedence F-REAL-ENV-2: INSTANCE (the replica's unique name) always wins — the
+        # DEPLOYMENT_ENVIRONMENT seen via os.getenv may have come from .env via the unit's
+        # EnvironmentFile, indistinguishable from an actual SO env var.
         "environment": os.getenv("INSTANCE")
         or os.getenv("DEPLOYMENT_ENVIRONMENT")
         or _read_env_value("DEPLOYMENT_ENVIRONMENT")
@@ -383,9 +384,9 @@ _stack_update_lock = asyncio.Lock()
 
 @app.post("/api/stack/update")
 async def stack_update(request: Request) -> dict:
-    """Pull GHCR público + up + fresh-state via up.sh update (painel aberto + audit log)."""
+    """Public GHCR pull + up + fresh-state via up.sh update (open panel + audit log)."""
     if _stack_update_lock.locked():
-        raise HTTPException(status_code=409, detail="Atualização já em andamento.")
+        raise HTTPException(status_code=409, detail="Update already in progress.")
     async with _stack_update_lock:
         _audit("stack_update_start", "-", request)
         code, out = await _run(["/bin/bash", "-lc", "./scripts/up.sh update"])
@@ -399,7 +400,7 @@ async def stack_update(request: Request) -> dict:
         if not ok:
             raise HTTPException(
                 status_code=500,
-                detail=f"up.sh update falhou (exit {code}).\n{detail}",
+                detail=f"up.sh update failed (exit {code}).\n{detail}",
             )
         stack = await _stack_version_info()
         return {"ok": True, "stack": stack, "log_tail": detail}
@@ -407,32 +408,32 @@ async def stack_update(request: Request) -> dict:
 
 @app.post("/api/terminal/open")
 async def terminal_open(body: TerminalOpenBody, request: Request, response: Response) -> dict:
-    """Valida senha, emite cookie de sessão e devolve URL do proxy /shell/ (mesma porta — sem 2º popup)."""
+    """Validates the password, issues a session cookie, and returns the /shell/ proxy URL (same port — no 2nd popup)."""
     pwd = _control_password()
     port = _ttyd_port()
     if not pwd:
         raise HTTPException(
             status_code=503,
-            detail="CONTROL_PASSWORD não configurada. Defina no .env ou rode ./scripts/control.sh.",
+            detail="CONTROL_PASSWORD not configured. Set it in .env or run ./scripts/control.sh.",
         )
     if not await _ttyd_reachable():
         raise HTTPException(
             status_code=503,
             detail=(
-                f"Terminal web (ttyd) não está rodando na porta {port}. "
-                "Use ./scripts/control.sh (requer ttyd instalado: brew install ttyd)."
+                f"Web terminal (ttyd) isn't running on port {port}. "
+                "Use ./scripts/control.sh (requires ttyd installed: brew install ttyd)."
             ),
         )
     if not _check_terminal_password(body.password):
         _audit("terminal_open_denied", "-", request)
-        raise HTTPException(status_code=401, detail="Senha inválida.")
+        raise HTTPException(status_code=401, detail="Invalid password.")
     token = _issue_terminal_session()
     _audit("terminal_open_ok", "-", request)
     return _terminal_session_response(token, response)
 
 
 def _terminal_session_response(token: str, response: Response | StarletteResponse) -> dict:
-    """Emite cookie + URL do proxy /shell/ (iframe no painel; token na query p/ WebSocket)."""
+    """Issues cookie + /shell/ proxy URL (iframe on the panel; token in the query for WebSocket)."""
     _set_terminal_cookie(response, token)
     return {"ok": True, "url": f"/shell/?t={token}", "token": token}
 
@@ -444,18 +445,18 @@ def _revoke_terminal_session(token: str | None) -> None:
 
 @app.post("/api/terminal/renew")
 async def terminal_renew(request: Request, response: Response) -> dict:
-    """Renova sessão do terminal (sem pedir senha de novo) — útil após exit ou erro no shell."""
+    """Renews the terminal session (without asking for the password again) — useful after exit or a shell error."""
     old = request.cookies.get("terminal_session")
     if not _valid_terminal_session(old):
         raise HTTPException(
             status_code=401,
-            detail="Sessão expirada. Desbloqueie o terminal novamente.",
+            detail="Session expired. Unlock the terminal again.",
         )
     if not await _ttyd_reachable():
         port = _ttyd_port()
         raise HTTPException(
             status_code=503,
-            detail=f"ttyd não está rodando na porta {port}. Rode ./scripts/control.sh.",
+            detail=f"ttyd isn't running on port {port}. Run ./scripts/control.sh.",
         )
     _revoke_terminal_session(old)
     token = _issue_terminal_session()
@@ -465,7 +466,7 @@ async def terminal_renew(request: Request, response: Response) -> dict:
 
 @app.post("/api/terminal/close")
 async def terminal_close(request: Request, response: Response) -> dict:
-    """Encerra sessão do terminal e remove cookie."""
+    """Ends the terminal session and removes the cookie."""
     token = request.cookies.get("terminal_session")
     _revoke_terminal_session(token)
     response.delete_cookie(key="terminal_session", path="/")
@@ -487,10 +488,10 @@ def _set_terminal_cookie(response: StarletteResponse, token: str) -> None:
 @app.api_route("/shell", methods=["GET", "POST", "HEAD", "OPTIONS"])
 @app.api_route("/shell/{path:path}", methods=["GET", "POST", "HEAD", "OPTIONS"])
 async def shell_http_proxy(request: Request, path: str = "") -> StarletteResponse:
-    """Proxy HTTP autenticado → ttyd local (base-path /shell)."""
+    """Authenticated HTTP proxy → local ttyd (base-path /shell)."""
     token = _terminal_token_from_request(request)
     if not _valid_terminal_session(token):
-        raise HTTPException(status_code=401, detail="Desbloqueie o terminal na aba Terminal do painel.")
+        raise HTTPException(status_code=401, detail="Unlock the terminal on the panel's Terminal tab.")
     upstream_url = _upstream_ttyd_url(path, _strip_session_query(request.url.query))
     hop_by_hop = {"host", "cookie", "connection", "transfer-encoding", "content-length"}
     headers = {k: v for k, v in request.headers.items() if k.lower() not in hop_by_hop}
@@ -521,7 +522,7 @@ async def shell_http_proxy(request: Request, path: str = "") -> StarletteRespons
 
 @app.websocket("/shell/ws")
 async def shell_ws_proxy(websocket: WebSocket) -> None:
-    """Proxy WebSocket autenticado → ttyd. ttyd exige subprotocolo 'tty' — sem isso o terminal reconecta."""
+    """Authenticated WebSocket proxy → ttyd. ttyd requires the 'tty' subprotocol — without it the terminal reconnects."""
     token = websocket.cookies.get("terminal_session") or websocket.query_params.get("t")
     if not _valid_terminal_session(token):
         await websocket.close(code=4401)

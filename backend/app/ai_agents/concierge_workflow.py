@@ -183,7 +183,7 @@ def search_catalog_and_price(
             **selected,
             "quote": get_price_tool.invoke({"sku": selected["sku"]}, config=config),
         }
-    trace = [*state.get("trace", []), f"Curator: {len(candidates or [])} candidatos → {(selected or {}).get('sku', '—')}"]
+    trace = [*state.get("trace", []), f"Curator: {len(candidates or [])} candidates → {(selected or {}).get('sku', '—')}"]
     return {
         "request": request,
         "constraints": constraints,
@@ -219,7 +219,7 @@ def compose_product_recommendation(
         "answer": answer,
         "language": state.get("constraints", {}).get("language") or _language(request),
         "messages": [AIMessage(content=answer)],
-        "trace": [*state.get("trace", []), "Respond: resposta composta para o shopper"],
+        "trace": [*state.get("trace", []), "Respond: answer composed for the shopper"],
     }
 
 

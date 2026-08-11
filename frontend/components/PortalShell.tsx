@@ -1,7 +1,7 @@
 "use client";
-// Shell do portal (conta + admin) — sidebar AppNav quando logado. Estrutura estável p/ não
-// remontar children ao fazer login (preserva redirect ?return= pós-auth).
-// Rotas protegidas sem sessão (ex. token expirou + refresh) → home da loja.
+// Portal shell (account + admin) — AppNav sidebar when logged in. Stable structure so it doesn't
+// remount children on login (preserves the ?return= redirect post-auth).
+// Protected routes without a session (e.g. token expired + refresh) → store home.
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";

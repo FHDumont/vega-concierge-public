@@ -1,16 +1,16 @@
-"""Notificação/email simulada — chamada a um serviço EXTERNO (fake).
+"""Simulated notification/email — call to an EXTERNAL (fake) service.
 
-Tem latência e uma pequena taxa de falha. NÃO bloqueia o pedido: a falha é
-registrada/engolida, o pedido segue válido."""
+Has latency and a small failure rate. Does NOT block order: failure is
+logged/swallowed, order stays valid."""
 import random
 import time
 
-FAIL_RATE = 0.15  # pequena taxa de falha do "provedor de email"
+FAIL_RATE = 0.15  # small failure rate of "email provider"
 
 
 def send_order_notification(order: dict) -> dict:
-    """Simula um POST a um provedor de email externo (confirmação do pedido).
-    Retorna `{sent, latency_ms}`; nunca levanta — a notificação não pode quebrar o pedido."""
+    """Simulates POST to external email provider (order confirmation).
+    Returns `{sent, latency_ms}`; never raises — notification cannot break order."""
     latency = random.uniform(0.05, 0.25)
     time.sleep(latency)
     sent = random.random() > FAIL_RATE

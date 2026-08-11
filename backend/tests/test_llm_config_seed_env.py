@@ -1,9 +1,9 @@
-"""`seed_providers_from_env()` — bootstrap da cascata por tokens do SO (F-BACKEND-3, Etapa B).
+"""`seed_providers_from_env()` — cascade bootstrap via OS tokens (F-BACKEND-3, Step B).
 
-Nomes de teste usam specs isoladas (`TestSeedOpenAI`/`TestSeedClaude`/…) em vez dos nomes reais
-("OpenAI"/"Claude"/"Bedrock"/"Ollama Local") — mesmo com o DB de teste isolado do `vega.db`
-real (DT-036), manter nomes fictícios evita qualquer colisão com providers de produção se um
-teste rodar contra outro DB por engano."""
+Test names use isolated specs (`TestSeedOpenAI`/`TestSeedClaude`/…) instead of the real names
+("OpenAI"/"Claude"/"Bedrock"/"Ollama Local") — even with the test DB isolated from the real
+`vega.db` (DT-036), keeping fictitious names avoids any collision with production providers if a
+test runs against another DB by mistake."""
 from __future__ import annotations
 
 import pytest
@@ -56,7 +56,7 @@ def _current_key(provider_id: str) -> str:
 
 @pytest.fixture
 def seed_env(monkeypatch):
-    """Specs de teste + tokens zerados; prioridade só cloud (Ollama entra nos testes que pedem)."""
+    """Test specs + zeroed tokens; cloud-only priority (Ollama comes in on tests that ask for it)."""
     llm_config.init_db()
     monkeypatch.setattr(llm_config, "_CASCADE_SPECS", TEST_CASCADE_SPECS)
     monkeypatch.setattr(settings, "llm_provider_priority", "BEDROCK,OPENAI,ANTHROPIC")

@@ -1,7 +1,7 @@
 "use client";
-// Cartão de config de UM agente (F-021): connection/model/role/system prompt + Test + Save.
-// Extraído de app/admin/config/page.tsx na F-027 p/ ser reusado pelo editor visual de agentes
-// (clicar num nó do diagrama abre a MESMA config). Sem segredo aqui (vai cru ao front).
+// Config card for a SINGLE agent (F-021): connection/model/role/system prompt + Test + Save.
+// Extracted from app/admin/config/page.tsx in F-027 to be reused by the visual agent editor
+// (clicking a diagram node opens the SAME config). No secrets here (goes raw to the front end).
 import { useEffect, useState } from "react";
 import {
   AgentConfig, AgentInput, AgentTest, LLMProvider, updateAgent, testAgent,
@@ -14,9 +14,9 @@ export default function AgentCard({ agent, providers, onSaved }: {
   const [busy, setBusy] = useState(false);
   const [test, setTest] = useState<AgentTest | "loading" | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  // Reage a uma troca do agente selecionado (reuso no editor visual — props mudam in-place).
+  // Reacts to a change of the selected agent (reused in the visual editor — props change in-place).
   useEffect(() => { setF(agent); setTest(null); setErr(null); }, [agent]);
-  // dirty: algum campo editável mudou em relação ao salvo.
+  // dirty: some editable field changed relative to what was saved.
   const dirty = (["connection", "model", "role", "system_prompt"] as const).some((k) => f[k] !== agent[k]);
 
   function set<K extends keyof AgentConfig>(k: K, v: AgentConfig[K]) {

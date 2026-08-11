@@ -1,7 +1,7 @@
 "use client";
-// Conta do cliente (F-008): deslogado → login/registro; logado → perfil (nome, e-mail,
-// tier + progresso) + logout. Purchase history em /account/purchases (F-NAV-1).
-// Design custom dirigido por paletas (ADR-012/013). Auth de DEMO — ADR-011 / DT-010.
+// Customer account (F-008): logged out → login/register; logged in → profile (name, email,
+// tier + progress) + logout. Purchase history at /account/purchases (F-NAV-1).
+// Custom design driven by palettes (ADR-012/013). DEMO auth — ADR-011 / DT-010.
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { TIER_GOLD_AT, TIER_PLATINUM_AT, formatMoney, nextTierHint } from "@/lib/shop";
@@ -174,7 +174,7 @@ export default function AccountPage() {
     setReturnTo(readReturnTo());
   }, []);
 
-  // Já logado com ?return= (ex. refresh) — ou fallback se o submit não redirecionou.
+  // Already logged in with ?return= (e.g. refresh) — or fallback if submit didn't redirect.
   useEffect(() => {
     if (!ready || !user) return;
     const dest = readReturnTo();

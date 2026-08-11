@@ -1,18 +1,18 @@
 "use client";
-// Tema da app = paleta + esquema (light/dark), selecionáveis e persistidos — ADR-012/013.
-// TODA a app (loja, Behind the Scenes, Admin) usa a paleta via variáveis CSS
-// ([data-palette]/[data-scheme] no <html>) — design custom, sem @splunk (F-015 removeu
-// o SplunkThemeProvider). Default Splunk/light. A preferência persiste em localStorage e
-// o script anti-flash no layout aplica os atributos antes do paint.
+// App theme = palette + scheme (light/dark), selectable and persisted — ADR-012/013.
+// The ENTIRE app (shop, Behind the Scenes, Admin) uses the palette via CSS variables
+// ([data-palette]/[data-scheme] on <html>) — custom design, no @splunk (F-015 removed
+// the SplunkThemeProvider). Default Splunk/light. The preference persists in localStorage and
+// the anti-flash script in the layout applies the attributes before paint.
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 
 export type ColorScheme = "light" | "dark";
 export type Palette = "splunk" | "blue" | "sunset" | "mono";
 
 export const PALETTES: { id: Palette; label: string }[] = [
-  // Splunk (default, F-038): copia o tema Hugo Splunk do guia (rosa #FF007F + neutros/fontes).
+  // Splunk (default, F-038): copies the guide's Hugo Splunk theme (pink #FF007F + neutrals/fonts).
   { id: "splunk", label: "Splunk" },
-  // "blue" é a antiga paleta "Splunk" azul (renomeada p/ liberar o nome ao tema do guia).
+  // "blue" is the former blue "Splunk" palette (renamed to free up the name for the guide's theme).
   { id: "blue", label: "Blue" },
   { id: "sunset", label: "Sunset" },
   { id: "mono", label: "Mono" },
@@ -38,8 +38,8 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function PaletteProvider({ children }: { children: React.ReactNode }) {
-  // Defaults SSR-safe (servidor e 1º render do cliente coincidem); a preferência salva
-  // é aplicada no efeito após montar — sem mismatch de hidratação.
+  // SSR-safe defaults (server and 1st client render match); the saved preference
+  // is applied in the effect after mount — no hydration mismatch.
   const [palette, setPaletteState] = useState<Palette>(DEFAULT_PALETTE);
   const [colorScheme, setSchemeState] = useState<ColorScheme>(DEFAULT_SCHEME);
 
@@ -50,13 +50,13 @@ export function PaletteProvider({ children }: { children: React.ReactNode }) {
       const p = localStorage.getItem(PALETTE_KEY);
       if (isPalette(p)) setPaletteState(p);
     } catch {
-      /* storage indisponível — mantém os defaults */
+      /* storage unavailable — keeps the defaults */
     }
   }, []);
 
-  // Mantém os atributos no <html> em sincronia (fora do React): a loja resolve as
-  // variáveis CSS por [data-palette]/[data-scheme]. O script inline no layout já os
-  // define antes do paint (evita flash); aqui só reagimos a mudanças do usuário.
+  // Keeps the <html> attributes in sync (outside React): the shop resolves its
+  // CSS variables via [data-palette]/[data-scheme]. The inline script in the layout already
+  // sets them before paint (avoids flash); here we only react to user changes.
   useEffect(() => {
     document.documentElement.dataset.palette = palette;
   }, [palette]);
@@ -69,7 +69,7 @@ export function PaletteProvider({ children }: { children: React.ReactNode }) {
     try {
       localStorage.setItem(PALETTE_KEY, p);
     } catch {
-      /* storage indisponível — vale só nesta sessão */
+      /* storage unavailable — only valid for this session */
     }
   }, []);
 
@@ -78,7 +78,7 @@ export function PaletteProvider({ children }: { children: React.ReactNode }) {
     try {
       localStorage.setItem(SCHEME_KEY, s);
     } catch {
-      /* storage indisponível — vale só nesta sessão */
+      /* storage unavailable — only valid for this session */
     }
   }, []);
 
