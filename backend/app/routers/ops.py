@@ -41,6 +41,13 @@ def hub_status(authorization: str | None = Header(default=None)):
     return hub.status()
 
 
+@router.post("/api/admin/hub/test-connection")
+def hub_test_connection(authorization: str | None = Header(default=None)):
+    # Pull sob demanda (se remote) + cascata efetiva mascarada — validação owner.
+    _require_owner(authorization)
+    return hub.test_connection()
+
+
 # --- Enrollment push por IP (F-027, ADR-020) --------------------------------
 # CLIENTE: endpoint que ACEITA ser enrolado pelo hub (máquina-a-máquina). Gateado por
 # ENROLL_TOKEN (segredo do lab, env baked) — NÃO pela sessão de owner. Seta source=remote

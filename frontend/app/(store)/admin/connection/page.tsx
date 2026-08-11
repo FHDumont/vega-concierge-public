@@ -8,8 +8,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import RumCard from "@/components/RumCard";
 import {
-  HubStatus, HubSource, HubClient, EnrollPushResult,
-  getHubStatus, getHubSource, setHubSource, syncHubNow, enrollPush,
+  HubStatus, HubSource, HubClient, EnrollPushResult, HubTestConnection,
+  getHubStatus, getHubSource, setHubSource, syncHubNow, enrollPush, testHubConnection,
 } from "@/lib/api";
 
 const MODE_LABEL: Record<HubStatus["mode"], string> = {
@@ -23,6 +23,12 @@ const MODE_SEV: Record<HubStatus["mode"], string> = {
 };
 
 const PAGE_SIZE = 15;
+
+function defaultHubConfigUrl(): string {
+  if (typeof window === "undefined") return "";
+  const { protocol, hostname } = window.location;
+  return `${protocol}//${hostname}:8000/api/hub/config`;
+}
 
 export default function ConnectionPage() {
   const { user, ready } = useAuth();
@@ -60,6 +66,8 @@ function ConnectionManager() {
   const [enrollToken, setEnrollToken] = useState("");
   const [serveToken, setServeToken] = useState("");
   const [interval, setIntervalS] = useState(45);
+  const [hubTest, setHubTest] = useState<HubTestConnection | null>(null);
+  const [hubTestBusy, setHubTestBusy] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -96,6 +104,12 @@ function ConnectionManager() {
     catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
   }
+  async function runHubTest() {
+    setHubTestBusy(true); setError(null);
+    try { setHubTest(await testHubConnection()); await load(); }
+    catch (e) { setError((e as Error).message); setHubTest(null); }
+    finally { setHubTestBusy(false); }
+  }
 
   if (!src || !status) {
     return <div className="ns-adm-wrap"><div className="ns-adm-empty">Loading connection…</div></div>;
@@ -114,10 +128,25 @@ function ConnectionManager() {
             <b>{MODE_LABEL[status.mode]}</b>
             <code className="ns-cfg-env">{status.env}</code>
           </div>
+          <button type="button" className="ns-adm-btn" disabled={busy || hubTestBusy} onClick={runHubTest}>
+            {hubTestBusy ? "Testing…" : "Test hub connection"}
+          </button>
         </div>
       </div>
 
       {error && <div className="ns-cfg-test err" style={{ marginBottom: 12 }}>{error}</div>}
+
+      {hubTest && (
+        <div className={`ns-adm-card ns-cfg-health ${hubTest.ok ? "ok" : "err"}`} style={{ marginBottom: 12 }}>
+          <span className="dot" />
+          {hubTest.ok
+            ? <>Effective cascade ({hubTest.source}): <b>{hubTest.provider_count}</b> provider{hubTest.provider_count === 1 ? "" : "s"}
+              {hubTest.providers.length > 0 && (
+                <span className="muted"> — {hubTest.providers.map((p) => `${p.name}/${p.model}`).join(" → ")}</span>
+              )}</>
+            : <>Hub connection failed{hubTest.remote?.last_error ? `: ${hubTest.remote.last_error}` : ""}</>}
+        </div>
+      )}
 
       <div className="ns-cfg-conn-grid">
         {/* Lado CLIENTE: fonte local|remote + alvo do hub */}
@@ -206,7 +235,7 @@ function ConnectionManager() {
       </div>
 
       {/* Push de enrollment por IP — força N lojas a virar clientes deste hub via API (F-027) */}
-      <PushEnrollSection serving={status.serving} />
+      <PushEnrollSection serving={status.serving} defaultHubUrl={defaultHubConfigUrl()} pullIntervalS={src.pull_interval_s} />
 
       {/* Clientes conectados — full-width (muitos participantes): filtro + paginação + tempos */}
       <ClientsTable clients={status.clients} intervalS={src.pull_interval_s} onRefresh={refreshStatus} />
@@ -220,15 +249,22 @@ function ConnectionManager() {
 // --- Push de enrollment por IP (F-027) --------------------------------------
 // Empurra `source=remote → este hub` p/ uma lista de IPs/hosts, chamando o endpoint de enroll de
 // cada loja (token-gated por um segredo compartilhado do lab). Resultado por IP. Mecanismo = API.
-function PushEnrollSection({ serving }: { serving: boolean }) {
+function PushEnrollSection({ serving, defaultHubUrl, pullIntervalS }: {
+  serving: boolean; defaultHubUrl: string; pullIntervalS: number;
+}) {
   const [ips, setIps] = useState("");
-  const [hubUrl, setHubUrl] = useState("");
+  const [hubUrl, setHubUrl] = useState(defaultHubUrl);
   const [enrollSecret, setEnrollSecret] = useState("");
   const [enrollToken, setEnrollToken] = useState("");
-  const [interval, setIntervalS] = useState(45);
+  const [interval, setIntervalS] = useState(pullIntervalS);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [result, setResult] = useState<EnrollPushResult | null>(null);
+
+  useEffect(() => {
+    if (defaultHubUrl) setHubUrl((u) => u || defaultHubUrl);
+  }, [defaultHubUrl]);
+  useEffect(() => { setIntervalS(pullIntervalS); }, [pullIntervalS]);
 
   const ipList = useMemo(
     () => ips.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean), [ips]);
@@ -250,7 +286,7 @@ function PushEnrollSection({ serving }: { serving: boolean }) {
       <h3 className="ns-cfg-group" style={{ marginTop: 0 }}>Push enrollment (by IP)</h3>
       <p className="ns-adm-note">
         Force other stores to become clients of this hub. Each store is reached over the API and must
-        share the lab enroll secret (<code>ENROLL_TOKEN</code>).
+        share the lab enroll secret (<code>ENROLL_TOKEN</code> from each target&apos;s <code>.env</code>).
         {!serving && " Tip: set a serve token above so the enrolled stores can pull."}
       </p>
       <div className="ns-cfg-grid" style={{ marginTop: 10 }}>

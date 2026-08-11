@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-# Inventário congelado: 63 rotas de `/api/*` + as 4 que o FastAPI publica sozinho.
+# Inventário congelado: 64 rotas de `/api/*` + as 4 que o FastAPI publica sozinho.
 # Ao ADICIONAR uma rota nova (aditivo, permitido), acrescente a linha aqui no mesmo commit.
 FROZEN_ROUTES: set[tuple[str, tuple[str, ...]]] = {
     ("/openapi.json", ("GET", "HEAD")),
@@ -71,6 +71,7 @@ FROZEN_ROUTES: set[tuple[str, tuple[str, ...]]] = {
     ("/api/admin/rum", ("PUT",)),
     ("/api/hub/config", ("GET",)),
     ("/api/admin/hub/status", ("GET",)),
+    ("/api/admin/hub/test-connection", ("POST",)),
     ("/api/admin/enroll", ("POST",)),
     ("/api/admin/hub/enroll-push", ("POST",)),
     ("/api/admin/llm-activity", ("GET",)),
@@ -114,9 +115,9 @@ def test_route_inventory_has_no_delta():
     assert not live - FROZEN_ROUTES, f"rotas novas não congeladas: {sorted(live - FROZEN_ROUTES)}"
 
 
-def test_api_surface_is_sixty_three_routes():
+def test_api_surface_is_sixty_four_routes():
     api_routes = {r for r in _live_routes() if r[0].startswith("/api/")}
-    assert len(api_routes) == 63, len(api_routes)
+    assert len(api_routes) == 64, len(api_routes)
 
 
 # --- endpoints exercidos offline ---------------------------------------------

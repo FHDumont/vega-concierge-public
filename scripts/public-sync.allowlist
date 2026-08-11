@@ -11,6 +11,7 @@ compose.plain.yml
 .env.example
 .gitignore
 docs/reference/workshop-env-contract.md
+docs/reference/runbooks/bootstrap-workshop-host.md
 docs/reference/runbooks/deploy-pull-only.md
 .github/workflows/build-images.yml
 .github/workflows/pages.yml

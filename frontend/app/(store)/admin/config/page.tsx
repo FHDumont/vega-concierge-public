@@ -7,8 +7,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import {
-  LLMProvider, ProviderInput, ProviderKind, ProviderTest, LLMTypePreset,
-  getProviders, createProvider, updateProvider, deleteProvider, reorderProviders, testProvider, getLLMTypes,
+  LLMProvider, ProviderInput, ProviderKind, ProviderTest, LLMTypePreset, HubSource,
+  getProviders, createProvider, updateProvider, deleteProvider, reorderProviders, testProvider, getLLMTypes, getHubSource,
 } from "@/lib/api";
 
 // Fallback dos Types caso o catálogo do backend não carregue (a UI segue usável offline).
@@ -72,6 +72,8 @@ function ConfigManager() {
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [types, setTypes] = useState<LLMTypePreset[]>(FALLBACK_TYPES);
+  const [hubSource, setHubSource] = useState<HubSource | null>(null);
+  const remoteSource = hubSource?.source === "remote";
 
   const load = useCallback(async () => {
     setError(null);
@@ -84,8 +86,8 @@ function ConfigManager() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-  // Catálogo de Type presets (prefill da conexão). Falha → mantém o fallback "custom".
   useEffect(() => { getLLMTypes().then((t) => t.length && setTypes(t)).catch(() => {}); }, []);
+  useEffect(() => { getHubSource().then(setHubSource).catch(() => {}); }, []);
 
   async function save(input: ProviderInput, id: string | "new") {
     setBusy(true);
@@ -157,6 +159,16 @@ function ConfigManager() {
           </div>
         </div>
 
+        {remoteSource && (
+          <div className="ns-ff-hub" style={{ marginBottom: 12 }}>
+            <span className="ns-ff-hub-icon" aria-hidden>🔗</span>
+            <span>
+              This store pulls LLM config from a <strong>hub</strong>. The list below is the <strong>local SQLite copy</strong> — chat uses the hub cascade.
+              Use <a className="ns-cfg-link" href="/admin/connection">Connection / Hub → Test hub connection</a> or <a className="ns-cfg-link" href="/admin/agents">Agents → Test</a> to validate the effective cascade.
+            </span>
+          </div>
+        )}
+
         {editing === "new" && (
           <ProviderForm initial={EMPTY} editingExisting={false} busy={busy} types={types}
             onCancel={() => setEditing(null)} onSave={(i) => save(i, "new")} />
@@ -179,7 +191,7 @@ function ConfigManager() {
               ) : (
                 <ProviderRow
                   key={p.id} p={p} index={i} total={providers.length} busy={busy}
-                  test={tests[p.id]} confirmDel={confirmDel === p.id}
+                  test={tests[p.id]} confirmDel={confirmDel === p.id} remoteSource={remoteSource}
                   onMove={move} onToggle={() => toggleEnabled(p)} onTest={() => runTest(p.id)}
                   onEdit={() => { setEditing(p.id); setError(null); }}
                   onAskDelete={() => setConfirmDel(p.id)} onCancelDelete={() => setConfirmDel(null)}
@@ -211,11 +223,11 @@ function ConfigManager() {
 
 // --- linha de provider ------------------------------------------------------
 function ProviderRow({
-  p, index, total, busy, test, confirmDel,
+  p, index, total, busy, test, confirmDel, remoteSource,
   onMove, onToggle, onTest, onEdit, onAskDelete, onCancelDelete, onDelete,
 }: {
   p: LLMProvider; index: number; total: number; busy: boolean;
-  test: ProviderTest | "loading" | undefined; confirmDel: boolean;
+  test: ProviderTest | "loading" | undefined; confirmDel: boolean; remoteSource: boolean;
   onMove: (i: number, d: -1 | 1) => void; onToggle: () => void; onTest: () => void;
   onEdit: () => void; onAskDelete: () => void; onCancelDelete: () => void; onDelete: () => void;
 }) {
@@ -245,7 +257,7 @@ function ProviderRow({
             {test === "loading"
               ? "Testing…"
               : test.ok
-                ? `✓ OK · ${test.model ?? "?"} · ${test.latency_ms ?? "?"} ms · ${(test.input_tokens ?? 0) + (test.output_tokens ?? 0)} tok`
+                ? `${remoteSource ? "✓ Local SQLite only · " : "✓ OK · "}${test.model ?? "?"} · ${test.latency_ms ?? "?"} ms · ${(test.input_tokens ?? 0) + (test.output_tokens ?? 0)} tok`
                 : `✗ ${test.error ?? "failed"}`}
           </div>
         )}
@@ -256,7 +268,8 @@ function ProviderRow({
           <input type="checkbox" checked={p.enabled} onChange={onToggle} disabled={busy} />
           <span>{p.enabled ? "On" : "Off"}</span>
         </label>
-        <button type="button" className="ns-adm-btn" onClick={onTest} disabled={busy || test === "loading"}>
+        <button type="button" className="ns-adm-btn" onClick={onTest} disabled={busy || test === "loading"}
+          title={remoteSource ? "Tests local SQLite, not the hub cascade in use at runtime" : undefined}>
           {test === "loading" ? "Testing…" : "Test"}
         </button>
         <button type="button" className="ns-adm-btn" onClick={onEdit} disabled={busy}>Edit</button>

@@ -4,8 +4,10 @@
 // + controles Start/Pause/Stop + painel AO VIVO (poll de /api/simulator/status).
 // É a ferramenta de tráfego (gera carga real chamando a API).
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { SimConfig, SimStatus, simStart, simStop, simPause, simStatus, getRum } from "@/lib/api";
 import FlagGuard from "@/components/FlagGuard";
+import { WORKSHOP_SIMULATOR_ENABLED } from "@/lib/workshop-config";
 
 // Categorias/tiers/problemas espelham o backend (simulator.py).
 const CATEGORIES = ["Audio", "Wearables", "Home", "Gifts"] as const;
@@ -66,11 +68,23 @@ function fmtUptime(s: number): string {
 }
 
 // F-033: barrado p/ participantes quando a flag `simulator` está OFF (o owner passa — ADR-021).
+// WORKSHOP_SIMULATOR_ENABLED=false oculta a superfície nesta versão do workshop (incl. owner).
+function SimulatorWorkshopGuard({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  useEffect(() => {
+    if (!WORKSHOP_SIMULATOR_ENABLED) router.replace("/admin");
+  }, [router]);
+  if (!WORKSHOP_SIMULATOR_ENABLED) return null;
+  return <>{children}</>;
+}
+
 export default function SimulatorPage() {
   return (
-    <FlagGuard flag="simulator">
-      <Simulator />
-    </FlagGuard>
+    <SimulatorWorkshopGuard>
+      <FlagGuard flag="simulator">
+        <Simulator />
+      </FlagGuard>
+    </SimulatorWorkshopGuard>
   );
 }
 

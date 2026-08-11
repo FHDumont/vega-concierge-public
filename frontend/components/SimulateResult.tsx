@@ -48,7 +48,7 @@ export default function SimulateResult({
           <>
             {" "}
             <a href={consoleUrl} target="_blank" rel="noopener noreferrer" className="ns-sim-console-link">
-              Open Console
+              Open Splunk Agent Observability
             </a>
           </>
         )}

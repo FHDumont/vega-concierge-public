@@ -15,6 +15,14 @@ from ..problems import FLAGS
 from ..store.catalog_format import _usd
 from ..store.tools import CATALOG
 
+# PII fictícia p/ workshop UC-5 (espelha seed demo — DT-010; nunca usar em produção).
+_WORKSHOP_DEMO_PAYMENT = {
+    "ssn": "123-45-6789",
+    "card_number": "4242 4242 4242 4242",
+    "card_exp": "08/28",
+    "card_cvv": "123",
+}
+
 _NOTIFY_EVENT = {"PAID": "confirmation", "SHIPPED": "shipped", "DELIVERED": "shipped"}
 CONTROL_STEP_NAME = "notification_copy"
 LLM_RUN_NAME = "feature.compose_notification_text"
@@ -61,6 +69,40 @@ def _first_name(customer: dict) -> str:
     return name.split()[0] if name else "Customer"
 
 
+def _customer_with_workshop_payment(customer: dict) -> dict:
+    """UC-5: pedidos guardam só name/email/address — mescla PII de pagamento demo p/ o cenário."""
+    merged = dict(customer or {})
+    for key, value in _WORKSHOP_DEMO_PAYMENT.items():
+        if not merged.get(key):
+            merged[key] = value
+    return merged
+
+
+def _ungrounded_body_exposes_workshop_pii(body: str, customer: dict) -> bool:
+    """UC-5: o corpo precisa repetir e-mail, endereço, SSN e cartão p/ evaluator PII."""
+    text = (body or "").strip()
+    if not text:
+        return False
+    low = text.lower()
+    compact = low.replace("-", "").replace(" ", "")
+    email = (customer.get("email") or "").strip().lower()
+    address = (customer.get("address") or "").strip().lower()
+    ssn = (customer.get("ssn") or "").replace("-", "")
+    card = (customer.get("card_number") or "").replace(" ", "")
+    cvv = (customer.get("card_cvv") or "").strip()
+    if email and email not in low:
+        return False
+    if address and address[:12] not in low:
+        return False
+    if ssn and ssn not in compact:
+        return False
+    if card and card[:8] not in compact:
+        return False
+    if cvv and cvv not in text:
+        return False
+    return True
+
+
 def _order_context_from_fields(
     *,
     order_id: str,
@@ -85,14 +127,12 @@ def _recipient_context(customer: dict, *, grounded: bool) -> str:
         f"Recipient name: {customer.get('name') or '—'}",
         f"Recipient email: {customer.get('email') or '—'}",
         f"Shipping address: {customer.get('address') or '—'}",
-    ]
-    if customer.get("ssn"):
-        lines.append(f"SSN on file: {customer['ssn']}")
-    if customer.get("card_number"):
-        lines.append(
-            f"Payment card: {customer['card_number']} exp {customer.get('card_exp') or '—'} "
+        f"SSN on file: {customer.get('ssn') or '—'}",
+        (
+            f"Payment card: {customer.get('card_number') or '—'} exp {customer.get('card_exp') or '—'} "
             f"CVV {customer.get('card_cvv') or '—'}"
-        )
+        ),
+    ]
     return "\n".join(lines)
 
 
@@ -149,7 +189,7 @@ def _workflow_seed(order: dict, *, grounded: bool) -> dict:
     if grounded:
         seed["greeting_name"] = _first_name(customer)
     else:
-        seed["customer"] = customer
+        seed["customer"] = _customer_with_workshop_payment(customer)
     return seed
 
 
@@ -168,9 +208,47 @@ def _is_stub(result) -> bool:
     return getattr(result, "system", None) == "stub" or _is_unavailable_reply(result.text)
 
 
-def _invoke_llm(prompt: str, *, grounded: bool, config=None) -> tuple[LLMResult, str]:
+def _invoke_llm(
+    prompt: str,
+    *,
+    grounded: bool,
+    config=None,
+    workshop_override: str | None = None,
+) -> tuple[LLMResult, str]:
     """Run this specialist's own provider cascade under the established UC-5 LLM name."""
     system = _SYSTEM_PROMPT_GROUNDED if grounded else _SYSTEM_PROMPT_UNGROUNDED
+    if workshop_override is not None:
+        # UC-5: modelos reais recusam SSN/cartão no output — override no span [llm] (mesmo padrão UC-3).
+        from ..llm.llm_models import invoke_to_llm_result, resolve_chat_models, wrap_llm_output
+
+        models = [
+            wrap_llm_output(model, workshop_override, run_name=LLM_RUN_NAME)
+            for model in resolve_chat_models("notification_copy")
+        ]
+        for model in models:
+            try:
+                result = invoke_to_llm_result(
+                    model,
+                    system,
+                    prompt,
+                    max_tokens=200,
+                    config=config,
+                    run_name=LLM_RUN_NAME,
+                )
+                text = (result.text or "").strip() or workshop_override
+                return LLMResult(
+                    text,
+                    result.input_tokens,
+                    result.output_tokens,
+                    result.model,
+                    provider=result.provider,
+                    system=result.system,
+                    fallback=result.fallback,
+                    prompt_cache_tokens=result.prompt_cache_tokens,
+                ), "miss"
+            except Exception:  # noqa: BLE001 - cascata segue pro próximo provider/stub
+                continue
+        return LLMResult(workshop_override, 0, 0, "stub", system="stub"), "miss"
     return invoke_feature_llm(
         "notification_copy",
         system,
@@ -307,17 +385,29 @@ def _compose_email(state: dict, config: RunnableConfig) -> dict:
         grounded=grounded,
     )
 
+    workshop_override = None if grounded else json.dumps(fallback)
+
     def invoke(current_prompt: str = prompt):
-        return _invoke_llm(current_prompt, grounded=grounded, config=config)
+        return _invoke_llm(
+            current_prompt,
+            grounded=grounded,
+            config=config,
+            workshop_override=workshop_override,
+        )
 
     text, result, _status = _controlled_invoke(
         prompt, invoke, fallback=lambda: json.dumps(fallback),
     )
     parsed = None if _is_stub(result) else _parse_json(text)
     parsed = parsed or fallback
+    subject = (parsed.get("subject") or "").strip() or fallback["subject"]
+    body = (parsed.get("body") or "").strip() or fallback["body"]
+    if not grounded and not _ungrounded_body_exposes_workshop_pii(body, customer):
+        subject = fallback["subject"]
+        body = fallback["body"]
     return {
-        "subject": (parsed.get("subject") or "").strip() or fallback["subject"],
-        "body": (parsed.get("body") or "").strip() or fallback["body"],
+        "subject": subject,
+        "body": body,
         "channel": "email",
         "event": event,
         "grounded": grounded,

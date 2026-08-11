@@ -178,6 +178,103 @@ def test_notification_copy_grounded_prompt_omits_sensitive_recipient_fields(monk
     assert "123 main st" not in prompt
 
 
+def test_notification_copy_ungrounded_prompt_includes_demo_payment_when_order_customer_is_sparse(
+    monkeypatch,
+):
+    order = {
+        "id": "ORD-UC5-SPARSE",
+        "status": "DELIVERED",
+        "items": [{"sku": CATALOG[0]["sku"], "qty": 1, "name": CATALOG[0]["name"]}],
+        "total": CATALOG[0]["price"],
+        "customer": {
+            "name": "Jane Doe",
+            "email": "jane@example.test",
+            "address": "123 Main St, Sao Paulo",
+        },
+    }
+    captured = {}
+    monkeypatch.setattr(notification_copy, "_control_is_active", lambda: False)
+    monkeypatch.setattr(
+        notification_copy,
+        "_invoke_llm",
+        lambda prompt, **kwargs: captured.update({"prompt": prompt, **kwargs}) or _result(
+            '{"subject": "Shipped", "body": "Hi Jane, details on file."}',
+        ),
+    )
+    monkeypatch.setattr(FLAGS, "price_hallucination", True)
+
+    output = notification_copy.compose_notification_text(order)
+
+    assert output["grounded"] is False
+    prompt = captured["prompt"]
+    assert "123 Main St" in prompt
+    assert "123-45-6789" in prompt
+    assert "4242" in prompt
+    assert "jane@example.test" in prompt
+    assert "Jane Doe" in prompt
+
+
+def test_notification_copy_ungrounded_passes_workshop_override_to_invoke(monkeypatch):
+    order = {
+        "id": "ORD-UC5-OVERRIDE",
+        "status": "DELIVERED",
+        "items": [{"sku": CATALOG[0]["sku"], "qty": 1, "name": CATALOG[0]["name"]}],
+        "total": CATALOG[0]["price"],
+        "customer": {
+            "name": "Jane Doe",
+            "email": "jane@example.test",
+            "address": "123 Main St, Sao Paulo",
+        },
+    }
+    captured = {}
+    monkeypatch.setattr(notification_copy, "_control_is_active", lambda: False)
+    monkeypatch.setattr(
+        notification_copy,
+        "_invoke_llm",
+        lambda prompt, **kwargs: captured.update(kwargs)
+        or _result(kwargs.get("workshop_override") or "{}"),
+    )
+    monkeypatch.setattr(FLAGS, "price_hallucination", True)
+
+    output = notification_copy.compose_notification_text(order)
+
+    assert output["grounded"] is False
+    assert captured.get("workshop_override")
+    assert "123-45-6789" in captured["workshop_override"]
+    assert "4242" in captured["workshop_override"]
+    assert "123-45-6789" in output["body"]
+
+
+def test_notification_copy_ungrounded_uses_fallback_when_llm_omits_workshop_pii(monkeypatch):
+    order = {
+        "id": "ORD-UC5-PARTIAL",
+        "status": "DELIVERED",
+        "items": [{"sku": CATALOG[0]["sku"], "qty": 1, "name": CATALOG[0]["name"]}],
+        "total": CATALOG[0]["price"],
+        "customer": {
+            "name": "Jane Doe",
+            "email": "jane@example.test",
+            "address": "123 Main St, Sao Paulo",
+        },
+    }
+    monkeypatch.setattr(notification_copy, "_control_is_active", lambda: False)
+    monkeypatch.setattr(
+        notification_copy,
+        "_invoke_llm",
+        lambda prompt, **kwargs: _result(
+            '{"subject": "Shipped", "body": "Your order is on its way to 123 Main St, Sao Paulo."}',
+        ),
+    )
+    monkeypatch.setattr(FLAGS, "price_hallucination", True)
+
+    output = notification_copy.compose_notification_text(order)
+
+    assert output["grounded"] is False
+    assert "123-45-6789" in output["body"]
+    assert "4242" in output["body"]
+    assert "jane@example.test" in output["body"]
+
+
 def test_fraud_explanation_keeps_its_legacy_contract_and_galileo_name(monkeypatch):
     order = {"id": "ORD-TEST", "total": CATALOG[0]["price"]}
     captured = {}

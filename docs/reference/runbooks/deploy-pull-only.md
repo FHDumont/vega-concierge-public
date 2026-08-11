@@ -64,6 +64,16 @@ docker manifest inspect ghcr.io/<owner>/vega-frontend:latest
 
 ## AMI golden (manual, uma vez)
 
+**Preferido:** script idempotente — [`bootstrap-workshop-host.md`](bootstrap-workshop-host.md):
+
+```bash
+git clone https://github.com/FHDumont/vega-concierge-public.git /opt/vega-concierge
+cd /opt/vega-concierge
+sudo ./scripts/bootstrap-workshop-host.sh
+```
+
+**Legado (passo a passo manual):**
+
 1. Ubuntu + Docker + compose plugin + **hugo extended** + **ttyd** + **Ollama** (+ modelos `nomic-embed-text`, `llama3.2`). **Linux:** Ollama deve escutar em `0.0.0.0:11434` (não só `127.0.0.1`) — ver troubleshooting abaixo.
 2. Clone público do repo em `/opt/vega-concierge` (sem token git):
    ```bash

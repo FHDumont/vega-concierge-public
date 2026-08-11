@@ -14,6 +14,8 @@ In a full-room workshop configure once on the **hub** and every participant VM p
 
 **Feature flags:** `behind_the_scenes` (Use cases), `admin`, `simulator`, `inspector`. Owner always bypasses.
 
-**Code:** `backend/app/hub.py`, `backend/app/feature_flags.py`.
+**Code:** `backend/app/hub/hub.py`, `backend/app/hub/feature_flags.py`, `backend/app/hub/config_source.py`.
+
+**Ops runbook:** `docs/reference/runbooks/hub-fleet-day0.md` (repo root).
 
 {{< checkpoint "You understand hub client vs server and used flags to shape participant nav" >}}

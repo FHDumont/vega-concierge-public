@@ -34,10 +34,7 @@ export default function GalileoStatusBanner({
         {enabled && links && (
           <>
             <a href={links.logStream} target="_blank" rel="noopener noreferrer" className="ns-bts-galileo-link">
-              Open Console
-            </a>
-            <a href={links.agentControl} target="_blank" rel="noopener noreferrer" className="ns-bts-galileo-link">
-              Agent Control
+              Open Splunk Agent Observability
             </a>
           </>
         )}

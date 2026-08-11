@@ -140,9 +140,11 @@ if [ "$RAG" -eq 1 ]; then
   COMPOSE_ARGS+=(--profile rag)
 fi
 
-set -a
-[ -f "$ROOT/.env" ] && . "$ROOT/.env"
-set +a
+# SO vence .env (contrato F-REAL-ENV-2) — e o merged vira .env.runtime pro compose.
+# shellcheck disable=SC1091
+. "$ROOT/scripts/lib/env-load.sh"
+load_env_os_first
+write_env_runtime
 
 # shellcheck disable=SC1091
 . "$ROOT/scripts/lib/fresh-state.sh"

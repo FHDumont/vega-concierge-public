@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useFlags } from "@/lib/flags";
 import { FeatureFlags } from "@/lib/api";
+import { WORKSHOP_SIMULATOR_ENABLED } from "@/lib/workshop-config";
 
 type Item = {
   label: string;
@@ -102,8 +103,13 @@ export default function AppNav() {
   const isOwner = user?.role === "OWNER";
 
   const flagOk = (it: Item) => !it.flag || isOwner || flags[it.flag];
+  const itemVisible = (it: Item) =>
+    (it.href !== "/admin/simulator" || WORKSHOP_SIMULATOR_ENABLED) &&
+    (!it.owner || isOwner) &&
+    flagOk(it);
   const groupOk = (g: Group) =>
     (!g.owner || isOwner) && (!g.flag || isOwner || flags[g.flag]);
+  const visibleItems = (g: Group) => g.items.filter(itemVisible);
 
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => { setCollapsed(localStorage.getItem(STORE_KEY) === "1"); }, []);
@@ -123,10 +129,10 @@ export default function AppNav() {
             <NavItem key={it.href} it={it} pathname={pathname} />
           ))}
         </div>
-        {APP_NAV_GROUPS.filter(groupOk).map((g) => (
+        {APP_NAV_GROUPS.filter((g) => groupOk(g) && visibleItems(g).length > 0).map((g) => (
           <div key={g.title} className="ns-adm-group">
             <div className="ns-adm-group-title">{g.title}</div>
-            {g.items.filter((it) => (!it.owner || isOwner) && flagOk(it)).map((it) => (
+            {visibleItems(g).map((it) => (
               <NavItem key={it.href} it={it} pathname={pathname} />
             ))}
           </div>

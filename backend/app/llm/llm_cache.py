@@ -30,6 +30,7 @@ from ..galileo_span import (
     response_cache_replay_run_name,
 )
 from .llm import LLMResult, StubLLM
+from ..rate_limit import RateLimiter
 from ..runnable_config import current_runnable_config
 from ..settings import settings
 
@@ -144,32 +145,10 @@ class _KeyedLocks:
             return lock
 
 
-class RateLimiter:
-    """Rate-limit por instância (janela deslizante). `allow()` True se ainda há orçamento na
-    janela. `maxn<=0` desliga (sempre permite)."""
-
-    def __init__(self, maxn: int = RATE_MAX, window: float = RATE_WINDOW_S):
-        self.maxn = maxn
-        self.window = window
-        self._hits: list = []
-        self._lock = threading.Lock()
-
-    def allow(self) -> bool:
-        if self.maxn <= 0:
-            return True
-        now = time.monotonic()
-        with self._lock:
-            self._hits = [t for t in self._hits if now - t < self.window]
-            if len(self._hits) >= self.maxn:
-                return False
-            self._hits.append(now)
-            return True
-
-
 # Singletons por instância (1 backend por VM). Trocáveis em teste via reset_state().
 _cache = ResponseCache()
 _inflight = _KeyedLocks()
-_limiter = RateLimiter()
+_limiter = RateLimiter(RATE_MAX, RATE_WINDOW_S)
 
 
 class _CheckResponseCacheInput(BaseModel):
@@ -487,4 +466,9 @@ def reset_state() -> None:
     global _cache, _inflight, _limiter
     _cache = ResponseCache()
     _inflight = _KeyedLocks()
-    _limiter = RateLimiter()
+    _limiter = RateLimiter(RATE_MAX, RATE_WINDOW_S)
+
+
+def llm_rate_allow() -> bool:
+    """Orçamento de chamadas reais ao provider na janela LLM (F-WORKSHOP-GUARD)."""
+    return _limiter.allow()

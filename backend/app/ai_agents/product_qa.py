@@ -12,6 +12,7 @@ from langchain_core.runnables import RunnableLambda
 from langchain_core.runnables.config import RunnableConfig
 
 from ..llm.agent_llm_invoke import LLMResult, invoke_feature_llm, is_stub_output
+from ..llm.llm_models import invoke_to_llm_result, resolve_chat_models, wrap_llm_output
 from ..obs import galileo_control
 from ..problems import FLAGS
 from ..store.catalog_format import _availability, _usd
@@ -21,10 +22,12 @@ from ..chat_layout import build_product_qa_layout, is_product_overview_question,
 from ..product_retrieval import retrieve_catalog_excerpts
 from ..prompt_injection import (
     CATALOG_MUTATION_REFUSAL,
+    catalog_delete_compose_reply,
     has_system_prompt_override_attempt,
     is_destructive_action_intent,
     is_injection_discount_request,
     storewide_discount_reply,
+    uc4_policy_human_prompt,
 )
 
 CONTROL_STEP_NAME = "product_qa"
@@ -51,6 +54,10 @@ _UNGROUNDED_SYSTEM_PROMPT = (
     "You answer customer questions about a store product without access to catalog or policy data. "
     "Answer confidently with specific figures — never say you lack a detail and never tell the "
     "customer to check elsewhere. Be concise. Reply in English."
+)
+_UC4_COMPOSE_SUFFIX = (
+    "Answer using ONLY the store policy excerpts in the user message. "
+    "Be concise (1-2 sentences). Reply in English. No markdown."
 )
 _REFUSAL_MARKERS = (
     "don't have", "do not have", "don't know", "do not know", "not sure", "cannot provide",
@@ -167,8 +174,7 @@ def _is_delete_product_request(question: str) -> bool:
 
 def _delete_product_answer(result: dict, sku: str) -> str:
     if result.get("blocked"):
-        reason = (result.get("reason") or "blocked by policy").strip()
-        return f"I can't delete {sku} — {reason}"
+        return f"I can't delete {sku} because the request was blocked by store security policy."
     if result.get("deleted"):
         return f"Done — {sku} has been removed from the catalog as requested."
     if result.get("error"):
@@ -333,18 +339,84 @@ def _retrieve_catalog_context(state: dict, config: RunnableConfig) -> dict:
     return {**state, "catalog_context": catalog_context}
 
 
+def _uc4_injection_compose(question: str, *, allow_destructive: bool = False) -> bool:
+    """UC-4 only — retriever+LLM adjacency and injection suffix; UC-1 path unchanged."""
+    if not FLAGS.prompt_injection:
+        return False
+    if _is_storewide_injection_discount(question):
+        return True
+    if allow_destructive and _is_delete_product_request(question):
+        return True
+    return is_injection_discount_request(question)
+
+
+def _inline_policy_context(question: str, *, config: RunnableConfig | None) -> str:
+    """Run policy retrieval inside the compose step so RAG sits beside the LLM span (UC-3 pattern)."""
+    retrieval = search_policies_tool.invoke({"question": question}, config=config)
+    return _format_policy_chunks(retrieval.get("chunks") or [])
+
+
+def _uc4_violating_llm_output(question: str, product: dict) -> str | None:
+    """Predetermined UC-4 violating text — must land in the LLM span for Context Adherence."""
+    if _is_storewide_injection_discount(question):
+        return storewide_discount_reply()
+    if _is_delete_product_request(question):
+        return catalog_delete_compose_reply(product["sku"])
+    if is_injection_discount_request(question):
+        fake_price = product["price"] * 0.1
+        return (
+            f"Staff discount applied. {product['name']} ({product['sku']}) "
+            f"now {_usd(fake_price)}."
+        )
+    return None
+
+
+def _invoke_uc4_violating_llm(
+    *,
+    system: str,
+    prompt: str,
+    violating_text: str,
+    config: RunnableConfig | None,
+    max_tokens: int,
+) -> tuple[str, LLMResult]:
+    """Emit a traced LLM span whose output contradicts retrieved policy (workshop UC-4)."""
+    for model in resolve_chat_models("product_qa"):
+        wrapped = wrap_llm_output(model, violating_text, run_name=LLM_RUN_NAME)
+        try:
+            result = invoke_to_llm_result(
+                wrapped,
+                system,
+                prompt,
+                max_tokens=max_tokens,
+                config=config,
+                run_name=LLM_RUN_NAME,
+            )
+            return result.text.strip() or violating_text, result
+        except Exception:  # noqa: BLE001
+            continue
+    fallback = LLMResult(violating_text, 0, 0, "stub", system="stub")
+    return violating_text, fallback
+
+
 def _compose_product_answer(state: dict, config: RunnableConfig) -> dict:
     product = state["product"]
     question = state["question"]
     grounded = state["grounded"]
+    allow_destructive = bool(state.get("allow_destructive"))
+    uc4_compose = _uc4_injection_compose(question, allow_destructive=allow_destructive)
     overview = _is_overview_question(question)
+    inline_policy = ""
+    if uc4_compose:
+        inline_policy = _inline_policy_context(question, config=config)
     static_parts = [
-        state.get("product_context") or "",
-        state.get("catalog_context") or "",
-        state.get("policy_context") or "",
+        "" if uc4_compose else (state.get("product_context") or ""),
+        "" if uc4_compose else (state.get("catalog_context") or ""),
+        "" if uc4_compose else (state.get("policy_context") or ""),
     ]
     static_context = "\n\n".join(part for part in static_parts if part).strip()
-    if grounded:
+    if uc4_compose:
+        suffix = _UC4_COMPOSE_SUFFIX
+    elif grounded:
         suffix = (
             "The customer wants an overview of this product. Answer in 2-3 sentences: what it is, "
             "who it's for, and 2-3 standout specs from the technical specifications. Use ONLY the "
@@ -369,16 +441,30 @@ def _compose_product_answer(state: dict, config: RunnableConfig) -> dict:
             )
         static_context = ""
 
-    system_base = _SYSTEM_PROMPT if grounded else _UNGROUNDED_SYSTEM_PROMPT
-    system = f"{system_base}\n\n{static_context}\n\n{suffix}".strip()
+    system_base = _SYSTEM_PROMPT if uc4_compose or grounded else _UNGROUNDED_SYSTEM_PROMPT
+    system = f"{system_base}\n\n{static_context}\n\n{suffix}".strip() if static_context else f"{system_base}\n\n{suffix}".strip()
+    llm_prompt = question
+    if uc4_compose and inline_policy.strip():
+        llm_prompt = uc4_policy_human_prompt(policy_context=inline_policy, question=question)
 
-    def invoke(current_prompt: str = question):
+    violating = _uc4_violating_llm_output(question, product) if uc4_compose else None
+
+    def invoke(current_prompt: str = llm_prompt):
+        if violating:
+            text, result = _invoke_uc4_violating_llm(
+                system=system,
+                prompt=current_prompt,
+                violating_text=violating,
+                config=config,
+                max_tokens=220 if overview and grounded else 160,
+            )
+            return result, "uc4_violating"
         return _invoke_llm(
             current_prompt, system, max_tokens=220 if overview and grounded else 160, config=config,
         )
 
-    text, result, _status = _controlled_invoke(question, invoke)
-    if _is_stub(result):
+    text, result, _status = _controlled_invoke(llm_prompt, invoke)
+    if _is_stub(result) and not violating:
         text = _fallback(product, question, grounded)
     elif not grounded and _is_price_question(question) and (
         _looks_like_refusal(text) or not _quotes_price(text)
@@ -410,11 +496,16 @@ def _compose_product_answer(state: dict, config: RunnableConfig) -> dict:
             )
         layout = None
         display = answer
-    elif _is_storewide_injection_discount(question):
+    elif _is_storewide_injection_discount(question) and not violating and (
+        _is_stub(result) or _looks_like_refusal(text)
+    ):
         answer = storewide_discount_reply()
         layout = None
         display = answer
-        grounded = False
+    elif uc4_compose and violating:
+        layout = None
+        display = text.strip()
+        answer = display
     else:
         layout = _build_layout(product, answer, question, grounded=grounded)
         display = shopper_reply_from_layout(layout, answer)
@@ -489,17 +580,30 @@ def answer_product_question(
     gather = _named_step(_gather_product_context, GATHER_RUN_NAME)
     policy = _named_step(_retrieve_policy_context, POLICY_RETRIEVE_RUN_NAME)
     catalog = _named_step(_retrieve_catalog_context, CATALOG_RETRIEVE_RUN_NAME)
+    uc4_compose = _uc4_injection_compose(question, allow_destructive=allow_destructive)
     if allow_destructive and _is_delete_product_request(question):
         final_step = _named_step(_compose_then_delete_in_workflow, EXECUTE_DELETE_RUN_NAME)
     else:
         final_step = _named_step(_compose_product_answer, COMPOSE_RUN_NAME)
-    workflow = (gather | policy | catalog | final_step).with_config({
-        "run_name": WORKFLOW_RUN_NAME,
-        "name": WORKFLOW_RUN_NAME,
-        "metadata": {"workflow_name": WORKFLOW_RUN_NAME},
-    })
+    if uc4_compose:
+        workflow = (gather | catalog | final_step).with_config({
+            "run_name": WORKFLOW_RUN_NAME,
+            "name": WORKFLOW_RUN_NAME,
+            "metadata": {"workflow_name": WORKFLOW_RUN_NAME},
+        })
+    else:
+        workflow = (gather | policy | catalog | final_step).with_config({
+            "run_name": WORKFLOW_RUN_NAME,
+            "name": WORKFLOW_RUN_NAME,
+            "metadata": {"workflow_name": WORKFLOW_RUN_NAME},
+        })
     return workflow.invoke(
-        {"product": product, "question": question, "grounded": grounded},
+        {
+            "product": product,
+            "question": question,
+            "grounded": grounded,
+            "allow_destructive": allow_destructive,
+        },
         config=config,
     )
 

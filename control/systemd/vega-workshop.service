@@ -8,7 +8,9 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/vega-concierge/workshop
+# Precedência (F-REAL-ENV-2): /etc/environment DEPOIS do .env — injeção por réplica (Ansible) vence o arquivo.
 EnvironmentFile=-/opt/vega-concierge/.env
+EnvironmentFile=-/etc/environment
 ExecStart=/usr/bin/hugo server --bind 0.0.0.0 --port 1313 --baseURL http://127.0.0.1:1313/
 Restart=always
 RestartSec=5

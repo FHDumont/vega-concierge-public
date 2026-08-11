@@ -37,9 +37,10 @@ EOF
 done
 
 # Carrega .env do repo (se existir) — reusa CONTROL_PASSWORD/VEGA_REPO_DIR etc. sem duplicar config.
-set -a
-[ -f "$ROOT/.env" ] && . "$ROOT/.env"
-set +a
+# SO vence .env (F-REAL-ENV-2): CONTROL_PASSWORD=x ./scripts/control.sh volta a funcionar.
+# shellcheck disable=SC1091
+. "$ROOT/scripts/lib/env-load.sh"
+load_env_os_first
 
 # Senha: prioridade p/ o que veio do ambiente/.env; fallback 'dev' SÓ para desenvolvimento local.
 export CONTROL_PASSWORD="${CONTROL_PASSWORD:-dev}"

@@ -10,12 +10,13 @@ services:
     image: ghcr.io/${IMAGE_OWNER:-fhdumont}/${BACKEND_IMAGE:-vega-backend}:${IMAGE_TAG:-latest}
     pull_policy: always
     restart: always
-    # Contrato único de config por VM (F-BACKEND-3, Etapa B): o `.env` da raiz é a fonte
-    # canônica (Ansible escreve tudo nele, tokens inclusive), injetada aqui via `env_file`.
+    # Contrato de config por VM (F-BACKEND-3 → F-REAL-ENV-2): o container recebe o ambiente
+    # EFETIVO via `.env.runtime`, gerado por scripts/up.sh como merge SO > .env — é assim que
+    # variáveis injetadas no SO pela réplica (Ansible) chegam aqui dentro.
     # `environment:` abaixo é só o que precisa de valor DIFERENTE dentro do container
-    # (`environment:` vence `env_file`, então esses overrides ficam imunes ao que estiver no `.env`).
+    # (`environment:` vence `env_file`, então esses overrides ficam imunes ao merge).
     env_file:
-      - path: .env
+      - path: .env.runtime
         required: false
     environment:
       - ORDERS_DB=/data/vega.db # SQLite em volume nomeado (DT-006): sobrevive a recriação

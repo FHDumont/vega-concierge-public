@@ -2,7 +2,8 @@
 # Control (vega-control/vega-ttyd) e workshop (vega-workshop) sobem em paralelo via multi-user.target.
 [Unit]
 Description=Vega Concierge stack boot (fresh-state + pull + up)
-After=docker.service network-online.target
+# Docker via pacote (docker.service) OU snap (snap.docker.dockerd.service) — unit ausente em After= é ignorada.
+After=docker.service snap.docker.dockerd.service network-online.target
 Wants=network-online.target
 # Ollama é soft — boot segue se a unit não existir na AMI.
 After=ollama.service
@@ -12,9 +13,13 @@ Wants=ollama.service
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=/opt/vega-concierge
+# Precedência (F-REAL-ENV-2): /etc/environment DEPOIS do .env — injeção por réplica (Ansible) vence o arquivo.
 EnvironmentFile=-/opt/vega-concierge/.env
+EnvironmentFile=-/etc/environment
 Environment=NON_INTERACTIVE=1
 ExecStart=/opt/vega-concierge/scripts/boot-workshop.sh
+# oneshot: pull GHCR + health-wait de até 120s estouram o default de 90s.
+TimeoutStartSec=900
 # Retry em falha transitória (rede, pull).
 Restart=on-failure
 RestartSec=30

@@ -9,7 +9,9 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/vega-concierge
+# Precedência (F-REAL-ENV-2): /etc/environment DEPOIS do .env — injeção por réplica (Ansible) vence o arquivo.
 EnvironmentFile=-/opt/vega-concierge/.env
+EnvironmentFile=-/etc/environment
 ExecStart=/bin/sh -c 'exec ttyd -b /shell -i lo -p ${CONTROL_TTYD_PORT:-7681} -W bash'
 Restart=always
 RestartSec=2

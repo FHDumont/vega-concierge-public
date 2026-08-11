@@ -62,11 +62,17 @@ Portas diretas na VM: loja `:3000` · API `:8000` · Ops Console `:9000` · guia
 
 ## Run no workshop (EC2)
 
-Clone deste repositório em `/opt/vega-concierge` (público, sem token git):
+**VM nova (sem AMI golden):** clone + bootstrap idempotente (Docker, Ollama, Hugo, systemd, stack):
 
 ```bash
 git clone https://github.com/FHDumont/vega-concierge-public.git /opt/vega-concierge
+cd /opt/vega-concierge
+sudo ./scripts/bootstrap-workshop-host.sh
 ```
+
+Runbook completo: [`docs/reference/runbooks/bootstrap-workshop-host.md`](docs/reference/runbooks/bootstrap-workshop-host.md).
+
+**AMI golden / reboot:** o clone herda deps; boot via `scripts/boot-workshop.sh` (systemd). Ver [`deploy-pull-only.md`](docs/reference/runbooks/deploy-pull-only.md).
 
 | Superfície | Porta | Acesso |
 | --- | --- | --- |
@@ -77,7 +83,7 @@ git clone https://github.com/FHDumont/vega-concierge-public.git /opt/vega-concie
 
 **Security Group:** abra **3000, 8000, 9000 e 1313**. O ttyd (`:7681`) fica só em `localhost` — terminal via proxy `/shell/` no painel.
 
-Boot na AMI: `scripts/boot-workshop.sh` via systemd. Instalação dos units: `sudo REPO_DIR=/opt/vega-concierge ./control/systemd/install.sh`.
+Boot na AMI: `scripts/boot-workshop.sh` via systemd. **VM nova:** use `scripts/bootstrap-workshop-host.sh` (substitui install manual). Units: `sudo REPO_DIR=/opt/vega-concierge ./control/systemd/install.sh` (o bootstrap já chama).
 
 ## Vega Ops Console
 

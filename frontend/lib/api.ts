@@ -17,6 +17,43 @@ const BASE =
     ? process.env.API_INTERNAL_URL || "http://localhost:8000"
     : window.__API_BASE || "";
 
+/** HTTP 429 da API — mensagem amigável + Retry-After (F-WORKSHOP-GUARD). */
+export class ApiRateLimitError extends Error {
+  readonly retryAfterSeconds: number;
+
+  constructor(message: string, retryAfterSeconds: number) {
+    super(message);
+    this.name = "ApiRateLimitError";
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
+async function throwIfRateLimited(r: Response): Promise<void> {
+  if (r.status !== 429) return;
+  const body = (await r.json().catch(() => ({}))) as {
+    detail?: string;
+    retry_after_seconds?: number;
+  };
+  const detail =
+    (typeof body.detail === "string" && body.detail) ||
+    "Too many requests. Please wait a moment and try again.";
+  const headerRetry = r.headers.get("Retry-After");
+  const parsedHeader = headerRetry ? parseInt(headerRetry, 10) : NaN;
+  const retryAfterSeconds = Number.isFinite(parsedHeader)
+    ? parsedHeader
+    : typeof body.retry_after_seconds === "number"
+      ? body.retry_after_seconds
+      : 60;
+  throw new ApiRateLimitError(detail, retryAfterSeconds);
+}
+
+/** Fetch central — propaga 429 sem retry automático. */
+async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const r = await fetch(input, init);
+  await throwIfRateLimited(r);
+  return r;
+}
+
 export type Product = { sku: string; name: string; price: number; tags: string[]; description?: string; stock?: number };
 
 export type StorePolicy = { slug: string; title: string; markdown: string };
@@ -206,7 +243,7 @@ export async function updateAddress(address: string): Promise<User> {
 }
 
 export async function runConcierge(request: string): Promise<RunResult> {
-  const r = await fetch(`${BASE}/api/run`, {
+  const r = await apiFetch(`${BASE}/api/run`, {
     method: "POST", headers: { "content-type": "application/json", ...sessionHeaders() },
     body: JSON.stringify({ request }),
   });
@@ -225,7 +262,7 @@ export async function deleteCatalogProduct(
   sku: string,
   prompt?: string,
 ): Promise<SecurityDeleteResult> {
-  const r = await fetch(`${BASE}/api/security/actions`, {
+  const r = await apiFetch(`${BASE}/api/security/actions`, {
     method: "POST",
     headers: { "content-type": "application/json", ...sessionHeaders() },
     body: JSON.stringify({
@@ -253,11 +290,12 @@ export async function sendChatMessage(
   messages: ChatMessage[],
   context?: ChatContext,
 ): Promise<ChatResult> {
-  const r = await fetch(`${BASE}/api/chat`, {
+  const r = await apiFetch(`${BASE}/api/chat`, {
     method: "POST",
     headers: { "content-type": "application/json", ...authHeaders(), ...sessionHeaders() },
     body: JSON.stringify({ messages, context: context || undefined }),
   });
+  if (!r.ok) throw new Error(`chat failed: ${r.status}`);
   return r.json();
 }
 
@@ -273,7 +311,7 @@ export async function getPolicies(): Promise<StorePolicy[]> {
 export async function recommendGift(
   request = "a birthday gift under $300",
 ): Promise<{ answer: string; recommended: Record<string, unknown> | null; quality: Record<string, unknown> }> {
-  const r = await fetch(`${BASE}/api/recommend/gift`, {
+  const r = await apiFetch(`${BASE}/api/recommend/gift`, {
     method: "POST",
     headers: { "content-type": "application/json", ...sessionHeaders() },
     body: JSON.stringify({ request }),
@@ -285,7 +323,7 @@ export async function recommendGift(
 // --- IA-Produto (F-022) -----------------------------------------------------
 // Q&A fundamentado nos dados do produto na PDP. Honra os toggles de problema.
 export async function askProduct(sku: string, question: string): Promise<{ answer: string; grounded: boolean }> {
-  const r = await fetch(`${BASE}/api/product/qa`, {
+  const r = await apiFetch(`${BASE}/api/product/qa`, {
     method: "POST", headers: { "content-type": "application/json", ...sessionHeaders() },
     body: JSON.stringify({ sku, question }),
   });
@@ -311,7 +349,7 @@ export type CompareResult = {
   layout?: CompareLayout | null;
 };
 export async function compareProducts(skuA: string, skuB: string): Promise<CompareResult> {
-  const r = await fetch(`${BASE}/api/compare`, {
+  const r = await apiFetch(`${BASE}/api/compare`, {
     method: "POST", headers: { "content-type": "application/json", ...sessionHeaders() },
     body: JSON.stringify({ sku_a: skuA, sku_b: skuB }),
   });
@@ -324,7 +362,7 @@ export async function compareProducts(skuA: string, skuB: string): Promise<Compa
 // Honra os toggles; fallback gracioso offline.
 export type CartCrossSell = { products: Product[]; blurb: string };
 export async function cartCrossSell(skus: string[]): Promise<CartCrossSell> {
-  const r = await fetch(`${BASE}/api/cart/crosssell`, {
+  const r = await apiFetch(`${BASE}/api/cart/crosssell`, {
     method: "POST", headers: { "content-type": "application/json", ...sessionHeaders() },
     body: JSON.stringify({ skus }),
   });
@@ -333,7 +371,7 @@ export async function cartCrossSell(skus: string[]): Promise<CartCrossSell> {
 }
 
 export async function createOrder(items: OrderItem[], customer: Customer): Promise<Order> {
-  const r = await fetch(`${BASE}/api/orders`, {
+  const r = await apiFetch(`${BASE}/api/orders`, {
     method: "POST", headers: { "content-type": "application/json", ...authHeaders(), ...sessionHeaders() },
     body: JSON.stringify({ items, customer }),
   });
@@ -365,7 +403,7 @@ export type NotificationCopy = {
   grounded: boolean;
 };
 export async function orderNotification(id: string): Promise<NotificationCopy> {
-  const r = await fetch(`${BASE}/api/orders/${id}/notification`, {
+  const r = await apiFetch(`${BASE}/api/orders/${id}/notification`, {
     method: "POST", headers: { ...authHeaders(), ...sessionHeaders() },
   });
   if (!r.ok) throw new Error(`notification failed: ${r.status}`);
@@ -383,7 +421,7 @@ export type AccountInsights = {
   grounded: boolean;
 };
 export async function accountInsights(): Promise<AccountInsights> {
-  const r = await fetch(`${BASE}/api/account/insights`, {
+  const r = await apiFetch(`${BASE}/api/account/insights`, {
     headers: { ...authHeaders(), ...sessionHeaders() },
   });
   if (!r.ok) throw new Error(`account insights failed: ${r.status}`);
@@ -400,7 +438,7 @@ export type RefundResult = {
   status: OrderStatus; reason: string; steps: RefundStep[]; order: Order;
 };
 export async function requestRefund(id: string): Promise<RefundResult> {
-  const r = await fetch(`${BASE}/api/orders/${id}/refund`, {
+  const r = await apiFetch(`${BASE}/api/orders/${id}/refund`, {
     method: "POST", headers: { ...authHeaders(), ...sessionHeaders() },
   });
   if (!r.ok) {
@@ -415,7 +453,7 @@ export async function requestRefund(id: string): Promise<RefundResult> {
 // Explicação amigável de bloqueio de fraude quando o pedido é barrado.
 // a UI só mostra a explicação amigável quando true. Envia o bearer (autorização do getOrder).
 export async function fraudExplain(id: string): Promise<{ explanation: string; fraud: boolean }> {
-  const r = await fetch(`${BASE}/api/orders/${id}/fraud-explain`, {
+  const r = await apiFetch(`${BASE}/api/orders/${id}/fraud-explain`, {
     method: "POST", headers: { ...authHeaders(), ...sessionHeaders() },
   });
   if (!r.ok) throw new Error(`fraud explain failed: ${r.status}`);
@@ -455,7 +493,7 @@ export type AdminInsights = {
   restock: { sku: string; name: string; stock: number }[];
 };
 export async function getAdminInsights(): Promise<AdminInsights> {
-  const r = await fetch(`${BASE}/api/admin/insights`, { headers: sessionHeaders() });
+  const r = await apiFetch(`${BASE}/api/admin/insights`, { headers: sessionHeaders() });
   if (!r.ok) throw new Error(`insights failed: ${r.status}`);
   return r.json();
 }
@@ -521,7 +559,7 @@ export type SimStatus = {
 };
 
 export async function simStart(cfg: Partial<SimConfig>): Promise<SimStatus> {
-  const r = await fetch(`${BASE}/api/simulator/start`, {
+  const r = await apiFetch(`${BASE}/api/simulator/start`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(cfg),
   });
   if (!r.ok) throw new Error(`sim start failed: ${r.status}`);
@@ -565,6 +603,7 @@ export type ProviderTest = {
 const CONFIG_BASE = `${BASE}/api/admin/config/providers`;
 
 async function configJson<T>(r: Response, what: string): Promise<T> {
+  await throwIfRateLimited(r);
   if (r.status === 401) throw new Error("not authenticated");
   if (r.status === 403) throw new Error("owner only");
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `${what} failed: ${r.status}`);
@@ -572,10 +611,10 @@ async function configJson<T>(r: Response, what: string): Promise<T> {
 }
 
 export async function getProviders(): Promise<LLMProvider[]> {
-  return configJson(await fetch(CONFIG_BASE, { headers: authHeaders() }), "providers");
+  return configJson(await apiFetch(CONFIG_BASE, { headers: authHeaders() }), "providers");
 }
 export async function createProvider(input: ProviderInput): Promise<LLMProvider> {
-  return configJson(await fetch(CONFIG_BASE, {
+  return configJson(await apiFetch(CONFIG_BASE, {
     method: "POST", headers: { "content-type": "application/json", ...authHeaders() },
     body: JSON.stringify(input),
   }), "create provider");
@@ -708,6 +747,18 @@ export async function syncHubNow(): Promise<HubRemoteStatus & { synced: boolean;
 }
 export async function getHubStatus(): Promise<HubStatus> {
   return configJson(await fetch(`${BASE}/api/admin/hub/status`, { headers: authHeaders() }), "hub status");
+}
+
+export type HubTestProvider = { name: string; model: string; kind: string };
+export type HubTestConnection = {
+  source: string; mode: HubStatus["mode"]; ok: boolean; provider_count: number;
+  providers: HubTestProvider[]; flags: Record<string, boolean>;
+  remote: HubRemoteStatus | null; sync: Record<string, unknown> | null;
+};
+export async function testHubConnection(): Promise<HubTestConnection> {
+  return configJson(await fetch(`${BASE}/api/admin/hub/test-connection`, {
+    method: "POST", headers: authHeaders(),
+  }), "test hub connection");
 }
 
 // --- Enrollment push por IP (F-027) -----------------------------------------

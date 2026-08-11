@@ -12,10 +12,10 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
-set -a
+# SO vence .env (F-REAL-ENV-2): validamos o valor EFETIVO, igual ao runtime.
 # shellcheck disable=SC1091
-. "$ENV_FILE"
-set +a
+. "$ROOT/scripts/lib/env-load.sh"
+load_env_os_first
 
 missing=0
 for key in DEPLOYMENT_ENVIRONMENT OLLAMA_BASE_URL OLLAMA_CHAT_MODEL; do

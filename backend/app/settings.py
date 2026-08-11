@@ -93,9 +93,21 @@ class Settings(BaseSettings):
     llm_rate_window_s: float = 60     # ...por janela (s); <=0 desliga
     llm_activity_max: int = 200
 
+    # --- rate limit HTTP na borda (F-WORKSHOP-GUARD) ----------------------------
+    api_rate_enabled: bool = True
+    api_rate_ai_max: int = 12
+    api_rate_ai_window_s: float = 60
+    api_rate_default_max: int = 60
+    api_rate_default_window_s: float = 60
+
     # --- Ollama do host (llm/llm_config.py, features/rag.py, api.py) ----------
     ollama_base_url: str = "http://host.docker.internal:11434"
     ollama_chat_model: str = "llama3.2"
+
+    # --- modelos padrão da cascata cloud (llm/llm_config.py — auto-cadastro no boot) -----------
+    openai_chat_model: str = "gpt-4o-mini"
+    anthropic_chat_model: str = "claude-sonnet-4-5"
+    bedrock_chat_model: str = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 
     # --- RAG (features/rag.py) ------------------------------------------------
     rag_enabled: bool = False
@@ -128,6 +140,7 @@ class Settings(BaseSettings):
     # --- tokens de provider injetados pelo ambiente do SO ---------------------
     # Reservados para a F-BACKEND-3 (bootstrap da cascata a partir do ambiente). Declarados
     # desde já para que a lista de variáveis entregue ao time de Ansible seja esta classe.
+    llm_provider_priority: str = "BEDROCK,OPENAI,ANTHROPIC,OLLAMA"
     openai_api_key: str = ""
     anthropic_api_key: str = ""
     aws_bearer_token_bedrock: str = ""

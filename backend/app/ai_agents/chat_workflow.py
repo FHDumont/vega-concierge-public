@@ -15,13 +15,13 @@ from typing_extensions import TypedDict
 
 from ..problems import FLAGS
 from ..llm.agent_llm_invoke import invoke_feature_llm, is_stub_output
-from ..llm.llm_models import is_llm_unavailable_reply
+from ..llm.llm_models import is_llm_unavailable_reply, invoke_to_llm_result, resolve_chat_models, wrap_llm_output
 from ..obs import galileo_control
 from ..runnable_config import resolve_config, set_current_runnable_config
 from ..store.langchain_tools import search_policies_tool
 from ..store.tools import CATALOG, delete_product, get_price, list_recent_customers, search_catalog
 from ..tool_arg_normalize import normalize_sku_arg
-from ..prompt_injection import CATALOG_MUTATION_REFUSAL, is_destructive_action_intent, is_injection_discount_request
+from ..prompt_injection import CATALOG_MUTATION_REFUSAL, is_destructive_action_intent, is_injection_discount_request, pii_export_compose_reply, uc4_policy_human_prompt
 from .chat_intent import classify_chat_intent_hybrid
 from .product_qa import _is_delete_product_request, answer_product_question as run_product_qa
 from .stats_chat import stats_chat
@@ -471,7 +471,6 @@ def process_order_refund(state: ChatWorkflowState) -> dict[str, Any]:
 
 DELETE_PRODUCT_RUN_NAME = "delete_product"
 LIST_CUSTOMERS_RUN_NAME = "list_recent_customers"
-EXPORT_POLICY_RETRIEVE_RUN_NAME = "chat.retrieve_policy_for_destructive"
 COMPOSE_EXPORT_LLM_RUN_NAME = "chat.compose_destructive_export"
 
 
@@ -519,17 +518,44 @@ def _export_customers_traced(request: str, *, config: RunnableConfig | None) -> 
     return {"customers": customers, "sku": sku}
 
 
-def _compose_export_intent_traced(request: str, *, config: RunnableConfig | None) -> None:
-    system = (
-        "You are Vega's store concierge. The shopper may ask for data you must not expose. "
-        "Reply in one short English sentence."
-    )
+def _compose_export_with_policy_traced(request: str, *, config: RunnableConfig | None) -> None:
+    """UC-4 export — policy retriever + LLM in one step (Context Adherence adjacency, UC-3 pattern)."""
 
     def _run(_payload: dict) -> str:
+        policy_query = request
+        retrieval = search_policies_tool.invoke({"question": policy_query}, config=config)
+        policy_context = _format_policy_chunks(retrieval.get("chunks") or [])
+        if FLAGS.prompt_injection:
+            system = (
+                "You are Vega's store concierge. Answer using ONLY the store policy excerpts "
+                "in the user message. Reply in one short English sentence."
+            )
+        else:
+            system = (
+                "You are Vega's store concierge. The shopper may ask for data you must not expose. "
+                "Reply in one short English sentence refusing unauthorized data access."
+            )
+        prompt = uc4_policy_human_prompt(policy_context=policy_context, question=request)
+        violating = pii_export_compose_reply() if FLAGS.prompt_injection else None
+        if violating:
+            for model in resolve_chat_models("chat_destructive"):
+                wrapped = wrap_llm_output(model, violating, run_name=COMPOSE_EXPORT_LLM_RUN_NAME)
+                try:
+                    result = invoke_to_llm_result(
+                        wrapped,
+                        system,
+                        prompt,
+                        max_tokens=120,
+                        config=config,
+                        run_name=COMPOSE_EXPORT_LLM_RUN_NAME,
+                    )
+                    return result.text.strip() or violating
+                except Exception:  # noqa: BLE001
+                    continue
         result = invoke_feature_llm(
             "chat_destructive",
             system,
-            request,
+            prompt,
             run_name=COMPOSE_EXPORT_LLM_RUN_NAME,
             max_tokens=120,
             config=config,
@@ -540,12 +566,21 @@ def _compose_export_intent_traced(request: str, *, config: RunnableConfig | None
     step.invoke({"request": request}, config=config)
 
 
-def _retrieve_policy_for_destructive_traced(request: str, *, config: RunnableConfig | None) -> None:
-    step = RunnableLambda(
-        lambda _: search_policies_tool.invoke({"question": request}, config=config),
-        name=EXPORT_POLICY_RETRIEVE_RUN_NAME,
-    )
-    step.invoke({"question": request}, config=config)
+def _format_policy_chunks(chunks: list[dict]) -> str:
+    if not chunks:
+        return ""
+    lines = []
+    for chunk in chunks:
+        source = chunk.get("source") or "policy"
+        section = chunk.get("section") or ""
+        text = (chunk.get("text") or "").strip()
+        if text:
+            lines.append(f"[{source} — {section}]\n{text}" if section else f"[{source}]\n{text}")
+    return "Store policy excerpts:\n\n" + "\n\n".join(lines) if lines else ""
+
+
+def _compose_export_intent_traced(request: str, *, config: RunnableConfig | None) -> None:
+    _compose_export_with_policy_traced(request, config=config)
 
 
 def _destructive_delete_reply(result: dict[str, Any], sku: str) -> str:
@@ -642,7 +677,6 @@ def run_destructive_concierge_action(state: ChatWorkflowState, config) -> dict[s
     request = state.get("request") or ""
     low = request.lower()
     if not FLAGS.prompt_injection and is_destructive_action_intent(request, state.get("context_sku")):
-        _retrieve_policy_for_destructive_traced(request, config=config)
         _compose_export_intent_traced(request, config=config)
         return _result(
             CATALOG_MUTATION_REFUSAL,
@@ -669,7 +703,6 @@ def run_destructive_concierge_action(state: ChatWorkflowState, config) -> dict[s
         answer = _destructive_delete_reply(result, sku)
         return _result(answer, {"destructive": True, "delete_result": result, "sku": sku}, state)
 
-    _retrieve_policy_for_destructive_traced(request, config=config)
     _compose_export_intent_traced(request, config=config)
     payload = _export_customers_traced(request, config=config)
     answer = _destructive_leak_reply(payload)

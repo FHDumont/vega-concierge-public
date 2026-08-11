@@ -33,6 +33,21 @@ def reset_problem_flags():
         setattr(FLAGS, name, value)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_api_rate_limit(monkeypatch):
+    """Suíte offline não herda buckets HTTP/LLM entre testes; `test_api_rate_limit` re-liga HTTP explicitamente."""
+    from app import rate_limit
+    from app.llm import llm_cache
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "api_rate_enabled", False)
+    rate_limit.reset_http_limiters()
+    llm_cache.reset_state()
+    yield
+    rate_limit.reset_http_limiters()
+    llm_cache.reset_state()
+
+
 @pytest.fixture
 def clean_cache():
     """Zera o cache/limiter de LLM (F-022) antes e depois — ordem de teste não muda hit/miss."""

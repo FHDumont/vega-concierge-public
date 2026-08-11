@@ -10,8 +10,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ChatMessage, ChatResult, sendChatMessage } from "@/lib/api";
+import { ApiRateLimitError, ChatMessage, ChatResult, applyProblemPreset, sendChatMessage } from "@/lib/api";
 import { shouldCloseChatForStoreNavigation } from "@/lib/chat-store-navigation";
+import { useWorkshopProblems } from "@/lib/workshop-problems";
 
 const STORAGE_KEY = "vega.chat.thread";
 
@@ -62,6 +63,7 @@ function saveTurns(turns: ChatTurn[]) {
 }
 
 export function ChatProvider({ children }: { children: ReactNode }) {
+  const { problems } = useWorkshopProblems();
   const [open, setOpen] = useState(false);
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [loading, setLoading] = useState(false);
@@ -97,6 +99,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setLoading(true);
 
       try {
+        // FLAGS are in-memory only — restart/reload zeros them while the UI can still show
+        // Scenario ON (trace 56a930eb: problem_flags.prompt_injection=false at send time).
+        if (problems.active_scenario) {
+          await applyProblemPreset(problems.active_scenario);
+        }
         const ctx: { sku?: string; order_id?: string } = {};
         if (contextSku) ctx.sku = contextSku;
         if (contextOrderId) ctx.order_id = contextOrderId;
@@ -108,16 +115,20 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         if (shouldCloseChatForStoreNavigation(result)) {
           setOpen(false);
         }
-      } catch {
+      } catch (err) {
+        const message =
+          err instanceof ApiRateLimitError
+            ? err.message
+            : "Something went wrong. Please try again.";
         setTurns((prev) => [
           ...prev,
-          { role: "assistant", content: "Something went wrong. Please try again." },
+          { role: "assistant", content: message },
         ]);
       } finally {
         setLoading(false);
       }
     },
-    [input, loading, turns, contextSku, contextOrderId],
+    [input, loading, turns, contextSku, contextOrderId, problems.active_scenario],
   );
 
   const openChat = useCallback((opts?: OpenChatOpts) => {

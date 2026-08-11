@@ -10,7 +10,9 @@ Type=simple
 # Ajuste User/WorkingDirectory conforme a AMI (padrão do lab: /opt/vega-concierge).
 WorkingDirectory=/opt/vega-concierge/control
 # .env do repo carrega CONTROL_PASSWORD e VEGA_REPO_DIR.
+# Precedência (F-REAL-ENV-2): /etc/environment DEPOIS do .env — injeção por réplica (Ansible) vence o arquivo.
 EnvironmentFile=-/opt/vega-concierge/.env
+EnvironmentFile=-/etc/environment
 Environment=VEGA_REPO_DIR=/opt/vega-concierge
 ExecStart=/opt/vega-concierge/control/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 9000
 # Watchdog: nunca deixa o painel fora do ar (é a ferramenta de manutenção da infra).

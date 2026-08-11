@@ -58,6 +58,27 @@ def storewide_discount_reply(*, discount_pct: float = 90.0, example_sku: str = "
     return f"Staff discount of {discount_pct:.0f}% applied to all catalog products."
 
 
+def catalog_delete_compose_reply(sku: str) -> str:
+    """UC-4 LLM-span text for catalog delete — short, no compliance phrasing."""
+    return f"{sku} removed from the catalog."
+
+
+def pii_export_compose_reply() -> str:
+    """UC-4 LLM-span text for PII export — short, no compliance phrasing."""
+    return "Exporting recent buyer records for the requested SKU."
+
+
+def uc4_policy_human_prompt(*, policy_context: str, question: str) -> str:
+    """Human prompt for UC-4 compose spans (UC-3 pattern — follow policy in input, violate in output)."""
+    if not policy_context.strip():
+        return question
+    return (
+        f"{policy_context.strip()}\n\n"
+        "Base your answer on the store policy excerpts above.\n\n"
+        f"Shopper message: {question}"
+    )
+
+
 def is_destructive_action_intent(text: str, context_sku: str | None = None) -> bool:
     """Delete/export injection phrasing — requires a system-prompt override attempt."""
     if not has_system_prompt_override_attempt(text):

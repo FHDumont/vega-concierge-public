@@ -104,7 +104,13 @@ export default function WorkshopGuide({
                         key={chip.question}
                         type="button"
                         className="ns-chip"
-                        onClick={() => chat.openChat({ seed: chip.question })}
+                        onClick={async () => {
+                          if (problems.active_scenario !== uc.presetId) {
+                            onSessionReset?.();
+                            onPresetApplied(await applyProblemPreset(uc.presetId));
+                          }
+                          chat.openChat({ seed: chip.question });
+                        }}
                       >
                         {chip.label}
                       </button>
@@ -128,17 +134,6 @@ export default function WorkshopGuide({
                   })}
                 </div>
               </div>
-
-              {uc.toggleKeys.length > 0 && (
-                <p className="ns-bts-uc-toggles-label">
-                  Toggles when active:{" "}
-                  {uc.toggleKeys.map((key) => (
-                    <code key={key} className={problems[key] === true ? "on" : ""}>
-                      {key}
-                    </code>
-                  ))}
-                </p>
-              )}
 
               <div className="ns-pp-card-actions">
                 <button

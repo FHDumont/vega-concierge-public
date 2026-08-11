@@ -17,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .hub import agent_config, feature_flags, hub, hub_settings, rum
 from .llm import llm_config
 from .obs import galileo_control
+from .rate_limit import ApiRateLimitMiddleware
 from .routers import ROUTERS
 from .settings import settings
 from .store import orders, users
@@ -38,11 +39,10 @@ def _bootstrap() -> None:
     users.seed_owner_user()  # usuário OWNER (config de LLM owner-only; idempotente; F-020)
     llm_config.init_db()     # tabela de provedores de LLM (F-020)
     _restored = llm_config.restore_providers_backup()  # fresh-state preserva cascata LLM (F-REAL-ENV-1)
-    llm_config.seed_ollama_default()  # Ollama Local se vazio (F-REAL-ENV-1)
-    _seeded = llm_config.seed_providers_from_env()  # OpenAI/Claude/Bedrock por token do SO (F-BACKEND-3)
+    _seeded = llm_config.seed_providers_from_env()  # cascata `.env` + LLM_PROVIDER_PRIORITY (F-BACKEND-3)
     log.info(
-        "llm providers: restaurados=%d, seed_env criados=%d, chaves atualizadas=%d",
-        _restored, _seeded["created"], _seeded["updated"],
+        "llm providers: restaurados=%d, seed_env criados=%d, chaves atualizadas=%d, ordem aplicada=%d",
+        _restored, _seeded["created"], _seeded["updated"], _seeded["ordered"],
     )
     agent_config.init_db()      # tabela de config por agente (F-021)
     agent_config.seed_defaults()  # semeia os 6 agentes com os prompts atuais (idempotente; F-021)
@@ -61,6 +61,7 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="Vega Concierge API", lifespan=lifespan)
+app.add_middleware(ApiRateLimitMiddleware)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 for _router in ROUTERS:

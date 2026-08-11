@@ -91,10 +91,10 @@ preflight_ollama() {
 preflight_docker
 preflight_env
 
-set -a
+# SO vence .env (F-REAL-ENV-2).
 # shellcheck disable=SC1091
-. "$ROOT/.env"
-set +a
+. "$ROOT/scripts/lib/env-load.sh"
+load_env_os_first
 
 preflight_ghcr
 preflight_ollama

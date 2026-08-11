@@ -166,3 +166,32 @@ def settings_public() -> dict:
         "has_enrollment_token": bool(s["enrollment_token"]),
         "has_serve_token": bool(s["serve_token"]),
     }
+
+
+def test_connection() -> dict:
+    """Pull (se remote) e resume a cascata EFETIVA p/ a UI — sem chaves."""
+    s = hub_settings.get_settings()
+    sync_meta: dict | None = None
+    if s["source"] == "remote" and _remote is not None:
+        sync_meta = _remote.sync_now()
+    active = config_source.get_active_source()
+    providers = active.get_llm_config()
+    summary = [
+        {"name": p.get("name", ""), "model": p.get("model", ""), "kind": p.get("kind", "openai")}
+        for p in providers if isinstance(p, dict)
+    ]
+    flags = active.get_flags()
+    remote = _remote.status() if _remote is not None else None
+    ok = remote["last_ok"] if remote else True
+    if s["source"] == "remote" and not summary and remote and not remote.get("has_cache"):
+        ok = False
+    return {
+        "source": active.name,
+        "mode": status()["mode"],
+        "ok": ok,
+        "provider_count": len(summary),
+        "providers": summary,
+        "flags": flags,
+        "remote": remote,
+        "sync": sync_meta,
+    }

@@ -109,6 +109,17 @@ def test_rate_limit_degrades_to_stub_without_caching(clean_cache):
     assert statuses.count("rate_limited") == 3, statuses
 
 
+def test_invoke_feature_llm_rate_limits_to_stub(clean_cache):
+    from app.llm.agent_llm_invoke import invoke_feature_llm
+    from app.llm.llm_models import is_stub_output
+
+    clean_cache._limiter = clean_cache.RateLimiter(maxn=2, window=60)
+    invoke_feature_llm("product_qa", "sys", "q1", run_name="test.rate")
+    invoke_feature_llm("product_qa", "sys", "q2", run_name="test.rate")
+    third = invoke_feature_llm("product_qa", "sys", "q3", run_name="test.rate")
+    assert is_stub_output(third.text), third.text
+
+
 def test_max_tokens_caps_the_output(clean_cache):
     small, _ = clean_cache.complete_cached(get_llm(), "mt", "sys", "a", max_tokens=5)
     big, _ = clean_cache.complete_cached(get_llm(), "mt", "sys", "b", max_tokens=200)

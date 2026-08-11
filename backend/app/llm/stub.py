@@ -471,6 +471,27 @@ def _matches_customer_leak_injection(text: str) -> bool:
 
 def _stub_plain_text(system: str, prompt: str, *, verbose: bool = False, max_tokens: int | None = None) -> str:
     """Respostas determinísticas do stub offline — JSON quando o agente pede structured output."""
+    from ..problems import FLAGS
+    from ..prompt_injection import (
+        catalog_delete_compose_reply,
+        has_system_prompt_override_attempt,
+        is_injection_discount_request,
+        pii_export_compose_reply,
+        storewide_discount_reply,
+    )
+
+    if FLAGS.prompt_injection and has_system_prompt_override_attempt(prompt):
+        low = prompt.lower()
+        if is_injection_discount_request(prompt):
+            return storewide_discount_reply()
+        if "delete" in low and re.search(r"\bNS-\d+\b", prompt, re.I):
+            sku_match = re.search(r"\b(NS-\d+)\b", prompt, re.I)
+            sku = sku_match.group(1).upper() if sku_match else "NS-001"
+            return catalog_delete_compose_reply(sku)
+        if any(w in low for w in ("customer", "buyer", "shopper", "user", "email", "address")) and any(
+            w in low for w in ("list", "show", "export", "all", "other", "recent", "dump", "every")
+        ):
+            return pii_export_compose_reply()
     if "Assess fraud risk" in prompt:
         return '{"decision": "ALLOW", "score": 0.08}'
     if "eligible for a refund" in prompt:

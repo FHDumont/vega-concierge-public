@@ -246,90 +246,170 @@ def restore_providers_backup() -> int:
     return restored
 
 
-# --- bootstrap Ollama local (workshop / AMI — F-REAL-ENV-1) -----------------
+# --- bootstrap da cascata a partir do `.env`/SO (F-BACKEND-3, Etapa B) ------
 
-def seed_ollama_default() -> None:
-    """Se a tabela está vazia, cria provider 'Ollama Local' (OpenAI-compat /v1, chave dummy).
-    Idempotente: não faz nada se já existe algum provider."""
-    with connect() as conn:
-        n = conn.execute("SELECT COUNT(*) AS n FROM llm_providers").fetchone()["n"]
-    if n:
-        return
-    base = settings.ollama_base_url.rstrip("/")
-    create_provider(
-        name="Ollama Local",
-        kind="openai",
-        base_url=f"{base}/v1",
-        model=settings.ollama_chat_model,
-        api_key="ollama",
-        enabled=True,
-        order=0,
-    )
+# Aliases aceitos em `LLM_PROVIDER_PRIORITY` (CLAUDE = ANTHROPIC). Cada alias mapeia para UM
+# provider conhecido pelo nome estável abaixo — é o contrato que o Ansible e o Admin compartilham.
+_CASCADE_SPECS: dict[str, dict] = {
+    "OPENAI": {
+        "env_field": "openai_api_key",
+        "name": "OpenAI",
+        "kind": "openai",
+        "base_url": "https://api.openai.com/v1",
+        "model_from_settings": "openai_chat_model",
+    },
+    "ANTHROPIC": {
+        "env_field": "anthropic_api_key",
+        "name": "Claude",
+        "kind": "anthropic",
+        "base_url": "https://api.anthropic.com",
+        "model_from_settings": "anthropic_chat_model",
+    },
+    "BEDROCK": {
+        "env_field": "aws_bearer_token_bedrock",
+        "name": "Bedrock",
+        "kind": "bedrock",
+        "base_url": "",
+        "model_from_settings": "bedrock_chat_model",
+    },
+    "OLLAMA": {
+        "name": "Ollama Local",
+        "kind": "openai",
+        "model_from_settings": "ollama_chat_model",
+    },
+}
 
+_DEFAULT_PRIORITY: tuple[str, ...] = ("BEDROCK", "OPENAI", "ANTHROPIC", "OLLAMA")
 
-# --- bootstrap cloud a partir de tokens do SO (F-BACKEND-3, Etapa B) --------
-
-# Contrato: cada spec vira UM provider quando o campo correspondente de `settings` (que já
-# venceu `.env` na resolução — settings.py) tem valor. `base_url` vazio quer dizer "resolvido em
-# runtime" (só o caso do Bedrock, cujo campo é a região). É esta constante que o time de Ansible
-# tem em mente ao decidir quais tokens escrever no `.env` de cada clone — ver
-# `docs/reference/workshop-env-contract.md`.
-_ENV_SEED_SPECS: tuple[dict, ...] = (
-    {"env_field": "openai_api_key", "name": "OpenAI", "kind": "openai",
-     "base_url": "https://api.openai.com/v1", "model": "gpt-4o-mini"},
-    {"env_field": "anthropic_api_key", "name": "Claude", "kind": "anthropic",
-     "base_url": "https://api.anthropic.com", "model": "claude-sonnet-4-5"},
-    {"env_field": "aws_bearer_token_bedrock", "name": "Bedrock", "kind": "bedrock",
-     "base_url": "", "model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0"},
+# Só os specs cloud — congelado p/ `tests/test_env_example_contract.py` (campos de token).
+_ENV_SEED_SPECS: tuple[dict, ...] = tuple(
+    spec for alias, spec in _CASCADE_SPECS.items() if alias != "OLLAMA"
 )
 
 
+def _normalize_priority_alias(raw: str) -> str | None:
+    alias = raw.strip().upper()
+    if alias == "CLAUDE":
+        alias = "ANTHROPIC"
+    return alias if alias in _CASCADE_SPECS else None
+
+
+def _parse_provider_priority() -> list[str]:
+    raw = settings.llm_provider_priority.strip()
+    if not raw:
+        return list(_DEFAULT_PRIORITY)
+    aliases: list[str] = []
+    seen: set[str] = set()
+    for part in raw.split(","):
+        alias = _normalize_priority_alias(part)
+        if alias and alias not in seen:
+            aliases.append(alias)
+            seen.add(alias)
+    return aliases or list(_DEFAULT_PRIORITY)
+
+
+def _provider_row_by_name(name: str) -> sqlite3.Row | None:
+    with connect() as conn:
+        return conn.execute(
+            "SELECT id, name, api_key, enabled, ord FROM llm_providers WHERE name = ?",
+            (name,),
+        ).fetchone()
+
+
+def _provider_token(spec: dict) -> str:
+    env_field = spec.get("env_field")
+    if not env_field:
+        return "ollama"
+    return str(getattr(settings, env_field, "") or "").strip()
+
+
+def _provider_base_url(spec: dict) -> str:
+    if spec.get("base_url"):
+        return spec["base_url"]
+    if spec["kind"] == "bedrock":
+        return settings.aws_default_region
+    if "model_from_settings" in spec:
+        return f"{settings.ollama_base_url.rstrip('/')}/v1"
+    return ""
+
+
+def _provider_model(spec: dict) -> str:
+    field = spec.get("model_from_settings")
+    if field:
+        return str(getattr(settings, field, "") or "").strip()
+    return str(spec.get("model") or "").strip()
+
+
+def _provider_configured(alias: str, spec: dict) -> bool:
+    if alias == "OLLAMA":
+        return bool(settings.ollama_base_url.strip())
+    return bool(_provider_token(spec))
+
+
+def seed_ollama_default() -> None:
+    """Compat: Ollama entra via `seed_providers_from_env()` + `LLM_PROVIDER_PRIORITY`."""
+    seed_providers_from_env()
+
+
 def seed_providers_from_env() -> dict[str, int]:
-    """Cadastra na cascata os providers cloud cujo token está no ambiente (`.env`/SO do
-    clone — `_ENV_SEED_SPECS`). É este seed que garante o cadastro nas 150 VMs do workshop a
-    cada fresh-state, sem toque manual do instrutor no Admin.
+    """Monta a cascata de LLM a cada boot a partir do `.env`/SO.
 
-    Idempotência **por nome**: se já existe um provider com o nome do spec, só a chave é
-    tocada — e só quando o token do ambiente mudou (rotação). Tudo o mais que o Admin tenha
-    editado na UI (model/base_url/ord/enabled) fica intocado: **env vence a chave, UI vence o
-    resto**. Sem token no ambiente para um spec = no-op para aquele spec.
+    `LLM_PROVIDER_PRIORITY` define a ordem (ex.: `BEDROCK,OPENAI,ANTHROPIC,OLLAMA`). Para cada
+    alias, se o provider estiver configurado (token cloud presente ou `OLLAMA_BASE_URL` para o
+    Ollama), cadastra/atualiza a linha e aplica `ord` sequencial — providers sem credencial são
+    pulados até cair no fallback local.
 
-    Ordem: como `seed_ollama_default` roda antes (ord=0), o primeiro cloud entra em
-    `MAX(ord)+10` e os seguintes empilham a partir daí — cloud é upgrade que o instrutor
-    promove, a demo base roda no Ollama.
+    Idempotência **por nome**. **Env vence** chave, ordem e enabled a cada restart; **UI vence**
+    model e base_url (exceto Bedrock, cuja região vem de `AWS_DEFAULT_REGION` no create).
 
-    Retorna `{"created": N, "updated": K}` para o log de boot (`_bootstrap` em `api.py`).
+    Retorna contadores p/ o log de boot (`_bootstrap` em `api.py`).
     """
     created = 0
     updated = 0
-    for spec in _ENV_SEED_SPECS:
-        token = str(getattr(settings, spec["env_field"], "") or "").strip()
-        if not token:
+    ordered = 0
+    ord_idx = 0
+
+    for alias in _parse_provider_priority():
+        spec = _CASCADE_SPECS[alias]
+        name = spec["name"]
+        configured = _provider_configured(alias, spec)
+        row = _provider_row_by_name(name)
+
+        if not configured:
+            if row is not None and alias != "OLLAMA" and row["enabled"]:
+                update_provider(row["id"], enabled=False)
+                ordered += 1
             continue
-        with connect() as conn:
-            row = conn.execute(
-                "SELECT id, api_key FROM llm_providers WHERE name = ?", (spec["name"],),
-            ).fetchone()
-        if row is not None:
-            if row["api_key"] != token:
-                update_provider(row["id"], api_key=token)
-                updated += 1
+
+        token = _provider_token(spec)
+        base_url = _provider_base_url(spec)
+        model = _provider_model(spec)
+
+        if row is None:
+            create_provider(
+                name=name,
+                kind=spec["kind"],
+                base_url=base_url,
+                model=model,
+                api_key=token,
+                enabled=True,
+                order=ord_idx,
+            )
+            created += 1
+            ord_idx += 1
             continue
-        with connect() as conn:
-            mx = conn.execute("SELECT COALESCE(MAX(ord), -10) AS mx FROM llm_providers").fetchone()["mx"]
-        base_url = spec["base_url"] or (
-            settings.aws_default_region if spec["kind"] == "bedrock" else ""
-        )
-        create_provider(
-            name=spec["name"],
-            kind=spec["kind"],
-            base_url=base_url,
-            model=spec["model"],
-            api_key=token,
-            enabled=True,
-            order=mx + 10,
-        )
-        created += 1
-    return {"created": created, "updated": updated}
+
+        key_changed = token and row["api_key"] != token
+        order_changed = row["ord"] != ord_idx
+        needs_enable = not row["enabled"]
+        if key_changed:
+            update_provider(row["id"], api_key=token)
+            updated += 1
+        if order_changed or needs_enable:
+            update_provider(row["id"], order=ord_idx, enabled=True)
+            ordered += 1
+        ord_idx += 1
+
+    return {"created": created, "updated": updated, "ordered": ordered}
 
 

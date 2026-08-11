@@ -21,6 +21,7 @@ from langchain_openai import ChatOpenAI
 from ..galileo_span import default_llm_run_name
 from .http_ssl import async_http_client, sync_http_client
 from .llm import DEFAULT_STUB_MODEL, LLM_TIMEOUT_S, LLMResult, make_bedrock_client
+from .llm_cache import llm_rate_allow
 from .llm_providers import bedrock_region, provider_configs_for_agent
 from ..settings import settings
 from .stub import VegaStubChatModel, make_stub_chat_model
@@ -567,6 +568,17 @@ def invoke_chat_cascade(
         if i == 0:
             candidate = get_chat_model(agent_name)
         is_last = i >= len(models) - 1
+        if not llm_rate_allow():
+            stub = make_stub_chat_model(settings.llm_stub_model)
+            return invoke_to_llm_result(
+                stub,
+                system,
+                prompt,
+                max_tokens=max_tokens,
+                verbose=verbose,
+                config=config,
+                run_name=run_name,
+            )
         try:
             result = invoke_to_llm_result(
                 candidate,
