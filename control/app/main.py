@@ -354,10 +354,11 @@ async def state(request: Request) -> dict:
         8000: await _port_open("127.0.0.1", 8000),
     }
     return {
-        # Precedência F-REAL-ENV-2: SO (unit carrega .env + /etc/environment) > INSTANCE (nome
-        # único da réplica) > .env do repo > fallback dev.
-        "environment": os.getenv("DEPLOYMENT_ENVIRONMENT")
-        or os.getenv("INSTANCE")
+        # Precedência F-REAL-ENV-2: INSTANCE (nome único da réplica) sempre vence — o
+        # DEPLOYMENT_ENVIRONMENT visto via os.getenv pode ter vindo do .env pela unit
+        # (EnvironmentFile), indistinguível de env do SO.
+        "environment": os.getenv("INSTANCE")
+        or os.getenv("DEPLOYMENT_ENVIRONMENT")
         or _read_env_value("DEPLOYMENT_ENVIRONMENT")
         or "user-local",
         "ttyd_port": port,

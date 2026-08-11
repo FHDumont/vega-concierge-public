@@ -71,9 +71,10 @@ check "INSTANCE mapeia p/ DEPLOYMENT_ENVIRONMENT (vence o .env)" "vm-workshop-42
 grep -q '^DEPLOYMENT_ENVIRONMENT=vm-workshop-42$' "$ROOT/.env.runtime" && echo "ok   runtime carrega o INSTANCE mapeado" || { echo "FAIL runtime sem INSTANCE mapeado" >&2; fail=1; }
 grep -q '^INSTANCE=' "$ROOT/.env.runtime" && { echo "FAIL INSTANCE cru não deveria entrar no runtime" >&2; fail=1; } || echo "ok   INSTANCE cru fica fora do runtime"
 
-# Caso 5 — DEPLOYMENT_ENVIRONMENT explícito no SO vence INSTANCE.
-out="$(run_case INSTANCE="vm-workshop-42" DEPLOYMENT_ENVIRONMENT="user-explicito")"
-check "DEPLOYMENT_ENVIRONMENT do SO vence INSTANCE" "user-explicito" "$(sed -n 1p <<<"$out")"
+# Caso 5 — INSTANCE vence até DEPLOYMENT_ENVIRONMENT presente no ambiente (as units carregam
+# o .env via EnvironmentFile, então esse valor pode ser só o placeholder baked).
+out="$(run_case INSTANCE="vm-workshop-42" DEPLOYMENT_ENVIRONMENT="user-placeholder")"
+check "INSTANCE vence DEPLOYMENT_ENVIRONMENT do ambiente" "vm-workshop-42" "$(sed -n 1p <<<"$out")"
 
 # Caso 6 — permissões do runtime (segredos): 600.
 perm="$(stat -c %a "$ROOT/.env.runtime" 2>/dev/null || stat -f %Lp "$ROOT/.env.runtime")"

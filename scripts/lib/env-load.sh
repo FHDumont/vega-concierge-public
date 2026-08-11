@@ -13,17 +13,18 @@
 # `export -p` emite `declare -x VAR="…"`; dentro de função isso criaria variável LOCAL,
 # então trocamos por `export` (mesma sintaxe de atribuição) antes do eval.
 load_env_os_first() {
-  local _snap _de_so
-  _de_so="${DEPLOYMENT_ENVIRONMENT-}"
+  local _snap
   _snap="$(export -p | sed 's/^declare -x/export/')"
   set -a
   # shellcheck disable=SC1091
   [ -f "$ROOT/.env" ] && . "$ROOT/.env"
   set +a
   eval "$_snap"
-  # INSTANCE (nome único criado pela réplica/Splunk Show) vira DEPLOYMENT_ENVIRONMENT quando o SO
-  # não trouxe DEPLOYMENT_ENVIRONMENT explícito. Ordem: SO DEPLOYMENT_ENVIRONMENT > INSTANCE > .env.
-  if [ -z "$_de_so" ] && [ -n "${INSTANCE:-}" ]; then
+  # INSTANCE (nome único criado pela réplica/Splunk Show) É o rótulo da instância: quando
+  # presente, SEMPRE vence DEPLOYMENT_ENVIRONMENT — inclusive o do .env que as units carregam
+  # via EnvironmentFile (indistinguível de env do SO dentro do processo). Sem INSTANCE
+  # (dev/laptop), nada muda.
+  if [ -n "${INSTANCE:-}" ]; then
     export DEPLOYMENT_ENVIRONMENT="$INSTANCE"
   fi
 }

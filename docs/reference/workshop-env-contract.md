@@ -107,9 +107,10 @@ ambiente dos processos também funciona (os scripts preservam o env já presente
 | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `AWS_BEARER_TOKEN_BEDROCK` / `AWS_DEFAULT_REGION` | Keys cloud da cascata LLM |
 
 **Mapeamento `INSTANCE` → `DEPLOYMENT_ENVIRONMENT`:** a réplica não fornece
-`DEPLOYMENT_ENVIRONMENT`; fornece `INSTANCE`. O `env-load.sh` (e o painel :9000) resolvem na
-ordem `DEPLOYMENT_ENVIRONMENT` do SO > `INSTANCE` do SO > `.env` > default — ou seja, na VM
-clonada o rótulo da instância É o `INSTANCE`, sem tocar no `.env` baked.
+`DEPLOYMENT_ENVIRONMENT`; fornece `INSTANCE` — e `INSTANCE`, quando presente, **sempre vence**
+qualquer `DEPLOYMENT_ENVIRONMENT` (o das units vem do `.env` via `EnvironmentFile` e é
+indistinguível de env do SO). Resolvido em `env-load.sh` (stack/containers) e no painel :9000.
+Sem `INSTANCE` (dev/laptop), vale a precedência normal SO > `.env` > default.
 
 **Reservadas do ambiente (o11y Splunk, NÃO consumidas pela app hoje):** `REALM` e
 `ACCESS_TOKEN` já estarão no SO junto com `INSTANCE`. A app não as lê nem as repassa ao
