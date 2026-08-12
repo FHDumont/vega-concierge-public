@@ -5,7 +5,7 @@ weight    = 1
 time      = "8 minutes"
 +++
 
-Vega registers controllable steps in `backend/app/galileo_control.py`. Enable rulesets in Console for these step names:
+Vega registers controllable steps in `backend/app/obs/galileo_control.py`. Enable rulesets in Console for these step names:
 
 | Step name | Stage | Ruleset | Demo UC |
 |---|---|---|---|
@@ -16,7 +16,9 @@ Vega registers controllable steps in `backend/app/galileo_control.py`. Enable ru
 | `notification_copy` | post steer | PII redact | UC-5 |
 | `gift_message` | post steer | PII | UC-5 gift |
 
-Optional env: `AGENT_CONTROL_URL`, `AGENT_CONTROL_API_KEY_HEADER` (default `Splunk Agent Observability-API-Key`).
+Optional env: `AGENT_CONTROL_URL`, `AGENT_CONTROL_API_KEY_HEADER` (default `Galileo-API-Key`).
+
+The prompt injection control (`vega-prompt-injection-<your log stream>`) **already exists and is attached to your log stream, turned off** — the app creates it on boot. Your job in the first step is to flip the toggle on.
 
 {{< exercise title="Enable Protect in Console" >}}
 
@@ -24,10 +26,12 @@ Optional env: `AGENT_CONTROL_URL`, `AGENT_CONTROL_API_KEY_HEADER` (default `Splu
 From Use cases banner or `galileo/config`, open Agent Control for your project/log stream.
 {{< /step >}}
 
-{{< step title="Create Block rulesets" >}}
-For UC-3: post-stage **Block** on `returns.finalize` when instruction adherence fails.
+{{< step title="Turn on the prompt injection control (UC-4)" >}}
+Find `vega-prompt-injection-<your log stream>` in the list and flip its toggle **on**. It is a pre-stage **Block** that denies whenever the **Prompt Injection (SLM)** metric scores ≥ 0.7 on the step input. It carries no step name, so it covers every `tool` and `llm` step — `product_qa`, `search`, `delete_product` and `list_recent_customers` alike.
+{{< /step >}}
 
-For UC-4: pre-stage **Block** on `product_qa`, `search`, and `delete_product` for prompt injection.
+{{< step title="Create the remaining Block ruleset" >}}
+For UC-3: post-stage **Block** on `returns.finalize` when instruction adherence fails.
 
 ![Agent Control rules](../images/galileo-log-stream-controls.png?width=750px)
 {{< /step >}}

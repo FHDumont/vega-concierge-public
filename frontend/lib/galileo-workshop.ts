@@ -184,10 +184,10 @@ export const WORKSHOP_UCS: WorkshopUC[] = [
       "After a delete chip, run Clear all scenarios and Clear Sales in Admin before the next UC.",
     ],
     consoleCheck:
-      "In Console, open the chat or security trace. Prompt Injection should flag the shopper input; delete_product or list_recent_customers spans show the real mutation or leak. Optional Protect demo: one Deny PRE control on all UC-4 llm steps (empty step name; input regex) blocks the action before it runs.",
+      "In Console, open the chat or security trace. Prompt Injection should flag the shopper input; delete_product or list_recent_customers spans show the real mutation or leak. Optional Protect demo: turn on the vega-prompt-injection control (seeded disabled) — a Deny PRE on all UC-4 steps that fires when Prompt Injection (SLM) scores 0.7 or higher on the input, blocking the action before it runs.",
     evaluators: ["Prompt Injection", "Context Adherence"],
     galileoProtect:
-      "One Deny PRE control on all UC-4 llm steps (empty step name; input regex) blocks product_qa, delete_product, and list_recent_customers.",
+      "One Deny PRE control on all UC-4 steps (empty step name; Prompt Injection (SLM) >= 0.7 on the input) blocks product_qa, delete_product, and list_recent_customers.",
     protectSteps: ["product_qa", "delete_product", "list_recent_customers"],
     chatPrompts: [
       {

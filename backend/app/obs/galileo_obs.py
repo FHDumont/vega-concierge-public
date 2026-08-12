@@ -43,17 +43,32 @@ _live_trace_var: contextvars.ContextVar[bool] = contextvars.ContextVar(
 # Trace name when caller doesn't give feature (run_demo, simulator, internal paths).
 _DEFAULT_TRACE_NAME = "vega.request"
 
-# Core evaluator set from workshop module 6 (`GalileoMetrics` member names — resolved lazily in
-# `ensure_stream_metrics` so `galileo` stays an optional import). LLM versions, same names as the UI.
+# Core evaluator set from workshop module 6 — **member names** of the SDK's `GalileoMetrics` enum
+# (`galileo/schema/metrics.py`), resolved lazily in `ensure_stream_metrics` so `galileo` stays an
+# optional import. The `_luna` suffix is the SLM variant; a name with no `_luna` member (e.g.
+# `agent_efficiency`, `instruction_adherence`) only exists as LLM. The judge model a PRESET runs on
+# (Bedrock, GPT, …) is Console configuration, not part of its name — a scorer whose name mentions a
+# model is a custom one, and those go in `WORKSHOP_CUSTOM_METRICS` below.
+# List the valid names with:
+#   cd backend && .venv/bin/python -c "from galileo.schema.metrics import GalileoMetrics; \
+#     [print(f'{m.name:36} {m.value}') for m in GalileoMetrics]"
 WORKSHOP_METRICS: tuple[str, ...] = (
-    "context_adherence_luna",     # UC-1 — grounded in retrieved content?
-    "agent_efficiency",      # UC-2 preset — redundant steps / token waste?
-    "correctness",       # failing tool calls (inventory outage on checkout)
-    "correctness_aws_bedrock",       # failing tool calls (inventory outage on checkout)
-    "instruction_adherence", # UC-3 — policy followed?
-    "prompt_injection_luna",      # UC-4 — override accepted?
-    "output_pii_luna",            # UC-5 — sensitive data in output?
-    "input_pii_luna",            # UC-5 — sensitive data in output?
+    "context_adherence_luna",  # UC-1 — grounded in retrieved content?
+    "agent_efficiency",        # UC-2 preset — redundant steps / token waste?
+    "correctness",             # UC-3 — answer factually right?
+    "instruction_adherence",   # UC-3 — policy followed?
+    "prompt_injection_luna",   # UC-4 — override accepted?
+    "input_pii_luna",          # UC-5 — sensitive data in input?
+    "output_pii_luna",         # UC-5 — sensitive data in output?
+)
+
+# Custom scorers (built in Console, not in the SDK enum) — matched by their **exact Console label**.
+# They only exist in the org that created them, so an unknown one is skipped with a warning instead
+# of taking the preset evaluators down with it. List what this org has with:
+#   from galileo.scorers import Scorers; from galileo.resources.models.scorer_types import ScorerTypes
+#   [s.label for s in Scorers().list(types=list(ScorerTypes)) if s.scorer_type != "preset"]
+WORKSHOP_CUSTOM_METRICS: tuple[str, ...] = (
+    "Correctness AWS Bedrock",  # UC-3 — Correctness judged by the Bedrock-hosted model
 )
 
 
@@ -122,32 +137,152 @@ def public_config() -> dict:
     }
 
 
+def _known_custom_scorer_labels() -> set[str] | None:
+    """Labels/names of this org's non-preset scorers — `None` when they can't be listed.
+
+    `Scorers().list()` with no filter returns ONLY presets, so the custom ones (the whole point
+    of this lookup) need the explicit type list."""
+    try:
+        from galileo.resources.models.scorer_types import ScorerTypes
+        from galileo.scorers import Scorers
+
+        labels: set[str] = set()
+        for scorer in Scorers().list(types=list(ScorerTypes)):
+            for value in (scorer.name, getattr(scorer, "label", None)):
+                if isinstance(value, str) and value:
+                    labels.add(value)
+        return labels
+    except Exception as exc:  # noqa: BLE001
+        log.debug("galileo: scorer catalog unreadable (%s: %s)", type(exc).__name__, exc)
+        return None
+
+
+def preset_scorer_ref(name: str) -> tuple[str, str, str] | None:
+    """`(scorer_id, scorer_version_id, label)` of the preset `name` — `None` when unresolvable.
+
+    An Agent Control control that reads a metric's value carries those two UUIDs in its condition;
+    they're per-Console identifiers, so they're looked up here instead of hardcoded. Lives in this
+    module because it's the one that already talks to the scorer catalog (`galileo_control` stays
+    the only module importing `agent_control`)."""
+    try:
+        from galileo.resources.models.scorer_types import ScorerTypes
+        from galileo.scorers import Scorers
+
+        for scorer in Scorers().list(types=list(ScorerTypes)):
+            if getattr(scorer, "name", None) != name:
+                continue
+            version = getattr(scorer, "default_version", None)
+            version_id = getattr(version, "id", None)
+            if not version_id:
+                return None
+            label = getattr(scorer, "label", None) or name
+            return str(scorer.id), str(version_id), str(label)
+        return None
+    except Exception as exc:  # noqa: BLE001
+        log.debug("galileo: preset scorer %r unresolvable (%s: %s)", name, type(exc).__name__, exc)
+        return None
+
+
+def _resolve_workshop_metrics() -> list:
+    """The configured evaluators as `enable_metrics` inputs, skipping (loudly) unknown ones.
+
+    Presets resolve to `GalileoMetrics` members; custom scorers stay as plain strings, which the
+    SDK matches by Console label. Both are checked one by one on purpose: resolving the whole
+    list in a single expression let a SINGLE bad name (`correctness_aws_bedrock`) raise and take
+    down the entire call — the stream got created and then NOTHING was enabled on it."""
+    from galileo.schema.metrics import GalileoMetrics
+
+    resolved: list = []
+    unknown: list[str] = []
+    for name in WORKSHOP_METRICS:
+        try:
+            resolved.append(GalileoMetrics[name])
+        except KeyError:
+            unknown.append(name)
+    if unknown:
+        log.error(
+            "galileo: unknown evaluator name(s) in WORKSHOP_METRICS, ignored: %s "
+            "(valid names are the GalileoMetrics enum members)", ", ".join(unknown),
+        )
+
+    if WORKSHOP_CUSTOM_METRICS:
+        # `None` = catalog unreadable; pass the labels through and let the write attempt decide.
+        known = _known_custom_scorer_labels()
+        missing = [] if known is None else [c for c in WORKSHOP_CUSTOM_METRICS if c not in known]
+        resolved.extend(c for c in WORKSHOP_CUSTOM_METRICS if c not in missing)
+        if missing:
+            log.error(
+                "galileo: custom scorer(s) not found in this Console, ignored: %s "
+                "(match is by exact label)", ", ".join(missing),
+            )
+    return resolved
+
+
+def _configured_scorer_count(project_id: str, stream_id: str) -> int | None:
+    """How many scorers the stream already has — `None` when it can't be determined.
+
+    `enable_metrics` is an upsert of the stream's whole scorer config, so it can only run when
+    the stream has none: that's what makes "never clobber what the owner set in Console" and
+    "a stream left empty still gets its evaluators" hold at the same time."""
+    try:
+        from galileo.config import GalileoPythonConfig
+        from galileo.resources.api.log_stream import (
+            get_metric_settings_projects_project_id_log_streams_log_stream_id_metric_settings_get as get_settings,
+        )
+
+        response = get_settings.sync(
+            client=GalileoPythonConfig.get().api_client,
+            project_id=project_id, log_stream_id=stream_id,
+        )
+        # The endpoint RETURNS `HTTPValidationError` (or `None`) instead of raising, and neither
+        # carries `scorers`. Counting those as 0 would read "empty" and let the backfill upsert
+        # over a stream that in fact has a config. A genuinely empty stream answers with `[]`,
+        # so only a real list is an answer; anything else is "unknown".
+        scorers = getattr(response, "scorers", None)
+        return len(scorers) if isinstance(scorers, list) else None
+    except Exception as exc:  # noqa: BLE001 — private-ish endpoint; treat as "unknown"
+        log.debug("galileo: scorer settings unreadable (%s: %s)", type(exc).__name__, exc)
+        return None
+
+
 def ensure_stream_metrics() -> None:
-    """Creates the log stream with the workshop evaluators pre-enabled — boot-time, best effort.
+    """Gives the log stream the workshop evaluators — boot-time, idempotent, best effort.
 
     Each workshop VM boots with its own `GALILEO_LOG_STREAM`; without this, the stream is
     lazily created by the SDK on the first trace with NO evaluators, and every attendee has to
-    enable them by hand in Console. Only a stream created *here* gets `WORKSHOP_METRICS`; an
-    existing stream is left alone so Console changes survive restarts. Any failure just logs —
+    enable them by hand in Console. Applies `WORKSHOP_METRICS` when the stream is created here,
+    and also when an existing stream has **no scorers at all** — a stream that already carries a
+    config (whatever the owner picked in Console) is never touched. Any failure just logs;
     Galileo being unreachable can't block the store's boot."""
     if not is_enabled():
         return
     try:
         from galileo.log_streams import create_log_stream, get_log_stream
         from galileo.projects import create_project, get_project
-        from galileo.schema.metrics import GalileoMetrics
+
+        # Resolve BEFORE any write: a typo must not leave a freshly created stream evaluator-less.
+        metrics = _resolve_workshop_metrics()
+        if not metrics:
+            log.error("galileo: no valid evaluator in WORKSHOP_METRICS — stream left as is")
+            return
 
         if get_project(name=project()) is None:
             create_project(project())
-        if get_log_stream(name=log_stream(), project_name=project()) is not None:
+        stream = get_log_stream(name=log_stream(), project_name=project())
+        if stream is None:
+            stream = create_log_stream(name=log_stream(), project_name=project())
+            action = "created"
+        elif _configured_scorer_count(str(stream.project_id), str(stream.id)) == 0:
+            action = "backfilled"  # stream exists with an empty config (nothing to clobber)
+        else:
             return
-        stream = create_log_stream(name=log_stream(), project_name=project())
         # All of WORKSHOP_METRICS are server-side scorers, so the returned list of
         # client-side (local) metric configs is empty — nothing to process here.
-        stream.enable_metrics([GalileoMetrics[name] for name in WORKSHOP_METRICS])
+        stream.enable_metrics(metrics)
         log.info(
-            "galileo: log stream %r created in project %r with %d evaluators enabled",
-            log_stream(), project(), len(WORKSHOP_METRICS),
+            "galileo: log stream %r %s in project %r with %d evaluators (%s)",
+            log_stream(), action, project(), len(metrics),
+            ", ".join(str(getattr(m, "value", m)) for m in metrics),  # enum members + custom labels
         )
     except Exception as exc:  # noqa: BLE001
         log.warning("galileo: ensure_stream_metrics skipped (%s: %s)", type(exc).__name__, exc)

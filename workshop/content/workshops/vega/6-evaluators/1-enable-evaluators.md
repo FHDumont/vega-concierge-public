@@ -18,14 +18,15 @@ In Splunk Agent Observability Console, open project **`vega-concierge`** and sel
 {{< /step >}}
 
 {{< step title="Verify the core evaluators" >}}
-These six should already be enabled (the backend enables them when it creates the stream):
+These should already be enabled (the backend enables them when it creates the stream):
 
-* **Context Adherence** — grounded in retrieved content? (UC-1)
+* **Context Adherence (SLM)** — grounded in retrieved content? (UC-1)
 * **Agent Efficiency** — redundant steps / token waste? (UC-2 preset)
-* **Tool Errors** — failing tool calls? (Advanced inventory outage on checkout)
+* **Correctness** — answer factually right? (UC-3)
+* **Correctness AWS Bedrock** — the same judgment from a Bedrock-hosted model (custom scorer)
 * **Instruction Adherence** — policy followed? (UC-3)
-* **Prompt Injection** — override accepted? (UC-4)
-* **PII** — sensitive data in output? (UC-5)
+* **Prompt Injection (SLM)** — override accepted? (UC-4)
+* **Input PII (SLM)** / **Output PII (SLM)** — sensitive data in or out? (UC-5)
 
 ![Enable evaluators](../images/sao-enable-two-evaluators.png?width=750px)
 

@@ -243,7 +243,7 @@ async def test_controlled_finalize_refund_propagates_invoke_fn_across_thread_bou
 
 
 def test_controlled_delete_product_passes_shopper_prompt_as_llm_input(active_control, monkeypatch):
-    """Protect regex/Prompt Injection on path `input` expects an llm-step string payload."""
+    """The Prompt Injection control on path `input` expects an llm-step string payload."""
     observed: dict = {}
 
     def _capture_step(fn, /, *args, **kwargs):
