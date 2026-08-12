@@ -46,12 +46,14 @@ _DEFAULT_TRACE_NAME = "vega.request"
 # Core evaluator set from workshop module 6 (`GalileoMetrics` member names — resolved lazily in
 # `ensure_stream_metrics` so `galileo` stays an optional import). LLM versions, same names as the UI.
 WORKSHOP_METRICS: tuple[str, ...] = (
-    "context_adherence",     # UC-1 — grounded in retrieved content?
+    "context_adherence_luna",     # UC-1 — grounded in retrieved content?
     "agent_efficiency",      # UC-2 preset — redundant steps / token waste?
-    "tool_error_rate",       # failing tool calls (inventory outage on checkout)
+    "correctness",       # failing tool calls (inventory outage on checkout)
+    "correctness_aws_bedrock",       # failing tool calls (inventory outage on checkout)
     "instruction_adherence", # UC-3 — policy followed?
-    "prompt_injection",      # UC-4 — override accepted?
-    "output_pii",            # UC-5 — sensitive data in output?
+    "prompt_injection_luna",      # UC-4 — override accepted?
+    "output_pii_luna",            # UC-5 — sensitive data in output?
+    "input_pii_luna",            # UC-5 — sensitive data in output?
 )
 
 
